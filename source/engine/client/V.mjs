@@ -310,8 +310,11 @@ V.CalcRefdef = function () { // TODO: Client
     }
     V.dmg_time -= Host.frametime;
   }
-  if (CL.state.stats[Def.stat.health] <= 0) { // Legacy
-    R.refdef.viewangles[2] = 80.0;
+
+  if (CL.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
+    if (CL.state.stats[Def.stat.health] <= 0) {
+      R.refdef.viewangles[2] = 80.0;
+    }
   }
 
   const ipitch = V.idlescale.value * Math.sin(CL.state.time * V.ipitch_cycle.value) * V.ipitch_level.value;
@@ -389,6 +392,11 @@ V.CalcRefdef = function () { // TODO: Client
   } else {
     V.oldz = finiteOrZero(ent/*lerp*/.origin[2]);
   }
+
+  if (CL.state.gameAPI) {
+    CL.state.gameAPI.updateRefDef(R.refdef);
+  }
+
   if (Chase.active.value) {
     Chase.Update();
   }

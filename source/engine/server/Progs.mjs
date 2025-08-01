@@ -1556,6 +1556,6 @@ PR.TempString = function(string) {
 };
 
 PR.capabilities = [
-  gameCapabilities.CAP_LEGACY_UPDATESTAT,
-  gameCapabilities.CAP_LEGACY_CLIENTDATA,
+  gameCapabilities.CAP_CLIENTDATA_UPDATESTAT,
+  gameCapabilities.CAP_CLIENTDATA_LEGACY,
 ];

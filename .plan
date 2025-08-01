@@ -328,6 +328,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-01
+
+* small optimization on clientdata
+* client gets to update refdef optionally
+
 ### 2025-07-30
 
 * I need to think about releasing client entities, maybe similar to server edicts with the free flag

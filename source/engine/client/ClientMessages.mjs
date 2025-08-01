@@ -100,6 +100,27 @@ export class ClientMessages {
   /** @type {ClientPlayerState[]} */
   playerstates = [];
 
+  /** @type {string[]} additional private player fields whose values are getting updated each frame */
+  #clientdataFields = [];
+
+  /** @type {MSG.ReadLong|MSG.ReadShort|MSG.ReadByte} shortcut to read the current amount of clientdata field bits */
+  #readClientdataFieldsBits = null;
+
+  set clientdataFields(fields) {
+    this.#clientdataFields.length = 0;
+    this.#clientdataFields.push(...fields);
+
+    console.assert(this.#clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
+
+    if (this.#clientdataFields.length <= 8) {
+      this.#readClientdataFieldsBits = MSG.ReadByte;
+    } else if (this.#clientdataFields.length <= 16) {
+      this.#readClientdataFieldsBits = MSG.ReadShort;
+    } else {
+      this.#readClientdataFieldsBits = MSG.ReadLong;
+    }
+  }
+
   /**
    * Parses Protocol.svc.time message.
    */
@@ -167,18 +188,14 @@ export class ClientMessages {
   /**
    * Client data parsing for QuakeJS based games.
    */
-  #parseClientdata(bits) {
-    CL.state.stats[Def.stat.weapon] = ((bits & Protocol.su.weapon) !== 0) ? MSG.ReadByte() : 0;
-    CL.state.stats[Def.stat.weaponframe] = ((bits & Protocol.su.weaponframe) !== 0) ? MSG.ReadByte() : 0;
-    CL.state.stats[Def.stat.health] = MSG.ReadShort();
-
-    const fieldbits = CL.state.clientdataFields.length > 8 ? MSG.ReadShort() : MSG.ReadByte();
+  #parseClientdata() {
+    const fieldbits = this.#readClientdataFieldsBits();
 
     const fields = [];
     const fieldsToNull = [];
 
-    for (let i = 0; i < CL.state.clientdataFields.length; i++) {
-      const field = CL.state.clientdataFields[i];
+    for (let i = 0; i < this.#clientdataFields.length; i++) {
+      const field = this.#clientdataFields[i];
 
       if ((fieldbits & (1 << i)) !== 0) {
         fields.push(field);
@@ -227,6 +244,7 @@ export class ClientMessages {
 
     for (const field of fieldsToNull) { // TODO: remove this once the server only pushes updated fields and no longer non-null/non-zero fields
       const value = clientdata[field];
+
       switch (true) {
         case value === null:
           // already null, do nothing
@@ -297,10 +315,10 @@ export class ClientMessages {
 
     this.#parseClientGeneral(bits);
 
-    if (CL.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_CLIENTDATA)) {
+    if (CL.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
       this.#parseClientLegacy(bits);
     } else {
-      this.#parseClientdata(bits);
+      this.#parseClientdata();
     }
   }
 

@@ -120,8 +120,6 @@ export default class CL {
   static state = class ClientState {
     static clientEntities = new ClientEntities();
     static clientMessages = new ClientMessages();
-    /** @type {string[]} additional private player fields whose values are getting updated each frame */
-    static clientdataFields = [];
     /** @type {{[key: string]: import('../../shared/GameInterfaces').SerializableType}} */
     static clientdata = {};
     static movemessages = 0;
@@ -1022,16 +1020,18 @@ CL.ParseServerData = function() { // private
     sound_precache[numsounds] = str;
   }
 
-  if (!CL.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_UPDATESTAT)) {
-    CL.state.clientdataFields.length = 0;
+  if (!CL.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT)) {
+    const clientdataFields = [];
 
     while (true) {
       const fields = MSG.ReadString();
       if (fields === '') {
         break;
       }
-      CL.state.clientdataFields.push(fields);
+      clientdataFields.push(fields);
     }
+
+    CL.state.clientMessages.clientdataFields = clientdataFields;
   }
 
   CL.state.model_precache.length = 0;
@@ -1356,15 +1356,15 @@ CL.ParseServerMessage = function() { // private
         CL.SignonReply();
         continue;
       case Protocol.svc.killedmonster:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_UPDATESTAT), 'killedmonster requires CAP_LEGACY_UPDATESTAT');
+        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'killedmonster requires CAP_LEGACY_UPDATESTAT');
         CL.state.stats[Def.stat.monsters]++;
         continue;
       case Protocol.svc.foundsecret:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_UPDATESTAT), 'foundsecret requires CAP_LEGACY_UPDATESTAT');
+        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'foundsecret requires CAP_LEGACY_UPDATESTAT');
         CL.state.stats[Def.stat.secrets]++;
         continue;
       case Protocol.svc.updatestat:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_UPDATESTAT), 'updatestat requires CAP_LEGACY_UPDATESTAT');
+        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'updatestat requires CAP_LEGACY_UPDATESTAT');
         i = MSG.ReadByte();
         console.assert(i >= 0 && i < CL.state.stats.length, 'updatestat must be in range');
         CL.state.stats[i] = MSG.ReadLong();

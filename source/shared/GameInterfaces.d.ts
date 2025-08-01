@@ -1,6 +1,7 @@
 import { BaseClientEdictHandler } from "./ClientEdict.mjs";
 import { ClientEngineAPI, ServerEngineAPI } from "../engine/common/GameAPIs.mjs";
 import { ServerEdict } from "../engine/server/Edict.mjs";
+import Vector from "./Vector.mjs";
 
 export type SerializableType = (string | number | boolean | Vector);
 
@@ -16,6 +17,16 @@ export type ViewmodelConfig = {
   frame: number;
 };
 
+export type RefDef = { // TODO: move to engine shared, it’s V’s refdef
+  vrect: {
+    width: number;
+    height: number;
+  };
+  vieworg: Vector;
+  viewangles: Vector;
+  // TODO: fov?
+};
+
 export interface ClientGameInterface {
   clientdata: ClientdataMap | null;
   viewmodel: ViewmodelConfig | null;
@@ -26,6 +37,8 @@ export interface ClientGameInterface {
   startFrame(): void;
 
   handleClientEvent(code: number, ...args: SerializableType[]): void;
+
+  updateRefDef(refdef: RefDef): unknown;
 
   static GetClientEdictHandler(classname: string): BaseClientEdictHandler
 

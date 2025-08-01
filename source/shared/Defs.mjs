@@ -184,9 +184,11 @@ export const clientStat = Object.freeze({
  */
 export const gameCapabilities = Object.freeze({
   /** this will read total_secrets, total_monsters, found_secrets, killed_monsters being sent via updatestat and let the client write them to CL.state.stat */
-  CAP_LEGACY_UPDATESTAT: 'CAP_REQUIRES_UPDATESTAT',
+  CAP_CLIENTDATA_UPDATESTAT: 'CAP_CLIENTDATA_UPDATESTAT',
   /** this will add items and ammo information to clientdata messages */
-  CAP_LEGACY_CLIENTDATA: 'CAP_LEGACY_CLIENTDATA',
+  CAP_CLIENTDATA_LEGACY: 'CAP_CLIENTDATA_LEGACY',
+  /** this will transmit clientdataFields defined in the player entity to the client and automatically populate clientdata on the ClientGameAPI */
+  CAP_CLIENTDATA_DYNAMIC: 'CAP_CLIENTDATA_DYNAMIC',
   /** the client game code brings its own status bar, in other words: no Sbar required! */
   CAP_HUD_INCLUDES_SBAR: 'CAP_HUD_INCLUDES_SBAR',
   /** the client game code takes care of rendering crosshairs, in other words: V is not required to draw one! */

@@ -1237,7 +1237,7 @@ Host.Spawn_f = function() { // signon 2, step 3
     MSG.WriteString(message, SV.server.lightstyles[i]);
   }
 
-  if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_LEGACY_UPDATESTAT)) {
+  if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT)) {
     MSG.WriteByte(message, Protocol.svc.updatestat);
     MSG.WriteByte(message, Def.stat.totalsecrets);
     MSG.WriteLong(message, SV.server.gameAPI.total_secrets);

@@ -111,6 +111,10 @@ SV.server = {
   gameName: null,
   /** @type {Defs.gameCapabilities[]} game capability flags */
   gameCapabilities: [],
+  /** @type {string[]} clientdata field names */
+  clientdataFields: [],
+  /** @type {MSG.WriteByte|MSG.WriteShort|MSG.WriteLong} */
+  clientdataFieldsBitsWriter: null,
 };
 
 export class ServerEntityState {
@@ -389,11 +393,9 @@ SV.SendServerData = function(client) {
   }
   MSG.WriteByte(message, 0);
 
-  // write the clientdata fields to the client, so it can build the compression table
-  if (!SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_LEGACY_UPDATESTAT)) {
-    const fields = SV.server.edicts[1].entity.clientdataFields;
-    for (const field of fields) {
-      console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
+    // write the clientdata fields to the client, so it can build the compression table
+    for (const field of SV.server.clientdataFields) {
       MSG.WriteString(message, field);
     }
     MSG.WriteByte(message, 0);
@@ -964,7 +966,7 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
     MSG.WriteShort(msg, punchangle[2] * 90.0);
   }
 
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_LEGACY_CLIENTDATA)) {
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
     MSG.WriteLong(msg, items);
     if ((bits & Protocol.su.weaponframe) !== 0) {
       MSG.WriteByte(msg, clientEdict.entity.weaponframe);
@@ -990,22 +992,17 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
         }
       }
     }
-  } else {
-    if ((bits & Protocol.su.weapon) !== 0) {
-      MSG.WriteByte(msg, SV.ModelIndex(clientEdict.entity.weaponmodel));
-    }
-    if ((bits & Protocol.su.weaponframe) !== 0) {
-      MSG.WriteByte(msg, clientEdict.entity.weaponframe);
-    }
-    MSG.WriteShort(msg, clientEdict.entity.health);
+  }
 
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
+    const clientdataFields = SV.server.clientdataFields;
     const destination = msg;
 
     let fieldbits = 0;
     const values = [];
 
-    for (let i = 0; i < clientEdict.entity.clientdataFields.length; i++) {
-      const field = clientEdict.entity.clientdataFields[i];
+    for (let i = 0; i < clientdataFields.length; i++) {
+      const field = clientdataFields[i];
       const value = clientEdict.entity[field];
 
       if (!value) { // TODO: compare old value and new values
@@ -1016,13 +1013,7 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
       values.push(value);
     }
 
-    if (clientEdict.entity.clientdataFields.length > 8) {
-      MSG.WriteShort(destination, fieldbits);
-    } else {
-      MSG.WriteByte(destination, fieldbits);
-    }
-
-    console.log('values', values, fieldbits);
+    SV.server.clientdataFieldsBitsWriter(destination, fieldbits);
 
     for (const field of values) {
       switch (true) {
@@ -1337,6 +1328,27 @@ SV.SpawnServer = function(mapname) {
   SV.server.lightstyles = [];
   for (i = 0; i <= Def.limits.lightstyles; i++) {
     SV.server.lightstyles[i] = '';
+  }
+
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
+    const fields = SV.server.edicts[1].entity.clientdataFields;
+    // configure clientdata fields
+    SV.server.clientdataFields.length = 0;
+    SV.server.clientdataFields.push(...fields);
+    console.assert(SV.server.clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
+
+    if (fields.length <= 8) {
+      SV.server.clientdataFieldsBitsWriter = MSG.WriteByte;
+    } else if (fields.length <= 16) {
+      SV.server.clientdataFieldsBitsWriter = MSG.WriteShort;
+    } else if (fields.length <= 32) {
+      SV.server.clientdataFieldsBitsWriter = MSG.WriteLong;
+    }
+
+    // double check that all fields are actually defined
+    for (const field of fields) {
+      console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
+    }
   }
 
   // init the game
