@@ -231,14 +231,18 @@ export class ClientMessages {
         case Protocol.serializableTypes.string:
           clientdata[field] = MSG.ReadString();
           break;
-        case Protocol.serializableTypes.entity:
-          clientdata[field] = CL.state.clientEntities.getEntity(MSG.ReadShort());
+        case Protocol.serializableTypes.true:
+          clientdata[field] = true;
           break;
-        case Protocol.serializableTypes.boolean:
-          clientdata[field] = MSG.ReadByte() !== 0;
+        case Protocol.serializableTypes.false:
+          clientdata[field] = false;
+          break;
+        case Protocol.serializableTypes.null:
+          clientdata[field] = null;
           break;
         default:
-          throw new HostError(`Unknown client event data type: ${dataType}`);
+          throw new HostError(`Unknown or unsupported client event data type: ${dataType}`);
+        // TODO: handle custom serializable types, also arrays are missing
       }
     }
 
@@ -272,37 +276,7 @@ export class ClientMessages {
 
   parseClientEvent() {
     const eventCode = MSG.ReadByte();
-
-    /** @type {(import('../../shared/GameInterfaces').SerializableType)[]} */
-    const args = [];
-
-    while (true) {
-      const dataType = MSG.ReadByte();
-
-      if (dataType === Protocol.serializableTypes.none) {
-        break;
-      }
-
-      switch (dataType) {
-        case Protocol.serializableTypes.number:
-          args.push(MSG.ReadLong());
-          break;
-        case Protocol.serializableTypes.vector:
-          args.push(MSG.ReadCoordVector());
-          break;
-        case Protocol.serializableTypes.string:
-          args.push(MSG.ReadString());
-          break;
-        case Protocol.serializableTypes.entity:
-          args.push(CL.state.clientEntities.getEntity(MSG.ReadShort()));
-          break;
-        case Protocol.serializableTypes.boolean:
-          args.push(MSG.ReadByte() !== 0);
-          break;
-        default:
-          throw new HostError(`Unknown client event data type: ${dataType}`);
-      }
-    }
+    const args = MSG.ReadSerializablesOnClient();
 
     CL.state.gameAPI.handleClientEvent(eventCode, ...args);
   }

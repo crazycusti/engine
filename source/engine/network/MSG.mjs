@@ -293,6 +293,13 @@ export default class MSG {
   /** @type {{ type: string, value: number | string }[]} */
   static _messageLog = [];
 
+  /** @type {{id: number, constructor: Function, serialize: (sz: SzBuffer, object: any) => void, deserializeOnServer: (sz: SzBuffer) => any, deserializeOnClient: (sz: SzBuffer) => any}[]} NOTE: any is actually T and Function typeof T */
+  static #serializableHandlers = [];
+
+  static RegisterSerializableType(constructor, { serialize, deserializeOnServer, deserializeOnClient }) {
+    this.#serializableHandlers.push({constructor, serialize, deserializeOnServer, deserializeOnClient, id: Object.keys(Protocol.serializableTypes).length + this.#serializableHandlers.length});
+  }
+
   // ============================================================================
   // WRITE METHODS (Static - take buffer as first parameter)
   // ============================================================================
@@ -487,6 +494,52 @@ export default class MSG {
     MSG.WriteByte(sb, to.msec);
   }
 
+  static WriteSerializables(sb, serializables) {
+    for (const serializable of serializables) {
+      switch (true) {
+      case serializable === undefined:
+        console.assert(false, 'serializable must not be undefined');
+        MSG.WriteByte(sb, Protocol.serializableTypes.null);
+        continue;
+      case serializable === null:
+        MSG.WriteByte(sb, Protocol.serializableTypes.null);
+        continue;
+      case typeof serializable === 'string':
+        MSG.WriteByte(sb, Protocol.serializableTypes.string);
+        MSG.WriteString(sb, serializable);
+        continue;
+      case typeof serializable === 'number':
+        MSG.WriteByte(sb, Protocol.serializableTypes.number);
+        MSG.WriteLong(sb, serializable);
+        continue;
+      case typeof serializable === 'boolean':
+        MSG.WriteByte(sb, serializable ? Protocol.serializableTypes.true : Protocol.serializableTypes.false);
+        continue;
+      case serializable instanceof Vector:
+        MSG.WriteByte(sb, Protocol.serializableTypes.vector);
+        MSG.WriteCoordVector(sb, serializable);
+        continue;
+      case serializable instanceof Array:
+        MSG.WriteByte(sb, Protocol.serializableTypes.array);
+        MSG.WriteSerializables(sb, serializable);
+        continue;
+      }
+
+      const handler = this.#serializableHandlers.find((h) => serializable instanceof h.constructor);
+
+      if (handler) {
+        MSG.WriteByte(sb, handler.id);
+        handler.serialize(sb, serializable);
+        continue;
+      }
+
+      throw new TypeError(`Unsupported argument type: ${typeof serializable}`);
+    }
+
+    // end of event data
+    MSG.WriteByte(sb, Protocol.serializableTypes.none);
+  }
+
   // ============================================================================
   // READ METHODS (Static - use NET.message and instance state)
   // ============================================================================
@@ -649,6 +702,52 @@ export default class MSG {
     to.msec = MSG.ReadByte();
 
     return to;
+  }
+
+  static ReadSerializablesOnClient() {
+    const serializables = [];
+
+    while (true) {
+      const type = MSG.ReadByte();
+      if (type === Protocol.serializableTypes.none) {
+        break; // end of stream of serializables
+      }
+
+      switch (type) {
+      case Protocol.serializableTypes.string:
+        serializables.push(MSG.ReadString());
+        continue;
+      case Protocol.serializableTypes.number:
+        serializables.push(MSG.ReadLong());
+        continue;
+      case Protocol.serializableTypes.true:
+        serializables.push(true);
+        continue;
+      case Protocol.serializableTypes.false:
+        serializables.push(false);
+        continue;
+      case Protocol.serializableTypes.null:
+        serializables.push(null);
+        continue;
+      case Protocol.serializableTypes.vector:
+        serializables.push(MSG.ReadCoordVector());
+        continue;
+      case Protocol.serializableTypes.array:
+        serializables.push(MSG.ReadSerializablesOnClient());
+        continue;
+      }
+
+      const handler = this.#serializableHandlers.find((h) => h.id === type);
+
+      if (handler) {
+        serializables.push(handler.deserializeOnClient(NET.message));
+        continue;
+      }
+
+      throw new TypeError(`Unsupported serializable type: ${type}`);
+    }
+
+    return serializables;
   }
 }
 

@@ -883,6 +883,7 @@ SV.WriteEntitiesToClient = function(clientEdict, msg) {
 SV.WriteClientdataToMessage = function(clientEdict, msg) {
   // FIXME: there is too much hard wired stuff happening here
   // FIXME: interfaces, edict, entity
+  // TODO: make this optional, client should take care of this
   if ((clientEdict.entity.dmg_take || clientEdict.entity.dmg_save) && clientEdict.entity.dmg_inflictor) {
     const other = clientEdict.entity.dmg_inflictor.edict ? clientEdict.entity.dmg_inflictor.edict : clientEdict.entity.dmg_inflictor; // FIXME: ServerEdict vs BaseEntity
     const vec = !other.isFree() ? other.entity.origin.copy().add(other.entity.mins.copy().add(other.entity.maxs).multiply(0.5)) : clientEdict.entity.origin;
@@ -1015,35 +1016,7 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
 
     SV.server.clientdataFieldsBitsWriter(destination, fieldbits);
 
-    for (const field of values) {
-      switch (true) {
-        case typeof field === 'string':
-          MSG.WriteByte(destination, Protocol.serializableTypes.string);
-          MSG.WriteString(destination, field);
-          break;
-        case typeof field === 'number':
-          MSG.WriteByte(destination, Protocol.serializableTypes.number);
-          MSG.WriteLong(destination, field);
-          break;
-        case typeof field === 'boolean':
-          MSG.WriteByte(destination, Protocol.serializableTypes.boolean);
-          MSG.WriteByte(destination, field ? 1 : 0);
-          break;
-        case field instanceof Vector:
-          MSG.WriteByte(destination, Protocol.serializableTypes.vector);
-          MSG.WriteCoordVector(destination, field);
-          break;
-        case field instanceof ServerEdict:
-          MSG.WriteByte(destination, Protocol.serializableTypes.entity);
-          MSG.WriteShort(destination, field.num);
-          break;
-        default:
-          throw new TypeError(`Unsupported argument type: ${typeof field}`);
-      }
-    }
-
-    // end of event data
-    MSG.WriteByte(destination, Protocol.serializableTypes.none);
+    MSG.WriteSerializables(destination, values);
   }
 
   return true; // TODO: changes

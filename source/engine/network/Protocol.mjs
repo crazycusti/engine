@@ -137,8 +137,11 @@ export const serializableTypes = Object.freeze({
   number: 1,
   vector: 2,
   string: 3,
-  entity: 4,
-  boolean: 5,
+  true: 4,
+  false: 5,
+  null: 6,
+  array: 7,
+  // anything else is a custom type and must be registered with MSG.RegisterSerializableType for more magic
 });
 
 export const te = Object.freeze({

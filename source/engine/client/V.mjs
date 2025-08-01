@@ -128,7 +128,7 @@ V.cshift_lava = [255.0, 80.0, 0.0, 150.0];
 
 V.blend = [0.0, 0.0, 0.0, 0.0];
 
-V.ParseDamage = function () {
+V.ParseDamage = function () { // Client
   const armor = MSG.ReadByte();
   const blood = MSG.ReadByte();
   const ent = CL.state.playerentity;
@@ -178,6 +178,14 @@ V.BonusFlash_f = function () {
   cshift[1] = 186.0;
   cshift[2] = 69.0;
   cshift[3] = 50.0;
+};
+
+V.BonusFlash = function (color, alpha) {
+  const cshift = CL.state.cshifts[CL.cshift.bonus];
+  cshift[0] = color[0] * 255.0;
+  cshift[1] = color[1] * 255.0;
+  cshift[2] = color[2] * 255.0;
+  cshift[3] = alpha * 255.0;
 };
 
 V.SetContentsColor = function (contents) {

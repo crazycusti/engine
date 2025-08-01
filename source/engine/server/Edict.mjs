@@ -1,14 +1,16 @@
 import Vector from '../../shared/Vector.mjs';
-import MSG from '../network/MSG.mjs';
+import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Q from '../common/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
+import { ClientEdict } from '../client/ClientEntities.mjs';
 
-let { COM, Con, Host, Mod, PR, SV } = registry;
+let { CL, COM, Con, Host, Mod, PR, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
   COM = registry.COM;
   Con = registry.Con;
   Host = registry.Host;
@@ -661,3 +663,33 @@ export class ServerEdict {
     return this.num === 0;
   }
 };
+
+MSG.RegisterSerializableType(ServerEdict, {
+  /**
+   * @param {SzBuffer} sz serialization buffer
+   * @param {ServerEdict} object edict to serialize
+   */
+  serialize(sz, object) {
+    sz.writeShort(object.num);
+  },
+
+  /**
+   * @param {SzBuffer} sz serialization buffer
+   * @returns {ServerEdict} deserialized edict
+   */
+  // eslint-disable-next-line no-unused-vars
+  deserializeOnServer(sz) {
+    const num = MSG.ReadShort();
+    console.assert(num >= 0 && num < SV.server.num_edicts, `ServerEdict.deserialize: invalid edict number ${num}`);
+    return SV.server.edicts[num];
+  },
+
+  /**
+   * @param {SzBuffer} sz serialization buffer
+   * @returns {ClientEdict} deserialized edict
+   */
+  // eslint-disable-next-line no-unused-vars
+  deserializeOnClient(sz) {
+    return CL.EntityNum(MSG.ReadShort());
+  },
+});

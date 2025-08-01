@@ -15,7 +15,7 @@ import { Pmove, Trace } from './Pmove.mjs';
 
 /** @typedef {import('../client/ClientEntities.mjs').ClientEdict} ClientEdict */
 
-let { CL, Con, Draw, Host, R, SCR, SV } = registry;
+let { CL, Con, Draw, Host, R, SCR, SV, V } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -25,6 +25,7 @@ eventBus.subscribe('registry.frozen', () => {
   R = registry.R;
   SCR = registry.SCR;
   SV = registry.SV;
+  V = registry.V;
 });
 
 eventBus.subscribe('com.ready', () => {
@@ -374,6 +375,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     MSG.WriteByte(SV.server.reliable_datagram, Protocol.svc.foundsecret);
   }
 
+  /** @deprecated use client events instead */
   static BroadcastObituary(killerEdictId, victimEdictId, killerWeapon, killerItems) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.obituary);
     MSG.WriteShort(SV.server.datagram, killerEdictId);
@@ -410,36 +412,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     MSG.WriteByte(destination, Protocol.svc.clientevent);
     MSG.WriteByte(destination, eventCode);
 
-    // TODO: compress args better
-    for (const arg of args) {
-      switch (true) {
-        case typeof arg === 'string':
-          MSG.WriteByte(destination, Protocol.serializableTypes.string);
-          MSG.WriteString(destination, arg);
-          break;
-        case typeof arg === 'number':
-          MSG.WriteByte(destination, Protocol.serializableTypes.number);
-          MSG.WriteLong(destination, arg);
-          break;
-        case typeof arg === 'boolean':
-          MSG.WriteByte(destination, Protocol.serializableTypes.boolean);
-          MSG.WriteByte(destination, arg ? 1 : 0);
-          break;
-        case arg instanceof Vector:
-          MSG.WriteByte(destination, Protocol.serializableTypes.vector);
-          MSG.WriteCoordVector(destination, arg);
-          break;
-        case arg instanceof ServerEdict:
-          MSG.WriteByte(destination, Protocol.serializableTypes.entity);
-          MSG.WriteShort(destination, arg.num);
-          break;
-        default:
-          throw new TypeError(`Unsupported argument type: ${typeof arg}`);
-      }
-    }
-
-    // end of event data
-    MSG.WriteByte(destination, Protocol.serializableTypes.none);
+    MSG.WriteSerializables(destination, args);
   }
 
   /**
@@ -637,6 +610,15 @@ export class ClientEngineAPI extends CommonEngineAPI {
     }
 
     throw new HostError(`ClientEngineAPI.ModById: ${id} not found`);
+  }
+
+  /**
+   *
+   * @param {Vector} color RGB color vector
+   * @param {number} alpha alpha value, default is 50.0
+   */
+  static BonusFlash(color, alpha = 0.25) {
+    V.BonusFlash(color, alpha);
   }
 
   static CL = {

@@ -328,6 +328,15 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-02
+
+* went even more wild on serialize/deserialize over the netchan
+* I want to give client code more flexibility on received damage
+  * need another feature flag to not transmit damage
+  * need to expose an API from the engine to the game regarding damage effects
+* I’m moving this obituary code from engine to client, also it should take the event route
+* client event manager needs to be more flexible, multiple listeners etc.
+
 ### 2025-08-01
 
 * small optimization on clientdata
