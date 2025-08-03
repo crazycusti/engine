@@ -74,7 +74,7 @@ export class EventBus {
    * @param {...*} args The arguments to pass to the event listeners.
    */
   publish(eventName, ...args) {
-    // console.debug(`EventBus: ${this.#name} - ${eventName}`, ...args);
+    console.debug(`EventBus: ${this.#name} - ${eventName}`, ...args);
 
     if (!this.#listeners.has(eventName)) {
       return;

@@ -2,7 +2,7 @@ import Vector from '../../shared/Vector.mjs';
 import GL, { GLTexture, resampleTexture8 } from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
-import Q from './Q.mjs';
+import Q from '../../shared/Q.mjs';
 import W, { translateIndexToRGBA } from './W.mjs';
 
 const Mod = {};

@@ -1,6 +1,6 @@
 import { registry, eventBus } from '../registry.mjs';
 import Cmd from './Cmd.mjs';
-import Q from './Q.mjs';
+import Q from '../../shared/Q.mjs';
 
 let { CL, Con } = registry;
 

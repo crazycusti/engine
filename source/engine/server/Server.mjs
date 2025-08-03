@@ -5,7 +5,7 @@ import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from './../common/Def.mjs';
 import Cmd from '../common/Cmd.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { ED, ServerEdict } from './Edict.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';

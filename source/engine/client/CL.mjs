@@ -1,5 +1,5 @@
 import MSG, { SzBuffer } from '../network/MSG.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import * as Def from '../common/Def.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import Vector from '../../shared/Vector.mjs';
@@ -191,6 +191,9 @@ export default class CL {
     static gameAPI = null;
     static paused = false;
 
+    /** event bus solely for engine-game communication, will be reset on every map load */
+    static eventBus = new EventBus('client-game');
+
     static clear() {
       this.clientMessages.clear();
       this.clientEntities.clear();
@@ -235,6 +238,26 @@ export default class CL {
       this.inwater = false;
       this.nodrift = false;
       this.paused = false;
+
+      this.#configureProxyEvents();
+    }
+
+    static #configureProxyEvents() {
+      this.eventBus.unsubscribeAll();
+
+      // proxy all relevant events from the client event bus to the game event bus, but not everything
+      for (const event of [
+        'vid.resize',
+        'cvar.changed',
+        'client.paused',
+        'client.unpaused',
+        'client.cdtrack',
+        'client.players.name-changed',
+        'client.players.frags-updated',
+        'client.players.colors-updated',
+      ]) {
+        this.eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args));
+      }
     }
   };
 
@@ -970,12 +993,7 @@ CL.ParseServerData = function() { // private
       throw new HostError(`Server (v${version.join('.')}) is not compatible. You are running v${identification.version.join('.')}.\nTry clearing your cache and connect again.`);
     }
 
-    // FIXME: put this somewhere else, but not in ParseServerData, more like a CL.PrepareGame or something
-    const clientEventBus = new EventBus('client-game');
-    eventBus.subscribe('vid.resize', (...args) => clientEventBus.publish('vid.resize', ...args));
-    eventBus.subscribe('cvar.changed', (...args) => clientEventBus.publish('cvar.changed', ...args));
-
-    CL.state.gameAPI = new PR.QuakeJS.ClientGameAPI(ClientEngineAPI, clientEventBus);
+    CL.state.gameAPI = new PR.QuakeJS.ClientGameAPI(ClientEngineAPI);
   } else {
     const game = MSG.ReadString();
 
@@ -1304,6 +1322,7 @@ CL.ParseServerMessage = function() { // private
           // make sure the current player is aware of name changes
           if (CL.state.scores[i].name !== '' && newName !== '' && newName !== CL.state.scores[i].name) {
             Con.Print(`${CL.state.scores[i].name} renamed to ${newName}\n`);
+            eventBus.publish('client.players.name-changed', i, CL.state.scores[i].name, newName);
           }
           CL.state.scores[i].name = newName;
         }
@@ -1314,6 +1333,7 @@ CL.ParseServerMessage = function() { // private
           throw new HostError('CL.ParseServerMessage: svc_updatefrags > MAX_SCOREBOARD');
         }
         CL.state.scores[i].frags = MSG.ReadShort();
+        eventBus.publish('client.players.frags-updated', i, CL.state.scores[i].frags);
         continue;
       case Protocol.svc.updatecolors: // TODO: Client
         i = MSG.ReadByte();
@@ -1321,8 +1341,9 @@ CL.ParseServerMessage = function() { // private
           throw new HostError('CL.ParseServerMessage: svc_updatecolors > MAX_SCOREBOARD');
         }
         CL.state.scores[i].colors = MSG.ReadByte();
+        eventBus.publish('client.players.colors-updated', i, CL.state.scores[i].colors);
         continue;
-      case Protocol.svc.updatepings: // TODO: Client?
+      case Protocol.svc.updatepings:
         i = MSG.ReadByte();
         if (i >= CL.state.maxclients) {
           throw new HostError('CL.ParseServerMessage: svc_updatepings > MAX_SCOREBOARD');
@@ -1333,7 +1354,7 @@ CL.ParseServerMessage = function() { // private
         R.ParseParticleEffect();
         continue;
       case Protocol.svc.spawnbaseline:
-        Con.Print('spawnbaseline no longer implemented\n');
+        console.assert(false, 'spawnbaseline is not implemented');
         continue;
       case Protocol.svc.spawnstatic:
         CL.ParseStaticEntity();
@@ -1409,7 +1430,6 @@ CL.ParseServerMessage = function() { // private
         continue;
       case Protocol.svc.playerinfo:
         parser.parsePlayer();
-        // CL.ParsePlayerinfo();
         continue;
       case Protocol.svc.deltapacketentities:
         entitiesReceived++;
@@ -1419,7 +1439,7 @@ CL.ParseServerMessage = function() { // private
         CL.ParseServerCvars();
         continue;
       case Protocol.svc.clientevent:
-        console.assert(CL.state.gameAPI, 'ClientGameAPI required');
+        console.assert(CL.state.gameAPI !== null, 'ClientGameAPI required');
         CL.state.clientMessages.parseClientEvent();
         continue;
     }

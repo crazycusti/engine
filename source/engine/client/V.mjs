@@ -2,7 +2,7 @@ import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import * as Def from '../common/Def.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import MSG from '../network/MSG.mjs';
 import Chase from './Chase.mjs';

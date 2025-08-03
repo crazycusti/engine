@@ -1,4 +1,4 @@
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
 

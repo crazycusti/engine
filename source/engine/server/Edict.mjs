@@ -3,7 +3,7 @@ import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
 

@@ -15,7 +15,7 @@ import { Pmove, Trace } from './Pmove.mjs';
 
 /** @typedef {import('../client/ClientEntities.mjs').ClientEdict} ClientEdict */
 
-let { CL, Con, Draw, Host, R, SCR, SV, V } = registry;
+let { CL, Con, Draw, Host, R, S, SCR, SV, V } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -23,6 +23,7 @@ eventBus.subscribe('registry.frozen', () => {
   Draw = registry.Draw;
   Host = registry.Host;
   R = registry.R;
+  S = registry.S;
   SCR = registry.SCR;
   SV = registry.SV;
   V = registry.V;
@@ -465,14 +466,19 @@ export class ClientEngineAPI extends CommonEngineAPI {
     return Draw.LoadPicFromFileDeferred(filename);
   }
 
+  static LoadSound(sfxName) {
+    return S.PrecacheSound(sfxName);
+  }
+
   /**
    * Draws a picture at the specified position.
    * @param {number} x x position
    * @param {number} y y position
    * @param {GLTexture} pic pic texture to draw
+   * @param {number} scale optional scale (default: 1.0)
    */
-  static DrawPic(x, y, pic) {
-    Draw.Pic(x, y, pic);
+  static DrawPic(x, y, pic, scale = 1.0) {
+    Draw.Pic(x, y, pic, scale);
   }
 
   /**
@@ -625,6 +631,12 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get vieworigin() {
       return CL.state.viewent.origin.copy();
     },
+    get maxclients() {
+      return CL.state.maxclients;
+    },
+    get levelname() {
+      return CL.state.levelname;
+    },
     get time() {
       return CL.state.time;
     },
@@ -640,6 +652,13 @@ export class ClientEngineAPI extends CommonEngineAPI {
   };
 
   static SCR = {
+    /**
+     * @returns {number} the current view size (important ones for the status bar are 100, 110, 120)
+     */
     get viewsize() { return /** @type {number} */ (SCR.viewsize.value); },
+  };
+
+  static get eventBus() {
+    return CL.state.eventBus;
   };
 };

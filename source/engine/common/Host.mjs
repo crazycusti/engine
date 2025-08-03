@@ -5,7 +5,7 @@ import Cmd, { ConsoleCommand } from './Cmd.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import MSG from '../network/MSG.mjs';
 import Vector from '../../shared/Vector.mjs';
-import Q from './Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { ServerClient } from '../server/Client.mjs';
 import { ServerEngineAPI } from './GameAPIs.mjs';
 import Chase from '../client/Chase.mjs';

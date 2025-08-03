@@ -1,7 +1,7 @@
 
 import { registry, eventBus } from '../registry.mjs';
 
-import Q from './Q.mjs';
+import Q from '../../shared/Q.mjs';
 import { CRC16CCITT as CRC } from './CRC.mjs';
 import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
 

@@ -11,7 +11,7 @@ import { registry, eventBus } from '../registry.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { REPLServer } from 'node:repl';
 import Cmd from '../common/Cmd.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 
 let { COM, Host, NET } = registry;
 

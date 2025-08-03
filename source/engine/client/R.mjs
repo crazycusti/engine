@@ -1,7 +1,7 @@
 import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
-import Q from '../common/Q.mjs';
+import Q from '../../shared/Q.mjs';
 import * as Def from '../common/Def.mjs';
 
 import { eventBus, registry } from '../registry.mjs';
