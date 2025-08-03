@@ -84,6 +84,26 @@ export default class Q {
   }
 
   /**
+   * Turns seconds like 3692 into a string like "01:01:32".
+   * @param {number} secs seconds
+   * @returns {string} hours:mins:seconds
+   */
+  static secsToTime(secs) {
+    let seconds = Math.floor(secs);
+    let minutes = Math.floor(seconds / 60);
+    let hours = 0;
+    if (minutes > 0) {
+      seconds -= minutes * 60;
+      hours = Math.floor(minutes / 60);
+      if (hours !== 0) {
+        minutes -= hours * 60;
+      }
+    }
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  /**
    * Yields execution to the event loop (async).
    * @returns {Promise<void>} Promise that resolves on next tick.
    */

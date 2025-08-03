@@ -89,7 +89,6 @@ export class ClientPlayerState extends Protocol.EntityState {
   }
 };
 
-
 /**
  * Handles player movement and entity related messages.
  */

@@ -170,7 +170,7 @@ export default class CL {
     static onground = false;
     /** @type {number} maxplayers of the current game */
     static maxclients = 1;
-    /** @type {CL.ScoreSlot[]} */
+    /** @type {ClientScoreSlot[]} */
     static scores = [];
     static worldmodel = null;
     static viewheight = 0;
@@ -927,14 +927,12 @@ CL.ParsePmovevars = function() { // private
   Con.DPrint('Reconfigured Pmovevars.\n');
 };
 
-CL.ScoreSlot = class ClientScoreSlot {
-  constructor() {
-    this.name = '';
-    this.entertime = 0.0;
-    this.frags = 0;
-    this.colors = 0;
-    this.ping = 0;
-  }
+class ClientScoreSlot {
+  name = '';
+  entertime = 0.0;
+  frags = 0;
+  colors = 0;
+  ping = 0;
 };
 
 CL.ParseServerData = function() { // private
@@ -989,7 +987,7 @@ CL.ParseServerData = function() { // private
   CL.state.scores.length = 0;
 
   for (let i = 0; i < CL.state.maxclients; i++) {
-    CL.state.scores[i] = new CL.ScoreSlot();
+    CL.state.scores[i] = new ClientScoreSlot();
   }
 
   CL.state.gametype = MSG.ReadByte(); // CR: unused (set to CL.state, but unused)

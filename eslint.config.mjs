@@ -54,7 +54,7 @@ export default [
       'jsdoc/check-types': 'error', // Ensures types are valid
       'jsdoc/require-param-description': 'off',
       'no-global-assign': 'warn',
-      "no-param-reassign": ["warn", { "props": true }],
+      // "no-param-reassign": ["warn", { "props": true }], -- too many false positives
     },
   },
   pluginJs.configs.recommended,

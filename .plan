@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-03
+
+* mainly cleaning up some stuff that is now done using client code and client events
+
 ### 2025-08-02
 
 * went even more wild on serialize/deserialize over the netchan

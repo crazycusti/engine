@@ -578,23 +578,12 @@ Host.Status_f = function() {
       continue;
     }
 
-    let seconds = Math.floor(NET.time - client.netconnection.connecttime);
-    let minutes = Math.floor(seconds / 60);
-    let hours = 0;
-    if (minutes > 0) {
-      seconds -= minutes * 60;
-      hours = Math.floor(minutes / 60);
-      if (hours !== 0) {
-        minutes -= hours * 60;
-      }
-    }
-
     const parts = [
       '#',
       client.num.toString().padStart(6),
       client.name.substring(0, 19).padEnd(19),
       client.uniqueId.substring(0, 19).padEnd(19),
-      `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`.padEnd(9),
+      Q.secsToTime(NET.time - client.netconnection.connecttime).padEnd(9),
       client.ping.toString().padStart(4),
       '0   ',
       'active',
@@ -605,68 +594,91 @@ Host.Status_f = function() {
   }
 };
 
-Host.God_f = function() {
-  if (this.forward()) {
-    return;
+class HostConsoleCommand extends ConsoleCommand {
+  /**
+   * @protected
+   * @returns {boolean} true, if it’s a cheat and cannot be invoked
+   */
+  cheat() {
+    if (!SV.cheats.value) {
+      Host.ClientPrint('Cheats are not enabled on this server.\n');
+      return true;
+    }
+
+    return false;
   }
-  if (SV.server.gameAPI.deathmatch !== 0) {
-    return;
-  }
-  SV.player.entity.flags ^= SV.fl.godmode;
-  if ((SV.player.entity.flags & SV.fl.godmode) === 0) {
-    Host.ClientPrint('godmode OFF\n');
-  } else {
-    Host.ClientPrint('godmode ON\n');
+}
+
+Host.God_f = class extends HostConsoleCommand {
+  run() {
+    if (this.forward()) {
+      return;
+    }
+    if (this.cheat()) {
+      return;
+    }
+    SV.player.entity.flags ^= SV.fl.godmode;
+    if ((SV.player.entity.flags & SV.fl.godmode) === 0) {
+      Host.ClientPrint('godmode OFF\n');
+    } else {
+      Host.ClientPrint('godmode ON\n');
+    }
   }
 };
 
-Host.Notarget_f = function() {
-  if (this.forward()) {
-    return;
-  }
-  if (SV.server.gameAPI.deathmatch !== 0) {
-    return;
-  }
-  SV.player.entity.flags ^= SV.fl.notarget;
-  if ((SV.player.entity.flags & SV.fl.notarget) === 0) {
-    Host.ClientPrint('notarget OFF\n');
-  } else {
-    Host.ClientPrint('notarget ON\n');
+Host.Notarget_f = class extends HostConsoleCommand {
+  run() {
+    if (this.forward()) {
+      return;
+    }
+    if (this.cheat()) {
+      return;
+    }
+    SV.player.entity.flags ^= SV.fl.notarget;
+    if ((SV.player.entity.flags & SV.fl.notarget) === 0) {
+      Host.ClientPrint('notarget OFF\n');
+    } else {
+      Host.ClientPrint('notarget ON\n');
+    }
   }
 };
 
-Host.Noclip_f = function() {
-  if (this.forward()) {
-    return;
+Host.Noclip_f = class extends HostConsoleCommand {
+  run() {
+    if (this.forward()) {
+      return;
+    }
+    if (this.cheat()) {
+      return;
+    }
+    if (SV.player.entity.movetype !== SV.movetype.noclip) {
+      Host.noclip_anglehack = true;
+      SV.player.entity.movetype = SV.movetype.noclip;
+      Host.ClientPrint('noclip ON\n');
+      return;
+    }
+    Host.noclip_anglehack = false;
+    SV.player.entity.movetype = SV.movetype.walk;
+    Host.ClientPrint('noclip OFF\n');
   }
-  if (SV.server.gameAPI.deathmatch !== 0) {
-    return;
-  }
-  if (SV.player.entity.movetype !== SV.movetype.noclip) {
-    Host.noclip_anglehack = true;
-    SV.player.entity.movetype = SV.movetype.noclip;
-    Host.ClientPrint('noclip ON\n');
-    return;
-  }
-  Host.noclip_anglehack = false;
-  SV.player.entity.movetype = SV.movetype.walk;
-  Host.ClientPrint('noclip OFF\n');
 };
 
-Host.Fly_f = function() {
-  if (this.forward()) {
-    return;
+Host.Fly_f = class extends HostConsoleCommand {
+  run() {
+    if (this.forward()) {
+      return;
+    }
+    if (this.cheat()) {
+      return;
+    }
+    if (SV.player.entity.movetype !== SV.movetype.fly) {
+      SV.player.entity.movetype = SV.movetype.fly;
+      Host.ClientPrint('flymode ON\n');
+      return;
+    }
+    SV.player.entity.movetype = SV.movetype.walk;
+    Host.ClientPrint('flymode OFF\n');
   }
-  if (SV.server.gameAPI.deathmatch !== 0) {
-    return;
-  }
-  if (SV.player.entity.movetype !== SV.movetype.fly) {
-    SV.player.entity.movetype = SV.movetype.fly;
-    Host.ClientPrint('flymode ON\n');
-    return;
-  }
-  SV.player.entity.movetype = SV.movetype.walk;
-  Host.ClientPrint('flymode OFF\n');
 };
 
 Host.Ping_f = function() {
@@ -1357,54 +1369,56 @@ Host.Kick_f = function(...argv) { // FIXME: Host.client
   Host.client = save;
 };
 
-Host.Give_f = function(classname) {
-  // CR:  unsure if I want a “give item_shells” approach or
-  //      if I want to push this piece of code into PR/PF and let
-  //      the game handle this instead
+Host.Give_f = class extends HostConsoleCommand {
+  run(classname) {
+    // CR:  unsure if I want a “give item_shells” approach or
+    //      if I want to push this piece of code into PR/PF and let
+    //      the game handle this instead
 
-  if (this.forward()) {
-    return;
-  }
-
-  if (SV.server.gameAPI.deathmatch !== 0) {
-    return;
-  }
-
-  if (!classname) {
-    Host.ClientPrint('give <classname>\n');
-    return;
-  }
-
-  const player = this.client.edict;
-
-  if (!classname.startsWith('item_') && !classname.startsWith('weapon_')) {
-    Host.ClientPrint('Only entity classes item_* and weapon_* are allowed!\n');
-    return;
-  }
-
-  // wait for the next server frame
-  SV.ScheduleGameCommand(() => {
-    const { forward } = player.entity.v_angle.angleVectors();
-
-    const start = player.entity.origin;
-    const end = forward.copy().multiply(64.0).add(start);
-
-    const mins = new Vector(-16.0, -16.0, -24.0);
-    const maxs = new Vector(16.0, 16.0, 32.0);
-
-    const trace = ServerEngineAPI.Traceline(start, end, false, player, mins, maxs);
-
-    const origin = trace.point.subtract(forward.multiply(16.0)).add(new Vector(0.0, 0.0, 16.0));
-
-    if (![Mod.contents.empty, Mod.contents.water].includes(ServerEngineAPI.DeterminePointContents(origin))) {
-      Host.ClientPrint('Item would spawn out of world!\n');
+    if (this.forward()) {
       return;
     }
 
-    ServerEngineAPI.SpawnEntity(classname, {
-      origin,
+    if (this.cheat()) {
+      return;
+    }
+
+    if (!classname) {
+      Host.ClientPrint('give <classname>\n');
+      return;
+    }
+
+    const player = this.client.edict;
+
+    if (!classname.startsWith('item_') && !classname.startsWith('weapon_')) {
+      Host.ClientPrint('Only entity classes item_* and weapon_* are allowed!\n');
+      return;
+    }
+
+    // wait for the next server frame
+    SV.ScheduleGameCommand(() => {
+      const { forward } = player.entity.v_angle.angleVectors();
+
+      const start = player.entity.origin;
+      const end = forward.copy().multiply(64.0).add(start);
+
+      const mins = new Vector(-16.0, -16.0, -24.0);
+      const maxs = new Vector(16.0, 16.0, 32.0);
+
+      const trace = ServerEngineAPI.Traceline(start, end, false, player, mins, maxs);
+
+      const origin = trace.point.subtract(forward.multiply(16.0)).add(new Vector(0.0, 0.0, 16.0));
+
+      if (![Mod.contents.empty, Mod.contents.water].includes(ServerEngineAPI.DeterminePointContents(origin))) {
+        Host.ClientPrint('Item would spawn out of world!\n');
+        return;
+      }
+
+      ServerEngineAPI.SpawnEntity(classname, {
+        origin,
+      });
     });
-  });
+  }
 };
 
 Host.FindViewthing = function() {
