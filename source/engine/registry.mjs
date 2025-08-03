@@ -85,6 +85,13 @@ export class EventBus {
     }
   }
 
+  /**
+   * Unsubscribes from all events.
+   */
+  unsubscribeAll() {
+    this.#listeners.clear();
+  }
+
   toString() {
     return `EventBus(${this.#name}): ${this.#listeners.size} topics`;
   }

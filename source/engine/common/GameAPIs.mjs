@@ -52,9 +52,6 @@ export const GameFlavors = Object.freeze({
 });
 
 export class CommonEngineAPI {
-  /** Engine’s main event bus. */
-  static eventBus = eventBus;
-
   /** @type {GameFlavors[]} */
   static gameFlavors = [];
 

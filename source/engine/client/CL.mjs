@@ -6,7 +6,7 @@ import Vector from '../../shared/Vector.mjs';
 import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { MoveVars, Pmove, PmovePlayer } from '../common/Pmove.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { gameCapabilities, solid } from '../../shared/Defs.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
@@ -970,7 +970,12 @@ CL.ParseServerData = function() { // private
       throw new HostError(`Server (v${version.join('.')}) is not compatible. You are running v${identification.version.join('.')}.\nTry clearing your cache and connect again.`);
     }
 
-    CL.state.gameAPI = new PR.QuakeJS.ClientGameAPI(ClientEngineAPI);
+    // FIXME: put this somewhere else, but not in ParseServerData, more like a CL.PrepareGame or something
+    const clientEventBus = new EventBus('client-game');
+    eventBus.subscribe('vid.resize', (...args) => clientEventBus.publish('vid.resize', ...args));
+    eventBus.subscribe('cvar.changed', (...args) => clientEventBus.publish('cvar.changed', ...args));
+
+    CL.state.gameAPI = new PR.QuakeJS.ClientGameAPI(ClientEngineAPI, clientEventBus);
   } else {
     const game = MSG.ReadString();
 
