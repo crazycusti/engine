@@ -3,6 +3,7 @@ precision mediump float;
 uniform float uGamma;
 uniform float uAmbientLight;
 uniform float uShadeLight;
+uniform float uTime;
 uniform vec3 uTop;
 uniform vec3 uBottom;
 uniform sampler2D tTexture;

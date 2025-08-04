@@ -17,14 +17,24 @@ export type ViewmodelConfig = {
   frame: number;
 };
 
+export type ViewportDimensions = {
+  width: number;
+  height: number;
+};
+
 export type RefDef = { // TODO: move to engine shared, it’s V’s refdef
-  vrect: {
-    width: number;
-    height: number;
-  };
+  vrect: ViewportDimensions;
   vieworg: Vector;
   viewangles: Vector;
   // TODO: fov?
+};
+
+export type ViewportResizeEvent = ViewportDimensions;
+
+export type ClientDamageEvent = {
+  damageReceived: number,
+  armorLost: number,
+  attackOrigin: Vector,
 };
 
 export interface ClientGameInterface {

@@ -110,6 +110,12 @@ export class ServerClient {
     this.sendsignon = false;
   }
 
+  changelevel() {
+    this._entityStates.clear();
+    this.cmd.reset();
+    this.lastcmd.reset();
+  }
+
   /**
    * @param {number} num edict Id
    * @returns {ServerEntityState} entity state

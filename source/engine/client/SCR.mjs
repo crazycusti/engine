@@ -356,12 +356,24 @@ SCR.UpdateScreen = function() {
     if (CL.cls.state === CL.active.connecting) {
       SCR.DrawConsole();
     } else if ((CL.state.intermission === 1) && (Key.dest.value === Key.dest.game)) {
-      Sbar.IntermissionOverlay();
+      if (!CL.sbarDisabled) {
+        Sbar.IntermissionOverlay();
+      } else {
+        CL.DrawHUD();
+      }
     } else if ((CL.state.intermission === 2) && (Key.dest.value === Key.dest.game)) {
-      Sbar.FinaleOverlay();
-      SCR.DrawCenterString();
+      if (!CL.sbarDisabled) {
+        Sbar.FinaleOverlay();
+        SCR.DrawCenterString();
+      } else {
+        CL.DrawHUD();
+      }
     } else if ((CL.state.intermission === 3) && (Key.dest.value === Key.dest.game)) {
-      SCR.DrawCenterString();
+      if (!CL.sbarDisabled) {
+        SCR.DrawCenterString();
+      } else {
+        CL.DrawHUD();
+      }
     } else {
       if (!SCR.disableCrosshair && SCR.crosshair.value !== 0) {
         Draw.Character(R.refdef.vrect.x + (R.refdef.vrect.width / 2) + SCR.crossx.value,

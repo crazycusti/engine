@@ -328,6 +328,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-04
+
+* almost finished the HUD stuff, intermission and finale screens are missing
+* fixed a glitch during changelevels, ServerClient states need to be flushed
+* fixed a couple of game related issues like setting rune items to items
+
 ### 2025-08-03
 
 * mainly cleaning up some stuff that is now done using client code and client events

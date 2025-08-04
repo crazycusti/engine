@@ -695,6 +695,7 @@ R.DrawAliasModel = function(e) {
     }
   }
   gl.uniform1f(program.uAlpha, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
+  gl.uniform1f(program.uTime, Host.realtime);
   gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
   gl.vertexAttribPointer(program.aPositionA.location, 3, gl.FLOAT, false, 24, frameA.cmdofs);
   if (program.aPositionB) {
@@ -803,7 +804,9 @@ R.DrawViewModel = function() {
   let program = GL.UseProgram('alias');
   gl.uniformMatrix4fv(program.uPerspective, false, R.perspective);
 
-  R.DrawAliasModel(CL.state.viewent);
+  if (CL.state.viewent.model !== null) {
+    R.DrawAliasModel(CL.state.viewent);
+  }
 
   ymax = 4.0 * Math.tan(R.refdef.fov_y * Math.PI / 360.0);
   R.perspective[0] = 4.0 / (ymax * R.refdef.vrect.width / R.refdef.vrect.height);
@@ -1329,7 +1332,7 @@ R.Init = async function() {
 
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],

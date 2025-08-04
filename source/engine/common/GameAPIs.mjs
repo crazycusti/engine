@@ -12,6 +12,7 @@ import Cvar from './Cvar.mjs';
 import { HostError } from './Errors.mjs';
 import Mod, { ParsedQC } from './Mod.mjs';
 import { Pmove, Trace } from './Pmove.mjs';
+import W from './W.mjs';
 
 /** @typedef {import('../client/ClientEntities.mjs').ClientEdict} ClientEdict */
 
@@ -382,10 +383,12 @@ export class ServerEngineAPI extends CommonEngineAPI {
     MSG.WriteLong(SV.server.datagram, killerItems);
   }
 
+  /** @deprecated use client events instead */
   static EnterIntermission() {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.intermission);
   }
 
+  /** @deprecated use client events instead */
   static EnterFinale() {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.finale);
   }
@@ -504,6 +507,21 @@ export class ClientEngineAPI extends CommonEngineAPI {
    */
   static DrawRect(x, y, w, h, c, a = 1.0) {
     Draw.Fill(x, y, w, h, c, a);
+  }
+
+  /**
+   * @param {number} index index on the palette, must be in range [0, 255]
+   * @returns {Vector} RGB color vector
+   */
+  static IndexToRGB(index) {
+    console.assert(typeof index === 'number', 'index must be a number');
+    console.assert(index >= 0 && index < 256, 'index must be in range [0, 255]');
+
+    return new Vector(
+      W.d_8to24table_u8[index * 3] / 256,
+      W.d_8to24table_u8[index * 3 + 1] / 256,
+      W.d_8to24table_u8[index * 3 + 2] / 256,
+    );
   }
 
   /**
@@ -640,8 +658,17 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get time() {
       return CL.state.time;
     },
-    stats(index) {
-      return CL.state.stats[index] || null;
+    get frametime() {
+      return Host.frametime;
+    },
+    get intermission() {
+      return CL.state.intermission > 0;
+    },
+    set intermission(value) {
+      CL.state.intermission = value ? 1 : 0;
+    },
+    score(/** @type {number} */ num) {
+      return CL.state.scores[num];
     },
   };
 

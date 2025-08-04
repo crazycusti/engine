@@ -1025,7 +1025,7 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
 SV.SendClientDatagram = function() { // FIXME: Host.client
   /** @type {ServerClient} */
   const client = Host.client;
-  const msg = new SzBuffer(2048, 'SV.SendClientDatagram');
+  const msg = new SzBuffer(4096, 'SV.SendClientDatagram');
   MSG.WriteByte(msg, Protocol.svc.time);
   MSG.WriteFloat(msg, SV.server.time);
 
@@ -1224,6 +1224,10 @@ SV.SpawnServer = function(mapname) {
     reconnect.writeByte(Protocol.svc.changelevel);
     reconnect.writeString(mapname);
     NET.SendToAll(reconnect);
+    // make sure that all client states are partially reset and ready for a new map
+    for (const client of SV.svs.clients) {
+      client.changelevel();
+    }
   }
 
   if (Host.coop.value !== 0) {

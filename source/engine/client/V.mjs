@@ -133,6 +133,9 @@ V.ParseDamage = function () { // Client
   const blood = MSG.ReadByte();
   const ent = CL.state.playerentity;
   const from = MSG.ReadCoordVector().subtract(ent.origin);
+
+  eventBus.publish('client.damage', { damageReceived: blood, armorLost: armor, attackOrigin: from.copy() });
+
   from.normalize();
   let count = (blood + armor) * 0.5;
   if (count < 10.0) {

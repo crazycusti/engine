@@ -37,6 +37,18 @@ eventBus.subscribe('registry.frozen', () => {
   V = registry.V;
 });
 
+const clientGameEvents = [
+  'vid.resize',
+  'cvar.changed',
+  'client.paused',
+  'client.unpaused',
+  'client.cdtrack',
+  'client.players.name-changed',
+  'client.players.frags-updated',
+  'client.players.colors-updated',
+  'client.damage',
+];
+
 export default class CL {
   /** @deprecated – use Def */
   static cshift = Def.contentShift;
@@ -246,17 +258,8 @@ export default class CL {
       this.eventBus.unsubscribeAll();
 
       // proxy all relevant events from the client event bus to the game event bus, but not everything
-      for (const event of [
-        'vid.resize',
-        'cvar.changed',
-        'client.paused',
-        'client.unpaused',
-        'client.cdtrack',
-        'client.players.name-changed',
-        'client.players.frags-updated',
-        'client.players.colors-updated',
-      ]) {
-        this.eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args));
+      for (const event of clientGameEvents) {
+        eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args));
       }
     }
   };
@@ -951,6 +954,9 @@ CL.ParsePmovevars = function() { // private
 };
 
 class ClientScoreSlot {
+  get isActive() {
+    return this.name !== '';
+  }
   name = '';
   entertime = 0.0;
   frags = 0;
