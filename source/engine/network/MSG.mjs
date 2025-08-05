@@ -148,7 +148,7 @@ export class SzBuffer {
   }
 
   writeFloat(f) {
-    console.assert(typeof f === 'number' && !isNaN(f) && isFinite(f), 'must be a real number, not NaN or Infinity');
+    console.assert(typeof f === 'number' && !Q.isNaN(f) && isFinite(f), 'must be a real number, not NaN or Infinity');
     new DataView(this.data).setFloat32(this.allocate(4), f, true);
   }
 
@@ -345,7 +345,7 @@ export default class MSG {
    * @param {number} f floating point value (32-bit)
    */
   static WriteFloat(sb, f) {
-    // console.assert(typeof f === 'number' && !isNaN(f) && isFinite(f), 'must be a real number, not NaN or Infinity',);
+    // console.assert(typeof f === 'number' && !Q.isNaN(f) && isFinite(f), 'must be a real number, not NaN or Infinity');
     (new DataView(sb.data)).setFloat32(sb.allocate(4), f, true);
   }
 

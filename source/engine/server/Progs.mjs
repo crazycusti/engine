@@ -462,7 +462,7 @@ class ProgsEntity {
             },
             set: function(value) {
               // s().set++;
-              if (value === undefined || isNaN(value)) {
+              if (value === undefined || Q.isNaN(value)) {
                 throw new TypeError('EdictProxy.' + name + ': invalid value for ev_float passed: ' + value);
               }
               val_float[ofs] = value;
@@ -939,11 +939,11 @@ PR.LoadProgs = function() {
 
         switch (field.type & 0x7fff) {
           case etype.ev_entity:
-            edict.entity[key] = value instanceof SV.Edict ? value : {num: parseInt(value)};
+            edict.entity[key] = value instanceof SV.Edict ? value : {num: Q.atoi(value)};
             break;
 
           case etype.ev_vector:
-            edict.entity[key] = value instanceof Vector ? value : new Vector(...value.split(' ').map((x) => parseFloat(x)));
+            edict.entity[key] = value instanceof Vector ? value : new Vector(...value.split(' ').map((x) => Q.atof(x)));
             break;
 
           case etype.ev_field: {

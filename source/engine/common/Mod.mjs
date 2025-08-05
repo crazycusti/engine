@@ -3,7 +3,7 @@ import GL, { GLTexture, resampleTexture8 } from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
 import Q from '../../shared/Q.mjs';
-import W, { translateIndexToRGBA } from './W.mjs';
+import W, { translateIndexToRGBA, WadFileInterface } from './W.mjs';
 
 const Mod = {};
 
@@ -110,9 +110,16 @@ Mod.version = {brush: 29, sprite: 1, alias: 6};
 
 Mod.known = [];
 
+/** @type {WadFileInterface} */
+let halflifeWad = null;
+
 Mod.Init = function() {
   Mod.novis = new Array(1024);
   Mod.novis.fill(0xff);
+};
+
+Mod.LoadWad = async function() {
+  // halflifeWad = await W.LoadFile('halflife.wad');
 };
 
 Mod.PointInLeaf = function(p, model) { // public method, static access? (PF, R, S use it)
@@ -312,6 +319,19 @@ Mod.LoadTextures = function(buf) {
       sky: false,
       turbulent: false,
     };
+    // prototyped an external wad file loading for textures:
+    // try {
+    //   const tex = halflifeWad.getLumpMipmap(tx.name, 0);
+    //   if (tex) {
+    //     tx.width = tex.width;
+    //     tx.height = tex.height;
+    //     tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, tex.data);
+    //     Mod.loadmodel.textures[i] = tx;
+    //     continue;
+    //   }
+    // } catch(e) {
+    //   console.error(e);
+    // }
     if (!registry.isDedicatedServer) {
       if (tx.name.substring(0, 3).toLowerCase() === 'sky') {
         R.InitSky(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), 32768));
@@ -1299,7 +1319,7 @@ Mod.ParseQC = function(qcContent) {
         break;
 
       case '$origin':
-        data.origin = new Vector(...value.split(/\s+/).map((n) => parseFloat(n)));
+        data.origin = new Vector(...value.split(/\s+/).map((n) => Q.atof(n)));
         break;
 
       case '$base':
@@ -1311,7 +1331,7 @@ Mod.ParseQC = function(qcContent) {
         break;
 
       case '$scale':
-        data.scale = Q.atof(value);
+        data.scale = +value;
         break;
 
       case '$frame': {

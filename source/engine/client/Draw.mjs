@@ -121,7 +121,7 @@ export default class Draw {
    * @param {number} scale The scale factor.
    */
   static Char(x, y, num, scale = 1.0) {
-    GL.StreamDrawTexturedQuad(x, y, 8 * scale, 8 * scale,
+    GL.StreamDrawTexturedQuad(Math.floor(x), Math.floor(y), scale << 3, scale << 3,
       (num & 15) * 0.0625, (num >> 4) * 0.0625,
       ((num & 15) + 1) * 0.0625, ((num >> 4) + 1) * 0.0625);
   }
@@ -248,7 +248,7 @@ export default class Draw {
    * @param {number} x The x position.
    * @param {number} y The y position.
    * @param {GLTexture} pic The texture to draw.
-   * @param {number} [scale=1.0] The scale factor for the picture.
+   * @param {number} [scale] The scale factor for the picture.
    */
   static Pic(x, y, pic, scale = 1.0) {
     if (!pic.ready) {
@@ -268,7 +268,7 @@ export default class Draw {
    * @param {GLTexture} pic The texture to draw.
    * @param {number} top The top color index.
    * @param {number} bottom The bottom color index.
-   * @param {number} [scale=1.0] The scale factor for the picture.
+   * @param {number} [scale] The scale factor for the picture.
    */
   static PicTranslate(x, y, pic, top, bottom, scale = 1.0) {
     if (!pic.ready) {
@@ -276,6 +276,7 @@ export default class Draw {
     }
     GL.StreamFlush();
     const program = GL.UseProgram('pic-translate');
+    gl.uniform3f(program.uColor, 1.0, 1.0, 1.0);
     pic.bind(program.tTexture);
     // @ts-ignore: translate may be dynamically added
     console.assert(pic.translate !== null, 'pic.translate must not be null');
@@ -299,6 +300,7 @@ export default class Draw {
     gl.uniform3f(program.uColor, 1.0, 1.0, 1.0);
     Draw.#conback.bind(program.tTexture, true);
     GL.StreamDrawTexturedQuad(0, lines - VID.height, VID.width, VID.height, 0.0, 0.0, 1.0, 1.0);
+    GL.StreamFlush();
   }
 
   /**

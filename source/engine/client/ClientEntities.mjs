@@ -587,8 +587,8 @@ export default class ClientEntities {
     for (let i = 1; i < this.entities.length; i++) {
       const clent = this.entities[i];
 
-      // freed entity or invisible entity
-      if (clent.free || !clent.model || (clent.effects & effect.EF_NODRAW)) {
+      // freed entity
+      if (clent.free) {
         continue;
       }
 
@@ -598,6 +598,11 @@ export default class ClientEntities {
       // if (clent.classname !== 'player') {
         clent.updatePosition(clent.num !== CL.state.viewentity);
       // }
+
+      // if the entity is not visible, skip it
+      if (!clent.model || (clent.effects & effect.EF_NODRAW)) {
+        continue;
+      }
 
       // do not render the player entity, unless we are in chase cam mode
       if (i === CL.state.viewentity && !Chase.active.value) {

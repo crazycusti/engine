@@ -146,7 +146,7 @@ export class ServerClient {
   }
 
   get uniqueId() {
-    return 'pending'; // TODO
+    return 'N/A'; // TODO
   }
 
   get ping() {

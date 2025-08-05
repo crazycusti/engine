@@ -34,6 +34,22 @@ export default class Cvar {
     CHEAT: 64,
   });
 
+  /** @type {string} */
+  #currentValue = null;
+
+  /** @type {number} */
+  #numberValue = null;
+
+  /** @type {string} @readonly */
+  #originalValue = null;
+
+  /** @type {string} @readonly */
+  #name = null;
+
+  get name() { return this.#name; }
+  get string() { return this.#currentValue; }
+  get value() { return this.#numberValue; }
+
   /**
    * @param {string} name name of the variable
    * @param {string} value preset value of the variable
@@ -41,29 +57,22 @@ export default class Cvar {
    * @param {?string} description optional description of the variable
    */
   constructor(name, value, flags = Cvar.FLAG.NONE, description = null) {
-    /** @type {string} @readonly */
-    this.name = name;
-    /** @type {string} */
-    this.string = value;
-    /** @type {string} @readonly @private */
-    this.original = value;
+    // making sure these fields are out of reach
+    this.#name = name;
+    this.#currentValue = value;
+    this.#originalValue = value;
+
     /** @type {number} @see Cvar.FLAG */
     this.flags = flags;
     /** @type {?string} @readonly */
     this.description = description;
 
+    this.#numberValue = Q.atof(value);
+
     console.assert(name.length > 0, 'Cvar name must be at least 1 character long', name);
     console.assert(!Cvar._vars[name], 'Cvar name must not be used already', name);
 
     Cvar._vars[name] = this;
-  }
-
-  /**
-   * Returns the value of the console variable as a floating-point number.
-   * @returns {number} The numeric value of the console variable.
-   */
-  get value() {
-    return Q.atof(this.string);
   }
 
   /**
@@ -136,11 +145,12 @@ export default class Cvar {
         value = '';
       }
 
-    const changed = this.string !== value;
+    const changed = this.#currentValue !== value;
 
     // TODO: implement Cvar.FLAG.DEFERRED
 
-    this.string = value;
+    this.#currentValue = value;
+    this.#numberValue = Q.atof(value);
 
     if (changed) {
       eventBus.publish('cvar.changed', this.name);
@@ -154,9 +164,17 @@ export default class Cvar {
    * @returns {Cvar} this
    */
   reset() {
-    this.set(this.original);
+    this.set(this.#originalValue);
 
     return this;
+  }
+
+  /**
+   * For easy embedding in strings. It will return the current value of the console variable.
+   * @returns {string} string representation of the console variable
+   */
+  toString() {
+    return this.#currentValue;
   }
 
   /**
@@ -202,6 +220,7 @@ export default class Cvar {
 
     if (value === undefined) {
       Con.Print(`"${v.name}" is "${v.string}"\n`);
+      Con.DPrint(`... "${v.string}" is ${v.value} as a numeric value\n`);
 
       if (v.description) {
         Con.Print(`> ${v.description}\n`);
@@ -261,7 +280,7 @@ export default class Cvar {
   static WriteVariables() {
     return Object.values(Cvar._vars)
         .filter((v) => (v.flags & Cvar.FLAG.ARCHIVE) !== 0)
-        .map((v) => `seta "${v.name}" "${v.string}"\n`)
+        .map((v) => `seta "${v.name}" "${v.string}"\n`) // FIXME: escape quotes in value
         .join('');
   }
 

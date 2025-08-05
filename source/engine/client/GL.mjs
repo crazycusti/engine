@@ -227,8 +227,10 @@ export class GLTexture {
   lockTextureMode(name) {
     console.assert(textureModes[name] !== undefined, 'Valid texture mode required');
 
-    this.#textureModeListener();
-    this.#textureModeListener = null;
+    if (this.#textureModeListener !== null) {
+      this.#textureModeListener();
+      this.#textureModeListener = null;
+    }
 
     if (this.#textureMode !== name) {
       this._setTextureMode(name);

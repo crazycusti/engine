@@ -15,6 +15,7 @@ import ClientInput from './ClientInput.mjs';
 import { HostError } from '../common/Errors.mjs';
 import ClientEntities, { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { ClientMessages, ClientPlayerState } from './ClientMessages.mjs';
+import VID from './VID.mjs';
 
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
@@ -81,6 +82,9 @@ export default class CL {
     static signon = 0;
     static state = 0;
     static spawnparms = '';
+
+    /** changelevel invoked */
+    static changelevel = false;
 
     /** @type {SzBuffer} outgoing client messages */
     static message = new SzBuffer(8192, 'CL.cls.message');
@@ -508,7 +512,7 @@ export default class CL {
   };
 
   static Draw() { // public, called by SCR.js // FIXME: maybe put that into M?, called by SCR
-    if (this.cls.connecting !== null && this.cls.state !== Def.clientConnectionState.disconnected) {
+    if (this.cls.connecting !== null && this.cls.state !== Def.clientConnectionState.disconnected && !this.cls.changelevel) {
       const x0 = 32, y0 = 32;
       Draw.BlackScreen();
       Draw.String(x0, y0, 'Connecting', 2);
@@ -517,6 +521,11 @@ export default class CL {
       const len = 30;
       const p = this.cls.connecting.percentage;
       Draw.String(x0, y0 + 48, `[${'#'.repeat(p / 100 * len).padEnd(len, '_')}] ${p.toFixed(0).padStart(0, ' ')}%`);
+      return;
+    }
+
+    if (this.cls.changelevel) {
+      Draw.String(VID.width / 2 - 64, VID.height / 2 - 16, 'Loading', 2);
     }
   }
 
@@ -622,6 +631,7 @@ CL.Disconnect = function() { // public, by Host.js
   S.StopAllSounds();
   if (CL.state.gameAPI) {
     CL.state.gameAPI.shutdown();
+    CL.state.gameAPI = null;
   }
   if (CL.cls.demoplayback === true) {
     CL.StopPlayback();
@@ -643,8 +653,10 @@ CL.Disconnect = function() { // public, by Host.js
       Host.ShutdownServer();
     }
   }
+  CL.ClearState(); // clear all client state
   // CL.cls.demoplayback = CL.cls.timedemo = false;
   CL.cls.signon = 0;
+  CL.cls.changelevel = false;
   CL.ResetCheatCvars();
 };
 
@@ -701,6 +713,7 @@ CL.SignonReply = function() { // private
       SCR.EndLoadingPlaque();
       Con.forcedup = true;
       SCR.con_current = 0;
+      CL.cls.changelevel = false;
       S.LoadPendingFiles();
       return;
   }
@@ -1296,6 +1309,7 @@ CL.ParseServerMessage = function() { // private
           const mapname = MSG.ReadString();
           CL.SetConnectingStep(5, 'Changing level to ' + mapname);
           CL.cls.signon = 0;
+          CL.cls.changelevel = true;
         }
         continue;
       case Protocol.svc.setangle:

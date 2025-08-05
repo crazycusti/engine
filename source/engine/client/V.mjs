@@ -422,7 +422,7 @@ V.RenderView = function () {
     Cvar.Set('scr_ofsy', '0');
     Cvar.Set('scr_ofsz', '0');
   }
-  if (CL.state.intermission) {
+  if (CL.state.intermission > 0) {
     V.CalcIntermissionRefdef();
   } else if (!CL.state.paused) {
     V.CalcRefdef();

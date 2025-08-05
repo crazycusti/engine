@@ -490,6 +490,8 @@ Host.Init = async function() {
     await SCR.Init();
     await CDAudio.Init();
 
+    await Mod.LoadWad();
+
     if (!CL.gameCapabilities.includes(gameCapabilities.CAP_HUD_INCLUDES_SBAR)) {
       await Sbar.Init();
     }
@@ -570,7 +572,7 @@ Host.Status_f = function() {
   print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' max\n');
   print('players : ' + NET.activeconnections + ' active (' + SV.svs.maxclients + ' max)\n\n');
 
-  print('# userid name                uniqueid            connected ping loss state  adr\n');
+  const lines = [];
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
@@ -579,18 +581,28 @@ Host.Status_f = function() {
     }
 
     const parts = [
-      '#',
-      client.num.toString().padStart(6),
+      client.num.toString().padStart(3),
       client.name.substring(0, 19).padEnd(19),
       client.uniqueId.substring(0, 19).padEnd(19),
       Q.secsToTime(NET.time - client.netconnection.connecttime).padEnd(9),
-      client.ping.toString().padStart(4),
-      '0   ',
-      'active',
+      client.ping.toFixed(0).padStart(4),
+      new Number(0).toFixed(0).padStart(4),   // TODO: add loss
+      'active', // TODO: add state
       client.netconnection.address,
     ];
 
-    print(parts.join(' ') + '\n');
+    lines.push(parts.join(' | ') + '\n');
+  }
+
+  if (lines.length === 0) {
+    return;
+  }
+
+  print('id  | name                | unique id           | play time | ping | loss | state  | adr\n');
+  print('----|---------------------|---------------------|-----------|------|------|--------|-----\n');
+
+  for (const line of lines) {
+    print(line);
   }
 };
 
@@ -768,8 +780,9 @@ Host.Changelevel_f = function(mapname) {
   }
 
   if (!SV.HasMap(mapname)) {
-    Con.Print(`No such map: ${mapname}\n`);
-    return;
+    throw new HostError(`No such map: ${mapname}`);
+    // Con.Print(`No such map: ${mapname}\n`);
+    // return;
   }
 
   for (let i = 0; i < SV.svs.maxclients; i++) {

@@ -136,9 +136,9 @@ function _PF_GenerateBuiltinFunction(name, func, argTypes = [], returnType = ety
   switch (returnType) {
     case etype.ev_vector:
       asserts.push({check: 'returnValue instanceof Vector', message: 'returnValue must be a Vector'});
-      asserts.push({check: '!isNaN(returnValue[0])', message: 'returnValue[0] must not be NaN'});
-      asserts.push({check: '!isNaN(returnValue[1])', message: 'returnValue[1] must not be NaN'});
-      asserts.push({check: '!isNaN(returnValue[2])', message: 'returnValue[2] must not be NaN'});
+      asserts.push({check: '!Number.isNaN(returnValue[0])', message: 'returnValue[0] must not be NaN'});
+      asserts.push({check: '!Number.isNaN(returnValue[1])', message: 'returnValue[1] must not be NaN'});
+      asserts.push({check: '!Number.isNaN(returnValue[2])', message: 'returnValue[2] must not be NaN'});
       returnCode = `
         PR.globals_float[${ofs.OFS_RETURN + 0}] = returnValue[0];
         PR.globals_float[${ofs.OFS_RETURN + 1}] = returnValue[1];
@@ -156,12 +156,12 @@ function _PF_GenerateBuiltinFunction(name, func, argTypes = [], returnType = ety
       break;
 
     case etype.ev_integer:
-      asserts.push({check: '!isNaN(returnValue)', message: 'returnValue must not be NaN'});
+      asserts.push({check: '!Number.isNaN(returnValue)', message: 'returnValue must not be NaN'});
       returnCode = `PR.globals_float[${ofs.OFS_RETURN}] = returnValue >> 0;`;
       break;
 
     case etype.ev_float:
-      asserts.push({check: '!isNaN(returnValue)', message: 'returnValue must not be NaN'});
+      asserts.push({check: '!Number.isNaN(returnValue)', message: 'returnValue must not be NaN'});
       returnCode = `PR.globals_float[${ofs.OFS_RETURN}] = returnValue;`;
       break;
 
@@ -184,6 +184,8 @@ function _PF_GenerateBuiltinFunction(name, func, argTypes = [], returnType = ety
     default:
       throw new TypeError('unsupported return type: ' + returnType);
   }
+
+  // TODO: do not pass on `asserts` when not in debug mode or developer mode
 
   const code = `return function ${name}() {
   const { PR, SV } = registry;
@@ -333,7 +335,7 @@ PF.dprint = function dprint() { // EngineInterface
 
 PF.dprint = _PF_GenerateBuiltinFunction('dprint', (str) => ServerEngineAPI.ConsoleDebug(str), [etype.ev_strings]);
 
-PF.ftos = _PF_GenerateBuiltinFunction('ftos', (f) => parseInt(f) === f ? f.toString() : f.toFixed(1), [etype.ev_float], etype.ev_string);
+PF.ftos = _PF_GenerateBuiltinFunction('ftos', (f) => (+f|0) === +f ? f.toString() : f.toFixed(1), [etype.ev_float], etype.ev_string);
 
 PF.fabs = _PF_GenerateBuiltinFunction('fabs', Math.abs, [etype.ev_float], etype.ev_float);
 

@@ -328,6 +328,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-05
+
+* CL: update origins when received, also for invisible entities
+* this whole loading a map on the client side is a mess, because I made it half-assed async and the rest is not sure what to do in the meantime
+
 ### 2025-08-04
 
 * almost finished the HUD stuff, intermission and finale screens are missing

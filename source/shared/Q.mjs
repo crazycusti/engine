@@ -38,11 +38,12 @@ export default class Q {
    * @returns {boolean} True if value is NaN.
    */
   static isNaN(value) {
-    return Number.isNaN ? Number.isNaN(value) : isNaN(value);
+    return Number.isNaN(value);
   }
 
   /**
    * Converts a string to an integer.
+   * NOTE: Use `+value|0` during regular use in the main/rendering loop.
    * @param {string} value - String to convert.
    * @returns {number} The integer value.
    */
@@ -52,6 +53,7 @@ export default class Q {
 
   /**
    * Converts a string to a float.
+   * NOTE: Use `+value` during regular use in the main/rendering loop.
    * @param {string} value - String to convert.
    * @returns {number} The float value.
    */
