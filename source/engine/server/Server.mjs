@@ -2884,12 +2884,12 @@ SV.HullForEntity = function(ent, mins, maxs, out_offset) {
 };
 
 SV.CreateAreaNode = function(depth, mins, maxs) {
-  const anode = {};
-  SV.areanodes[SV.areanodes.length++] = anode;
+  const anode = {depth, mins, maxs};
+  SV.areanodes[0] = anode;
 
-  anode.trigger_edicts = {};
+  anode.trigger_edicts = {ent: null};
   anode.trigger_edicts.prev = anode.trigger_edicts.next = anode.trigger_edicts;
-  anode.solid_edicts = {};
+  anode.solid_edicts = {ent: null};
   anode.solid_edicts.prev = anode.solid_edicts.next = anode.solid_edicts;
 
   if (depth === 4) {
@@ -2993,7 +2993,7 @@ SV.LinkEdict = function(ent, touch_triggers = false) {
   ent.entity.absmax = ent.entity.absmax.set(absmax);
 
   ent.leafnums = [];
-  if (ent.entity.modelindex !== 0.0) {
+  if (ent.entity.modelindex !== 0) {
     SV.FindTouchedLeafs(ent, SV.server.worldmodel.nodes[0]);
   }
 

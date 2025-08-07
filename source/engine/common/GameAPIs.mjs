@@ -240,18 +240,50 @@ export class ServerEngineAPI extends CommonEngineAPI {
     Cmd.text += `changelevel ${mapname}\n`;
   }
 
+  static *#FindInAreaNode(areaNode, mins, maxs) {
+    if (areaNode.mins.gt(maxs) || areaNode.maxs.lt(mins)) {
+      return; // areaNode is out of bounds
+    }
+
+    if (areaNode.children) {
+      for (const child of areaNode.children) {
+        yield *this.#FindInAreaNode(child, mins, maxs);
+      }
+    }
+
+    for (let ent = areaNode.solid_edicts.next; ent !== areaNode.solid_edicts; ent = ent.next) {
+      /** @type {ServerEdict} */
+      const edict = ent.ent;
+
+      if (!edict || edict.isFree()) {
+        continue;
+      }
+
+      if (edict.entity.absmin[0] > maxs[0] || edict.entity.absmax[0] < mins[0] ||
+          edict.entity.absmin[1] > maxs[1] || edict.entity.absmax[1] < mins[1] ||
+          edict.entity.absmin[2] > maxs[2] || edict.entity.absmax[2] < mins[2]) {
+        continue;
+      }
+
+      yield edict;
+    }
+  }
+
   /**
    * Finds all edicts around origin in given radius.
    * @param {Vector} origin
    * @param {number} radius
-   * @yields {SV.Edict} matching edict
+   * @returns {ServerEdict[]} matching edict
    */
-  static *FindInRadius(origin, radius) {
-    for (let i = 1; i < SV.server.num_edicts; i++) {
-      /** @type {ServerEdict} */
-      const ent = SV.server.edicts[i];
+  static FindInRadius(origin, radius) {
+    const vradius = new Vector(radius, radius, radius);
+    const mins = origin.copy().subtract(vradius);
+    const maxs = origin.copy().add(vradius);
 
-      if (ent.isFree() || ent.entity.solid === solid.SOLID_NOT) {
+    const edicts = [];
+
+    for (const ent of this.#FindInAreaNode(SV.areanodes[0], mins, maxs)) {
+      if (ent.num === 0 || ent.isFree() || ent.entity.solid === solid.SOLID_NOT) {
         continue;
       }
 
@@ -261,8 +293,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
         continue;
       }
 
-      yield ent;
+      edicts.push(ent);
     }
+
+    return edicts; // used to be a generator, but we need to return an array due to changing linked lists in between
   }
 
   static FindByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
@@ -350,12 +384,14 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return SV.server.loading;
   }
 
+  /** @deprecated use client events instead */
   static DispatchTempEntityEvent(tempEntityId, origin) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity);
     MSG.WriteByte(SV.server.datagram, tempEntityId);
     MSG.WriteCoordVector(SV.server.datagram, origin);
   }
 
+  /** @deprecated use client events instead */
   static DispatchBeamEvent(beamId, edictId, startOrigin, endOrigin) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity); // FIXME: unhappy about this
     MSG.WriteByte(SV.server.datagram, beamId);
@@ -365,32 +401,12 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   /** @deprecated use client events instead */
-  static BroadcastMonsterKill() {
-    MSG.WriteByte(SV.server.reliable_datagram, Protocol.svc.killedmonster);
-  }
-
-  /** @deprecated use client events instead */
-  static BroadcastSecretFound() {
-    MSG.WriteByte(SV.server.reliable_datagram, Protocol.svc.foundsecret);
-  }
-
-  /** @deprecated use client events instead */
   static BroadcastObituary(killerEdictId, victimEdictId, killerWeapon, killerItems) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.obituary);
     MSG.WriteShort(SV.server.datagram, killerEdictId);
     MSG.WriteShort(SV.server.datagram, victimEdictId);
     MSG.WriteLong(SV.server.datagram, killerWeapon);
     MSG.WriteLong(SV.server.datagram, killerItems);
-  }
-
-  /** @deprecated use client events instead */
-  static EnterIntermission() {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.intermission);
-  }
-
-  /** @deprecated use client events instead */
-  static EnterFinale() {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.finale);
   }
 
   static PlayTrack(id1, id2) {
@@ -405,9 +421,8 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @param {SzBuffer} destination destination to write the event to, can be SV.server.datagram or a client message buffer
    * @param {number} eventCode event code, must be understood by the client
    * @param  {...import('../../shared/GameInterfaces').SerializableType} args any arguments to pass to the client event, will be serialized
-   * @private
    */
-  static DispatchClientEventOnDestination(destination, eventCode, ...args) {
+  static #DispatchClientEventOnDestination(destination, eventCode, ...args) {
     console.assert(typeof eventCode === 'number', 'eventCode must be a number');
 
     MSG.WriteByte(destination, Protocol.svc.clientevent);
@@ -423,7 +438,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @param  {...import('../../shared/GameInterfaces').SerializableType} args any arguments to pass to the client event, will be serialized
    */
   static BroadcastClientEvent(expedited, eventCode, ...args) {
-    this.DispatchClientEventOnDestination(expedited ? SV.server.datagram : SV.server.expedited_datagram, eventCode, ...args);
+    this.#DispatchClientEventOnDestination(expedited ? SV.server.datagram : SV.server.expedited_datagram, eventCode, ...args);
   }
 
   /**
@@ -438,7 +453,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
     const destination = expedited ? receiverPlayerEdict.getClient().expedited_message : receiverPlayerEdict.getClient().message;
 
-    this.DispatchClientEventOnDestination(destination, eventCode, ...args);
+    this.#DispatchClientEventOnDestination(destination, eventCode, ...args);
   }
 };
 

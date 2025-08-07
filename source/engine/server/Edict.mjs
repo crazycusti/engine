@@ -450,7 +450,7 @@ export class ServerEdict {
   }
 
   /**
-   * Returns client (or object that has a client enemy) that would be * a valid target. If there are more than one
+   * Returns client (or object that has a client enemy) that would be a valid target. If there are more than one
    * valid options, they are cycled each frame. If (self.origin + self.viewofs) is not in the PVS of the target, null is returned.
    * @returns {ServerEdict} Edict when client found, null otherwise
    */

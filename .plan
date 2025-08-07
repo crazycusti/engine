@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-07
+
+* ServerGameAPI.FindInRadius uses area nodes now, cuts down search by 50%
+
 ### 2025-08-05
 
 * CL: update origins when received, also for invisible entities
