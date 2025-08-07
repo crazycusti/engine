@@ -7,6 +7,7 @@ import W, { WadFileInterface, WadLumpTexture } from '../common/W.mjs';
 import { eventBus } from '../registry.mjs';
 import GL, { GLTexture } from './GL.mjs';
 import { version } from '../common/Def.mjs';
+import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 
 /** @type {WebGL2RenderingContext} */
 let gl = null;
@@ -25,16 +26,16 @@ eventBus.subscribe('gl.shutdown', () => {
  * @param {Uint8Array} chars chars texture data
  * @param {number} num character code ASCII
  * @param {number} dest destination offset in conback
+ * @param {Vector} color color vector
  */
-function charToConback(conback, chars, num, dest) {
+function charToConback(conback, chars, num, dest, color) {
   let source = ((num >> 4) << 10) + ((num & 15) << 3);
   for (let drawline = 0; drawline < 8; drawline++) {
     for (let x = 0; x < 8; x++) {
       if (chars[(source + x) * 4 + 3] > 0) {
-        conback[(dest + x) * 4 + 0] = chars[(source + x) * 4 + 0];
-        conback[(dest + x) * 4 + 1] = chars[(source + x) * 4 + 1];
-        conback[(dest + x) * 4 + 2] = chars[(source + x) * 4 + 2];
-        conback[(dest + x) * 4 + 3] = chars[(source + x) * 4 + 3];
+        conback[(dest + x) * 4 + 0] = chars[(source + x) * 4 + 0] * color[0];
+        conback[(dest + x) * 4 + 1] = chars[(source + x) * 4 + 1] * color[1];
+        conback[(dest + x) * 4 + 2] = chars[(source + x) * 4 + 2] * color[2];
       }
     }
     source += 128;
@@ -69,24 +70,18 @@ export default class Draw {
     Draw.#chars = GLTexture.FromLumpTexture(conchars).lockTextureMode('GL_NEAREST');
     // eslint-disable-next-line require-atomic-updates
     Draw.#conback = await (async () => {
-      try {
-        return await GLTexture.FromImageFile('gfx/conback.webp');
-      } catch (err) {
-        if (err instanceof MissingResourceError) {
-          const lump = await W.LoadLump('gfx/conback.lmp');
-          if (lump === null) {
-            throw new MissingResourceError('gfx/conback.lmp');
-          }
-
-          // we are writing the version into the conback texture
-          for (let i = 0; i < version.length; i++) {
-            charToConback(lump.data, conchars.data, version.charCodeAt(i), 59829 - ((version.length - i) * 8));
-          }
-
-          return GLTexture.FromLumpTexture(lump).lockTextureMode('GL_NEAREST');
-        }
-        throw err;
+      const lump = await W.LoadLump('gfx/conback.lmp');
+      if (lump === null) {
+        throw new MissingResourceError('gfx/conback.lmp');
       }
+
+      // we are writing the version into the conback texture
+      const color = ClientEngineAPI.IndexToRGB(95);
+      for (let i = 0; i < version.length; i++) {
+        charToConback(lump.data, conchars.data, version.charCodeAt(i), 59829 - ((version.length - i) * 8), color);
+      }
+
+      return GLTexture.FromLumpTexture(lump).lockTextureMode('GL_NEAREST');
     })();
     Draw.#loading = await W.LoadLump('gfx/loading.lmp');
     const elem = document.getElementById('loading');
