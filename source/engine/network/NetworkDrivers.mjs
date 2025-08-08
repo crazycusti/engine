@@ -494,11 +494,15 @@ export class WebSocketDriver extends BaseDriver {
     ws.on('close', () => {
       Con.DPrint('WebSocketDriver._OnConnectionServer.disconnect: client disconnected\n');
       sock.state = QSocket.STATE_DISCONNECTED;
+
+      eventBus.publish('net.connection.close', sock);
     });
 
     ws.on('error', () => {
       Con.DPrint('WebSocketDriver._OnConnectionServer.disconnect: client errored out\n');
       sock.state = QSocket.STATE_DISCONNECTED;
+
+      eventBus.publish('net.connection.error', sock);
     });
 
     ws.on('message', (data) => {
@@ -506,6 +510,8 @@ export class WebSocketDriver extends BaseDriver {
     });
 
     this.newConnections.push(sock);
+
+    eventBus.publish('net.connection.accepted', sock);
   }
 
   CheckNewConnections() {

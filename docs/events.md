@@ -53,6 +53,16 @@ The engine has an event bus.
 | host.crash | 1. Error | Emitted when there was an uncaught exception during the main loop. |
 | host.ready | - | The engine is initialized and ready to roll. |
 
+### Network
+
+Those events are only fired by the server code.
+
+| Event | Arguments | Description |
+| - | - | - |
+| net.connection.accepted | 1. QSocket | When a new connection has been accepted. |
+| net.connection.close | 1. QSocket | Connection closed. |
+| net.connection.error | 1. QSocket | Connection received an error. |
+
 ### Server
 
 | Event | Arguments | Description |

@@ -26,6 +26,25 @@ eventBus.subscribe('host.crash', (e) => {
   exit(1);
 });
 
+const mainLoop = {
+  _resolve: null,
+  sleep() {
+    return new Promise((resolve) => {
+      this._resolve = resolve;
+    });
+  },
+  notify() {
+    if (this._resolve) {
+      this._resolve();
+      this._resolve = null;
+    }
+  },
+};
+
+eventBus.subscribe('net.connection.accepted', () => {
+  mainLoop.notify();
+});
+
 /**
  * System class to manage initialization, quitting, and REPL functionality.
  */
@@ -61,6 +80,7 @@ export default class Sys {
       Sys.#repl = start({
         prompt: '] ',
         eval(command, context, filename, callback) {
+          mainLoop.notify();
           this.clearBufferedCommand();
           Cmd.text += command;
           setTimeout(() => callback(null), 20); // we have to wait at least one frame before expecting a result
@@ -94,6 +114,11 @@ export default class Sys {
       }
 
       await Q.sleep(Math.max(0, 1000.0 / 60.0 - dtime));
+
+      // when there are no more commands to process and no active connections, we can sleep indefinitely
+      if (NET.activeconnections === 0 && Host._scheduledForNextFrame.length === 0) {
+        await mainLoop.sleep();
+      }
     }
   }
 
