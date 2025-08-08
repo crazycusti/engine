@@ -50,6 +50,7 @@ const clientGameEvents = [
   'client.server-info.ready',
   'client.server-info.updated',
   'client.damage',
+  'client.chat.message',
 ];
 
 export default class CL {
@@ -153,6 +154,10 @@ export default class CL {
       [0.0, 0.0, 0.0, 0.0],
       [0.0, 0.0, 0.0, 0.0],
       [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0],
     ];
     static viewangles = new Vector();
     // static velocity = new Vector();
@@ -212,6 +217,9 @@ export default class CL {
     /** event bus solely for engine-game communication, will be reset on every map load */
     static eventBus = new EventBus('client-game');
 
+    /** @type {Function[]} */
+    static #proxyEventListeners = [];
+
     /** stores client-game state and particles, things we need to set _after_ signon 4 */
     static loadClientData = null;
 
@@ -225,12 +233,6 @@ export default class CL {
       this.items = 0;
       this.item_gettime.fill(0.0);
       this.faceanimtime = 0.0;
-      this.cshifts = [
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0],
-      ];
       this.viewangles = new Vector();
       this.punchangle = new Vector();
       this.idealpitch = 0.0;
@@ -260,16 +262,24 @@ export default class CL {
       this.nodrift = false;
       this.paused = false;
       // this.loadClientData = null; -- not clearing this, we want to carry it over upon a load game
-
+      for (const cshift of this.cshifts) {
+        cshift.fill(0.0);
+      }
       this.#configureProxyEvents();
     }
 
     static #configureProxyEvents() {
+      // remove all game event listeners
       this.eventBus.unsubscribeAll();
+
+      // remove all previous proxy listeners
+      for (const unsubscribe of this.#proxyEventListeners) {
+        unsubscribe();
+      }
 
       // proxy all relevant events from the client event bus to the game event bus, but not everything
       for (const event of clientGameEvents) {
-        eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args));
+        this.#proxyEventListeners.push(eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args)));
       }
     }
   };
@@ -753,9 +763,9 @@ CL.ReadFromServer = function() { // public, by Host.js
     } else {
       ret = CL.GetMessage();
       if (ret === -1) {
-        if (CL._processingServerDataState === 0 && CL.cls.signon < 4) {
-          break;
-        }
+        // if (CL._processingServerDataState === 0 && CL.cls.signon < 4) {
+        //   break;
+        // }
         throw new HostError('CL.ReadFromServer: lost server connection');
       }
       if (ret === 0) {
@@ -1155,22 +1165,18 @@ CL.ParseStaticSound = function() { // private
 };
 
 CL.AppendChatMessage = function(name, message, direct) { // private // TODO: Client
+  eventBus.publish('client.chat.message', name, message, direct);
+
+  if (CL.gameCapabilities.includes(gameCapabilities.CAP_CHAT_MANAGED)) {
+    return;
+  }
+
   if (CL.state.chatlog.length > 5) {
     CL.state.chatlog.shift();
   }
 
   CL.state.chatlog.push({name, message, direct});
-};
-
-CL.PublishObituary = function(killerEdictId, victimEdictId, killerWeapon, killerItems) { // private // TODO: Client
-  if (!CL.state.scores[killerEdictId + 1] || !CL.state.scores[victimEdictId + 1]) {
-    return;
-  }
-
-  const killer = CL.state.scores[killerEdictId - 1].name;
-  const victim = CL.state.scores[victimEdictId - 1].name;
-
-  CL.AppendChatMessage(killer, `killed ${victim} using ${killerWeapon} (${killerItems})`, true);
+  S.LocalSound(CL.sfx_talk);
 };
 
 CL.ParseServerCvars = function () { // private
@@ -1295,10 +1301,6 @@ CL.ParseServerMessage = function() { // private
         continue;
       case Protocol.svc.chatmsg: // TODO: Client
         CL.AppendChatMessage(MSG.ReadString(), MSG.ReadString(), MSG.ReadByte() === 1);
-        S.LocalSound(CL.sfx_talk);
-        continue;
-      case Protocol.svc.obituary: // TODO: Client
-        CL.PublishObituary(MSG.ReadShort(), MSG.ReadShort(), MSG.ReadLong(), MSG.ReadLong());
         continue;
       case Protocol.svc.stufftext:
         Cmd.text += MSG.ReadString();

@@ -199,4 +199,6 @@ export const gameCapabilities = Object.freeze({
   CAP_SPAWNPARMS_DYNAMIC: 'CAP_SPAWNPARMS_DYNAMIC',
   /** will use SetNewParms, SetSpawnParms, SetChangeParms, parm0..15, etc. */
   CAP_SPAWNPARMS_LEGACY: 'CAP_SPAWNPARMS_LEGACY',
+  /** prevents chat messages from being handled by the engine, client code will handle that */
+  CAP_CHAT_MANAGED: 'CAP_CHAT_MANAGED',
 });

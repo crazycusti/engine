@@ -183,8 +183,8 @@ V.BonusFlash_f = function () {
   cshift[3] = 50.0;
 };
 
-V.BonusFlash = function (color, alpha) {
-  const cshift = CL.state.cshifts[CL.cshift.bonus];
+V.ContentShift = function (slot, color, alpha) {
+  const cshift = CL.state.cshifts[slot];
   cshift[0] = color[0] * 255.0;
   cshift[1] = color[1] * 255.0;
   cshift[2] = color[2] * 255.0;
@@ -242,13 +242,21 @@ V.CalcBlend = function () {
     CL.state.cshifts[CL.cshift.bonus][3] = 0.0;
   }
 
+  for (let i = CL.cshift.user1; i < CL.state.cshifts.length; i++) {
+    const cshift = CL.state.cshifts[i];
+    cshift[3] -= (Host.frametime / 16.0) * 1000.0;
+    if (cshift[3] < 0.0) {
+      cshift[3] = 0.0;
+    }
+  }
+
   if (V.cshiftpercent.value === 0) {
     V.blend[0] = V.blend[1] = V.blend[2] = V.blend[3] = 0.0;
     return;
   }
 
   let r = 0.0; let g = 0.0; let b = 0.0; let a = 0.0; let a2; let i;
-  for (i = 0; i <= 3; i++) {
+  for (i = 0; i < CL.state.cshifts.length; i++) {
     cshift = CL.state.cshifts[i];
     a2 = cshift[3] * V.cshiftpercent.value / 25500.0;
     if (a2 === 0.0) {

@@ -27,6 +27,7 @@ The engine has an event bus.
 | client.server-info.ready | 1. map<string,string> | Initial update of server info. |
 | client.server-info.updated | 1. name, 2. value | A server info has been updated. |
 | client.damage | 1. ClientDamageEvent | Damage event. Sent when the player received damage. |
+| client.chat.message | 1. name, 2. message, 3. whether is a direct message or not. |
 
 ### Console
 

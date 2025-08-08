@@ -400,15 +400,6 @@ export class ServerEngineAPI extends CommonEngineAPI {
     MSG.WriteCoordVector(SV.server.datagram, endOrigin);
   }
 
-  /** @deprecated use client events instead */
-  static BroadcastObituary(killerEdictId, victimEdictId, killerWeapon, killerItems) {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.obituary);
-    MSG.WriteShort(SV.server.datagram, killerEdictId);
-    MSG.WriteShort(SV.server.datagram, victimEdictId);
-    MSG.WriteLong(SV.server.datagram, killerWeapon);
-    MSG.WriteLong(SV.server.datagram, killerItems);
-  }
-
   static PlayTrack(id1, id2) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.cdtrack);
     MSG.WriteByte(SV.server.datagram, id1);
@@ -649,12 +640,12 @@ export class ClientEngineAPI extends CommonEngineAPI {
   }
 
   /**
-   *
+   * @param {number} slot see Def.contentShift
    * @param {Vector} color RGB color vector
-   * @param {number} alpha alpha value, default is 50.0
+   * @param {number} duration duration in seconds, default is 0.5
    */
-  static BonusFlash(color, alpha = 0.25) {
-    V.BonusFlash(color, alpha);
+  static ContentShift(slot, color, duration = 0.5) {
+    V.ContentShift(slot + 4, color, duration);
   }
 
   static CL = {
