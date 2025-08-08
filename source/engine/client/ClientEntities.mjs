@@ -257,9 +257,9 @@ export class ClientEdict {
       return;
     }
 
-    if (this.classname === 'player') {
-      console.log('updatePosition', this.num, this.classname, this.origin, this.angles);
-    }
+    // if (this.classname === 'player') {
+    //   console.log('updatePosition', this.num, this.classname, this.origin, this.angles);
+    // }
 
     if (this.originPrevious === null) {
       this.originPrevious = this.origin.copy();

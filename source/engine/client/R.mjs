@@ -1474,6 +1474,45 @@ R.InitParticles = async function() {
       []);
 };
 
+R.SerializeParticles = function() {
+  const data = [];
+  const round = (num) => Math.round(num * 10) / 10; // we do not need a high precision here
+
+  for (let i = 0; i < R.numparticles; i++) {
+    const p = R.particles[i];
+
+    if (p.die < CL.state.time) {
+      continue;
+    }
+
+    data.push({
+      i: i,
+      die: round(p.die - CL.state.time),
+      color: p.color,
+      ramp: round(p.ramp),
+      type: round(p.type),
+      org: [...p.org].map(round),
+      vel: [...p.vel].map(round),
+    });
+  }
+
+  return data;
+};
+
+R.DeserializeParticles = function(data) {
+  for (const p of data) {
+    console.assert(p.i >= 0 && p.i < R.particles.length, 'valid particle index', p.i);
+    R.particles[p.i] = {
+      die: p.die + CL.state.time,
+      color: p.color,
+      ramp: p.ramp,
+      type: p.type,
+      org: new Vector(...p.org),
+      vel: new Vector(...p.vel),
+    };
+  }
+};
+
 R.EntityParticles = function(ent) {
   const allocated = R.AllocParticles(162);
 
@@ -1562,11 +1601,11 @@ R.ParticleExplosion = function(org) {
       color: R.ramp1[0],
       ramp: Math.floor(Math.random() * 4.0),
       type: ((i & 1) !== 0) ? R.ptype.explode : R.ptype.explode2,
-      org: [
+      org: new Vector(
         org[0] + Math.random() * 32.0 - 16.0,
         org[1] + Math.random() * 32.0 - 16.0,
         org[2] + Math.random() * 32.0 - 16.0,
-      ],
+      ),
       vel: new Vector(Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0),
     };
   }
@@ -1580,11 +1619,11 @@ R.ParticleExplosion2 = function(org, colorStart, colorLength) {
       die: CL.state.time + 0.3,
       color: colorStart + (colorMod++ % colorLength),
       type: R.ptype.blob,
-      org: [
+      org: new Vector(
         org[0] + Math.random() * 32.0 - 16.0,
         org[1] + Math.random() * 32.0 - 16.0,
         org[2] + Math.random() * 32.0 - 16.0,
-      ],
+      ),
       vel: new Vector(Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0),
     };
   }
@@ -1602,11 +1641,11 @@ R.BlobExplosion = function(org) {
       p.type = R.ptype.blob2;
       p.color = 150 + Math.floor(Math.random() * 7.0);
     }
-    p.org = [
+    p.org = new Vector(
       org[0] + Math.random() * 32.0 - 16.0,
       org[1] + Math.random() * 32.0 - 16.0,
       org[2] + Math.random() * 32.0 - 16.0,
-    ];
+    );
     p.vel = new Vector(Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0, Math.random() * 512.0 - 256.0);
   }
 };

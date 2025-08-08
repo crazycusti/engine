@@ -7,7 +7,7 @@ export const productName = 'The Quake Shack';
 /**
  * Version string. It will be modified during the build process.
  */
-export const productVersion = '1.1.0+dev';
+export const productVersion = '1.1.1+dev';
 
 export const limits = Object.freeze({
   edicts: 600,
@@ -131,3 +131,8 @@ export const clientConnectionState = {
   connecting: 1,
   connected: 2,
 };
+
+/**
+ * Version used for savegames.
+ */
+export const gamestateVersion = 2;

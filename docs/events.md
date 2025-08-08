@@ -21,6 +21,12 @@ The engine has an event bus.
 | client.paused | | Game has been paused. |
 | client.unpaused | | Game has been unpaused. |
 | client.cdtrack | 1. track number | CD track for background music requested. |
+| client.players.name-changed | 1. num, 2. old name, 3. new name | Emitted whenever someone’s name has changed. |
+| client.players.frags-updated | 1. num 2. frags | Emitted whenever someone’s frags have been updated. |
+| client.players.colors-updated | 1. num 2. colors | Emitted whenever someone’s colors have changed. |
+| client.server-info.ready | 1. map<string,string> | Initial update of server info. |
+| client.server-info.updated | 1. name, 2. value | A server info has been updated. |
+| client.damage | 1. ClientDamageEvent | Damage event. Sent when the player received damage. |
 
 ### Console
 

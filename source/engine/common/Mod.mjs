@@ -216,11 +216,38 @@ Mod.FindName = function(name) { // private method (refactor into _RegisterModel)
   return null;
 };
 
+/** @deprecated use Mod.LoadModelAsync instead */
 Mod.LoadModel = function(mod, crash) { // private method
   if (mod.needload !== true) {
     return mod;
   }
   const buf = COM.LoadFile(mod.name);
+  if (buf === null) {
+    if (crash === true) {
+      throw new MissingResourceError(mod.name);
+    }
+    return null;
+  }
+  Mod.loadmodel = mod; // TODO: refactor into this
+  mod.needload = false;
+  switch ((new DataView(buf)).getUint32(0, true)) {
+    case 0x4f504449:
+      Mod.LoadAliasModel(buf);
+      break;
+    case 0x50534449:
+      Mod.LoadSpriteModel(buf);
+      break;
+    default:
+      Mod.LoadBrushModel(buf);
+  }
+  return mod;
+};
+
+Mod.LoadModelAsync = async function(mod, crash) { // private method
+  if (mod.needload !== true) {
+    return mod;
+  }
+  const buf = await COM.LoadFileAsync(mod.name);
   if (buf === null) {
     if (crash === true) {
       throw new MissingResourceError(mod.name);
@@ -249,6 +276,15 @@ Mod.LoadModel = function(mod, crash) { // private method
  */
 Mod.ForName = function(name, crash = false) { // public method
   return Mod.LoadModel(Mod.FindName(name), crash);
+};
+
+/**
+ * @param {string} name filename
+ * @param {boolean} crash whether to throw an error if the model is not found
+ * @returns {BaseModel|null} the loaded model or null if not found
+ */
+Mod.ForNameAsync = async function(name, crash = false) { // public method
+  return await Mod.LoadModelAsync(Mod.FindName(name), crash);
 };
 
 /*

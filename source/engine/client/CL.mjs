@@ -47,6 +47,8 @@ const clientGameEvents = [
   'client.players.name-changed',
   'client.players.frags-updated',
   'client.players.colors-updated',
+  'client.server-info.ready',
+  'client.server-info.updated',
   'client.damage',
 ];
 
@@ -210,6 +212,9 @@ export default class CL {
     /** event bus solely for engine-game communication, will be reset on every map load */
     static eventBus = new EventBus('client-game');
 
+    /** stores client-game state and particles, things we need to set _after_ signon 4 */
+    static loadClientData = null;
+
     static clear() {
       this.clientMessages.clear();
       this.clientEntities.clear();
@@ -254,6 +259,7 @@ export default class CL {
       this.inwater = false;
       this.nodrift = false;
       this.paused = false;
+      // this.loadClientData = null; -- not clearing this, we want to carry it over upon a load game
 
       this.#configureProxyEvents();
     }
@@ -621,8 +627,13 @@ export default class CL {
         continue;
       }
 
-      CL.pmove.addEntity(clent, clent.solid === solid.SOLID_BSP ? clent.model : null);
+      this.pmove.addEntity(clent, clent.solid === solid.SOLID_BSP ? clent.model : null);
     }
+  }
+
+  static ResumeGame(clientdata, particles) {
+    this.EstablishConnection('local');
+    this.state.loadClientData = [clientdata, particles];
   }
 };
 
@@ -694,6 +705,7 @@ CL.SignonReply = function() { // private
       MSG.WriteString(CL.cls.message, 'prespawn');
       return;
     case 2:
+      eventBus.publish('client.server-info.ready', Object.assign({}, CL.cls.serverInfo));
       CL.SetConnectingStep(95, 'Setting client state');
       MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
       MSG.WriteString(CL.cls.message, 'name "' + CL.name.string + '"\n');
@@ -1032,7 +1044,6 @@ CL.ParseServerData = function() { // private
     CL.state.scores[i] = new ClientScoreSlot();
   }
 
-  CL.state.gametype = MSG.ReadByte(); // CR: unused (set to CL.state, but unused)
   CL.state.levelname = MSG.ReadString();
 
   CL.ParsePmovevars();
@@ -1080,19 +1091,13 @@ CL.ParseServerData = function() { // private
   CL._processingServerDataState = 1;
 
   (async () => {
-    let lastYield = Host.realtime;
-
     for (let i = 1; i < nummodels; i++) {
       CL.SetConnectingStep(25 + (i / nummodels) * 20, 'Loading model: ' + model_precache[i]);
-      CL.state.model_precache[i] = Mod.ForName(model_precache[i]);
+      // eslint-disable-next-line require-atomic-updates
+      CL.state.model_precache[i] = await Mod.ForNameAsync(model_precache[i]);
       if (CL.state.model_precache[i] === null) {
         Con.Print('Model ' + model_precache[i] + ' not found\n');
         return;
-      }
-
-      if (Host.realtime - lastYield > 0.1) {
-        await Q.yield();
-        lastYield = Host.realtime;
       }
     }
 
@@ -1100,11 +1105,6 @@ CL.ParseServerData = function() { // private
       CL.SetConnectingStep(45 + (i / numsounds) * 20, 'Loading sound: ' + sound_precache[i]);
       // eslint-disable-next-line require-atomic-updates
       CL.state.sound_precache[i] = await S.PrecacheSoundAsync(sound_precache[i]);
-
-      if (Host.realtime - lastYield > 0.1) {
-        await Q.yield();
-        lastYield = Host.realtime;
-      }
     }
   })().then(() => {
     CL._processingServerDataState = 2;
@@ -1120,10 +1120,14 @@ CL.ParseServerData = function() { // private
     Host.noclip_anglehack = false;
     if (CL.state.gameAPI) {
       CL.state.gameAPI.init();
-
-      // TODO: feature flag required for clientdata support
-      // console.assert(typeof CL.state.gameAPI.clientdata === 'object', 'clientdata must be an object');
+      if (CL.state.loadClientData && CL.state.loadClientData[0]) { // let’s check if we have a saved game state to load
+        CL.state.gameAPI.loadGame(CL.state.loadClientData[0]);
+      }
     }
+    if (CL.state.loadClientData && CL.state.loadClientData[1]) { // let’s check if we have a saved particles state to load
+      R.DeserializeParticles(CL.state.loadClientData[1]);
+    }
+    CL.state.loadClientData = null;
   });
 };
 
@@ -1180,6 +1184,7 @@ CL.ParseServerCvars = function () { // private
 
     if (CL.cls.signon === 4) {
       Con.Print(`"${name}" changed to "${value}"\n`);
+      eventBus.publish('client.server-info.updated', name, value);
     }
 
     // special handling for cheats

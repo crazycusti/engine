@@ -180,7 +180,7 @@ export const clientStat = Object.freeze({
 /**
  * @readonly
  * @enum {string}
- * feature flags
+ * feature flags for the game code (both server and client)
  */
 export const gameCapabilities = Object.freeze({
   /** this will read total_secrets, total_monsters, found_secrets, killed_monsters being sent via updatestat and let the client write them to CL.state.stat */
@@ -195,4 +195,8 @@ export const gameCapabilities = Object.freeze({
   CAP_HUD_INCLUDES_CROSSHAIR: 'CAP_HUD_INCLUDES_CROSSHAIR',
   /** the client game manages the view model now, no longer the game code */
   CAP_VIEWMODEL_MANAGED: 'CAP_VIEWMODEL_MANAGED',
+  /** no longer using SetNewParms, SetSpawnParms, SetChangeParms, parm0..15, but the new interfaces allowing for more flexibility */
+  CAP_SPAWNPARMS_DYNAMIC: 'CAP_SPAWNPARMS_DYNAMIC',
+  /** will use SetNewParms, SetSpawnParms, SetChangeParms, parm0..15, etc. */
+  CAP_SPAWNPARMS_LEGACY: 'CAP_SPAWNPARMS_LEGACY',
 });

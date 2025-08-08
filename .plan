@@ -331,6 +331,13 @@ class MainMenu extends BaseMenu {
 ### 2025-08-08
 
 * about to clean up more the game <-> engine APIs
+* introduced loadState/saveState to the client game API allowing better handling of savegames
+* added particles to savegames
+* fixed a couple of bugs in the serialization engine
+* some entities were missing fields to be serialized causing stuck doors and platforms, all fixed now
+* added events for serverinfo changes
+* version bump
+* fixed that non-sense blocking Mod.ForName on the client
 
 ### 2025-08-07
 

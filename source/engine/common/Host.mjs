@@ -81,7 +81,6 @@ Host.FindMaxClients = function() {
   for (let i = 0; i < SV.svs.maxclientslimit; i++) {
     SV.svs.clients.push(new ServerClient(i));
   }
-  Cvar.Set('deathmatch', '0');
 };
 
 Host.InitLocal = function() {
@@ -90,15 +89,15 @@ Host.InitLocal = function() {
   Host.speeds = new Cvar('host_speeds', '0');
   Host.ticrate = new Cvar('sys_ticrate', '0.05');
   Host.serverprofile = new Cvar('serverprofile', '0');
-  Host.fraglimit = new Cvar('fraglimit', '0', Cvar.FLAG.SERVER);
-  Host.timelimit = new Cvar('timelimit', '0', Cvar.FLAG.SERVER);
-  Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER);
-  Host.samelevel = new Cvar('samelevel', '0', Cvar.FLAG.SERVER, 'Set to 1 to stay on the same map even the map is over');
-  Host.noexit = new Cvar('noexit', '0', Cvar.FLAG.SERVER);
-  Host.skill = new Cvar('skill', '1');
+  Host.fraglimit = new Cvar('fraglimit', '0', Cvar.FLAG.SERVER); // Legacy
+  Host.timelimit = new Cvar('timelimit', '0', Cvar.FLAG.SERVER); // Legacy
+  Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER); // Legacy
+  Host.samelevel = new Cvar('samelevel', '0', Cvar.FLAG.SERVER, 'Set to 1 to stay on the same map even the map is over'); // Legacy
+  Host.noexit = new Cvar('noexit', '0', Cvar.FLAG.SERVER); // Legacy
+  Host.skill = new Cvar('skill', '1', Cvar.FLAG.SERVER); // Legacy
+  Host.deathmatch = new Cvar('deathmatch', '0', Cvar.FLAG.SERVER); // Legacy
+  Host.coop = new Cvar('coop', '0', Cvar.FLAG.SERVER); // Legacy
   Host.developer = new Cvar('developer', '0');
-  Host.deathmatch = new Cvar('deathmatch', '0', Cvar.FLAG.SERVER);
-  Host.coop = new Cvar('coop', '0', Cvar.FLAG.SERVER);
   Host.pausable = new Cvar('pausable', '1', Cvar.FLAG.SERVER);
 
   // dedicated server settings
@@ -879,7 +878,7 @@ Host.Savegame_f = function(savename) {
   }
 
   const gamestate = {
-    version: 1,
+    version: Def.gamestateVersion,
     gameversion: SV.server.gameVersion,
     comment: CL.state.levelname, // TODO: ask the game for a comment
     spawn_parms: client.spawn_parms,
@@ -889,8 +888,15 @@ Host.Savegame_f = function(savename) {
     lightstyles: SV.server.lightstyles,
     globals: null,
     edicts: [],
+    particles: R.SerializeParticles(),
     num_edicts: SV.server.num_edicts,
+    // TODO: client entities
+    clientdata: null,
   };
+
+  if (CL.state.gameAPI) {
+    gamestate.clientdata = CL.state.gameAPI.saveGame();
+  }
 
   // IDEA: we could actually compress this by using a list of common fields
   for (const edict of SV.server.edicts) {
@@ -936,8 +942,8 @@ Host.Loadgame_f = function (savename) {
 
   const gamestate = JSON.parse(data);
 
-  if (gamestate.version !== 1) {
-    throw new HostError(`Savegame is version ${gamestate.version}, not 1\n`);
+  if (gamestate.version !== Def.gamestateVersion) {
+    throw new HostError(`Savegame is version ${gamestate.version}, not ${Def.gamestateVersion}\n`);
   }
 
   Host.current_skill = gamestate.current_skill;
@@ -999,8 +1005,7 @@ Host.Loadgame_f = function (savename) {
   const client = SV.svs.clients[0];
   client.spawn_parms = gamestate.spawn_parms;
 
-  CL.EstablishConnection('local');
-  Host.Reconnect_f();
+  CL.ResumeGame(gamestate.clientdata, gamestate.particles);
 };
 
 Host.Name_f = function(...names) { // signon 2, step 1
@@ -1232,9 +1237,19 @@ Host.Spawn_f = function() { // signon 2, step 3
       colormap: ent.num, // the num, not the entity
       team: (client.colors & 15) + 1,
     });
-    for (let i = 0; i <= 15; i++) {
-      SV.server.gameAPI[`parm${i + 1}`] = client.spawn_parms[i];
+
+    // load in spawn parameters (legacy)
+    if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
+      for (let i = 0; i <= 15; i++) {
+        SV.server.gameAPI[`parm${i + 1}`] = client.spawn_parms[i];
+      }
     }
+
+    // load in spawn parameters
+    if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_DYNAMIC)) {
+      ent.entity.restoreSpawnParameters(client.spawn_parms);
+    }
+
     // call the spawn function
     SV.server.gameAPI.time = SV.server.time;
     SV.server.gameAPI.ClientConnect(ent);
@@ -1300,14 +1315,13 @@ Host.Begin_f = function() {  // signon 3, step 1
   this.client.spawned = true;
 };
 
-Host.Kick_f = function(...argv) { // FIXME: Host.client
+Host.Kick_f = function() { // FIXME: Host.client
+  const argv = this.argv;
   if (!this.client) {
     if (!SV.server.active) {
       this.forward();
       return;
     }
-  } else if (SV.server.gameAPI.deathmatch !== 0.0) {
-    return;
   }
   if (argv.length <= 1) {
     return;

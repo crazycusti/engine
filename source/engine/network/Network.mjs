@@ -127,7 +127,7 @@ NET.Close = function(sock) {
 };
 
 NET.GetMessage = function(sock) {
-  if (sock == null) {
+  if (sock === null) {
     return -1;
   }
   if (sock.state === QSocket.STATE_DISCONNECTED) {
@@ -325,9 +325,4 @@ NET.MaxPlayers_f = function(maxplayers) { // TODO: turn into Cvar with hooks
   }
 
   SV.svs.maxclients = n;
-  if (n === 1) {
-    Cvar.Set('deathmatch', '0');
-  } else {
-    Cvar.Set('deathmatch', '1');
-  }
 };

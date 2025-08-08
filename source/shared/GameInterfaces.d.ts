@@ -41,13 +41,20 @@ export interface ClientGameInterface {
   clientdata: ClientdataMap | null;
   viewmodel: ViewmodelConfig | null;
 
+  // client initialization and shutdown methods
   init(): void;
   shutdown(): void;
-  draw(): void;
+
+  // client main loop methods
   startFrame(): void;
+  draw(): void;
 
+  // serialization methods (for saving/loading games)
+  saveGame(): string;
+  loadGame(data: string);
+
+  // client event handling methods and state change hooks
   handleClientEvent(code: number, ...args: SerializableType[]): void;
-
   updateRefDef(refdef: RefDef): unknown;
 
   static GetClientEdictHandler(classname: string): BaseClientEdictHandler
@@ -58,20 +65,30 @@ export interface ClientGameInterface {
   static IsServerCompatible(version: number[]): boolean;
 };
 
+export interface PlayerEntitySpawnParamsDynamic {
+  saveSpawnParameters(): string;
+  restoreSpawnParameters(data: string): void;
+};
+
 export interface ServerGameInterface {
-  StartFrame(): void;
-  SetNewParms(): void;
-  SetSpawnParms(clientEntity: ServerEdict): void;
-  SetChangeParms(clientEdict: ServerEdict): void;
+  // only used with CAP_SPAWNPARMS_LEGACY flag
+  SetNewParms?(): void;
+  SetSpawnParms?(clientEdict: ServerEdict): void;
+  SetChangeParms?(clientEdict: ServerEdict): void;
+
   PlayerPreThink(clientEdict: ServerEdict): void;
   PlayerPostThink(clientEdict: ServerEdict): void;
+
   ClientConnect(clientEdict: ServerEdict): void;
   ClientDisconnect(clientEdict: ServerEdict): void;
   ClientKill(clientEdict: ServerEdict): void;
+
   PutClientInServer(clientEdict: ServerEdict): void;
 
   init(mapname: string, serverflags: number): void;
   shutdown(isCrashShutdown: boolean): void;
+  startFrame(): void;
+
   prepareEntity(edict: ServerEdict, classname: string, initialData?: any): boolean;
   spawnPreparedEntity(edict: ServerEdict): boolean;
 

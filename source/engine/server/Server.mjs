@@ -165,7 +165,14 @@ export class ServerEntityState {
 
 SV.EntityState = ServerEntityState;
 
-SV.svs = {};
+SV.svs = {
+  changelevel_issued: false,
+  clients: [],
+  maxclients: 0,
+  maxclientslimit: 32,
+  /** gamestate across maps */
+  gamestate: null,
+};
 
 /**
  * Simple class hooking up all movevars with corresponding cvars.
@@ -380,7 +387,6 @@ SV.SendServerData = function(client) {
   }
 
   MSG.WriteByte(message, SV.svs.maxclients);
-  MSG.WriteByte(message, ((Host.coop.value === 0) && (Host.deathmatch.value !== 0)) ? 1 : 0); // gametype (1 deathmatch, 0 coop/singleplayer)
   MSG.WriteString(message, SV.server.edicts[0].entity.message || SV.server.mapname); // levelname
   // @ts-ignore
   SV.pmove.movevars.sendToClient(message);
@@ -431,12 +437,7 @@ SV.SendServerData = function(client) {
 SV.ConnectClient = function(client, netconnection) {
   Con.DPrint('Client ' + netconnection.address + ' connected\n');
 
-  const spawn_parms = new Array(client.spawn_parms.length);
-  if (SV.server.loadgame) {
-    for (let i = 0; i < client.spawn_parms.length; i++) {
-      spawn_parms[i] = client.spawn_parms[i];
-    }
-  }
+  const old_spawn_parms = SV.server.loadgame ? client.spawn_parms : null;
 
   client.clear();
   client.name = 'unconnected';
@@ -445,14 +446,20 @@ SV.ConnectClient = function(client, netconnection) {
 
   client.old_frags = Infinity; // trigger a update frags
 
-  if (SV.server.loadgame) {
-    for (let i = 0; i < client.spawn_parms.length; i++) {
-      client.spawn_parms[i] = spawn_parms[i];
-    }
-  } else {
-    SV.server.gameAPI.SetNewParms();
-    for (let i = 0; i < client.spawn_parms.length; i++) {
-      client.spawn_parms[i] = SV.server.gameAPI[`parm${i + 1}`];
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_DYNAMIC)) {
+    client.entity.restoreSpawnParameters(old_spawn_parms);
+  } else if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
+    if (SV.server.loadgame) {
+      console.assert(old_spawn_parms instanceof Array, 'old_spawn_parms is an array');
+
+      for (let i = 0; i < client.spawn_parms.length; i++) {
+        client.spawn_parms[i] = old_spawn_parms[i];
+      }
+    } else {
+      SV.server.gameAPI.SetNewParms();
+      for (let i = 0; i < client.spawn_parms.length; i++) {
+        client.spawn_parms[i] = SV.server.gameAPI[`parm${i + 1}`];
+      }
     }
   }
 
@@ -1184,6 +1191,7 @@ SV.ModelIndex = function(name) {
 
 SV.SaveSpawnparms = function() {
   SV.svs.serverflags = SV.server.gameAPI.serverflags;
+
   for (let i = 0; i < SV.svs.maxclients; i++) {
     /** @type {ServerClient} */
     const client = SV.svs.clients[i];
@@ -1232,7 +1240,7 @@ SV.SpawnServer = function(mapname) {
   }
 
   if (Host.coop.value !== 0) {
-    Cvar.SetValue('deathmatch', 0);
+    Host.deathmatch.set(0);
   }
   Host.current_skill = Math.floor(Host.skill.value + 0.5);
   if (Host.current_skill < 0) {
@@ -1240,7 +1248,7 @@ SV.SpawnServer = function(mapname) {
   } else if (Host.current_skill > 3) {
     Host.current_skill = 3;
   }
-  Cvar.SetValue('skill', Host.current_skill);
+  Host.skill.set(Host.current_skill);
 
   Con.DPrint('Clearing memory\n');
   Mod.ClearAll();
@@ -2665,7 +2673,7 @@ SV.HandleRconRequest = function(client) {
     return;
   }
 
-  Con.Print(`SV.HandleRconRequest: rcon by ${client.name} from ${client.netconnection.address}: ${cmd}\n`);
+  Con.Print(`[${client.name}@${client.netconnection.address}] ${cmd}\n`);
 
   Con.StartCapturing();
   Cmd.ExecuteString(cmd);

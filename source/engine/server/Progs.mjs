@@ -426,7 +426,7 @@ class ProgsEntity {
                 val_int[ofs] = value.ofs;
                 return;
               }
-              throw new TypeError('EdictProxy.' + name + ': Expected fields definition');
+              val_int[ofs] = value;
             },
             configurable: true,
             enumerable: true,
@@ -1539,4 +1539,5 @@ PR.TempString = function(string) {
 PR.capabilities = [
   gameCapabilities.CAP_CLIENTDATA_UPDATESTAT,
   gameCapabilities.CAP_CLIENTDATA_LEGACY,
+  gameCapabilities.CAP_SPAWNPARMS_LEGACY,
 ];

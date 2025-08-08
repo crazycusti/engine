@@ -1,3 +1,4 @@
+import { gameCapabilities } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
@@ -12,6 +13,7 @@ eventBus.subscribe('registry.frozen', () => {
 
 /** @typedef {import('./Edict.mjs').ServerEdict} ServerEdict */
 /** @typedef {import('./Server.mjs').ServerEntityState} ServerEntityState */
+/** @typedef {import('../../shared/GameInterfaces').PlayerEntitySpawnParamsDynamic} PlayerEntitySpawnParamsDynamic */
 
 export class ServerClient {
   static STATE = {
@@ -55,7 +57,7 @@ export class ServerClient {
     this.sync_time = 0.0;
 
     /** spawn parms are carried from level to level */
-    this.spawn_parms = new Array(16);
+    this.spawn_parms = null;
 
     this.cmd = new Protocol.UserCmd();
     this.lastcmd = new Protocol.UserCmd();
@@ -98,7 +100,6 @@ export class ServerClient {
     this.last_ping_update = 0.0;
     this.num_pings = 0;
     this.ping_times.fill(0);
-    this.spawn_parms.fill(0);
     this.cmd.reset();
     this.lastcmd.reset();
     this.last_update = 0.0;
@@ -108,6 +109,12 @@ export class ServerClient {
     this.dropasap = false;
     this.spawned = false;
     this.sendsignon = false;
+
+    if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
+      this.spawn_parms = new Array(16);
+    } else {
+      this.spawn_parms = null;
+    }
   }
 
   changelevel() {
@@ -153,11 +160,22 @@ export class ServerClient {
     return Math.round((this.ping_times.reduce((sum, elem) => sum + elem) / this.ping_times.length) * 1000) || 0;
   }
 
-  saveSpawnparms() { // FIXME: should game handle this?
-    SV.server.gameAPI.SetChangeParms(this.edict);
+  saveSpawnparms() {
+    if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_DYNAMIC)) {
+      this.spawn_parms = (this.edict.entity).saveSpawnParameters();
+      return;
+    }
 
-    for (let i = 0; i < this.spawn_parms.length; i++) {
-      this.spawn_parms[i] =  SV.server.gameAPI[`parm${i + 1}`];
+    if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
+      SV.server.gameAPI.SetChangeParms(this.edict);
+
+      this.spawn_parms = new Array(16);
+
+      for (let i = 0; i < this.spawn_parms.length; i++) {
+        this.spawn_parms[i] =  SV.server.gameAPI[`parm${i + 1}`];
+      }
+
+      return;
     }
   }
 

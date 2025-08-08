@@ -673,6 +673,9 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get time() {
       return CL.state.time;
     },
+    get gametime() {
+      return CL.state.clientMessages.mtime[0];
+    },
     get frametime() {
       return Host.frametime;
     },
@@ -684,6 +687,9 @@ export class ClientEngineAPI extends CommonEngineAPI {
     },
     score(/** @type {number} */ num) {
       return CL.state.scores[num];
+    },
+    get serverInfo() {
+      return CL.cls.serverInfo;
     },
   };
 
