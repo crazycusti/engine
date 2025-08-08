@@ -130,6 +130,11 @@ export default class Sys {
 
     const basepath = COM.GetParm('-basepath') || '';
 
+    const listenPort = COM.GetParm('-port') || 3000;
+    const listenAddress = COM.GetParm('-ip');
+
+    Sys.Print(`Webserver will listen on ${listenAddress || 'all interfaces'} on port ${listenPort}\n`);
+
     const __dirname = import.meta.dirname + '/../..';
 
     if (basepath !== '') {
@@ -169,10 +174,12 @@ export default class Sys {
     });
 
     const server = createServer(app);
-    const port = COM.GetParm('-port') || 3000;
 
-    server.listen(port, () => {
-      Sys.Print(`Webserver listening on port ${port}\n`);
+    server.listen({
+      port: listenPort,
+      host: listenAddress || undefined,
+    }, () => {
+      Sys.Print(`Webserver listening on port ${listenPort} (${listenAddress}\n`);
 
       NET.server = server;
     });
