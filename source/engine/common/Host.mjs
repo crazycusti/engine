@@ -566,7 +566,7 @@ Host.Status_f = function() {
     print = Host.ClientPrint;
   }
   print('hostname: ' + NET.hostname.string + '\n');
-  print('version : ' + Def.version + ' (' + SV.server.gameVersion + ')\n');
+  print('version : ' + Def.productVersion + ' (' + SV.server.gameVersion + ')\n');
   print('map     : ' + SV.server.gameAPI.mapname + '\n');
   print('game    : ' + SV.server.gameName + '\n');
   print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' max\n');
@@ -1041,7 +1041,7 @@ Host.Name_f = function(...names) { // signon 2, step 1
 };
 
 Host.Version_f = function() {
-  Con.Print('Version ' + Def.version + '\n');
+  Con.Print('Version ' + Def.productVersion + '\n');
 };
 
 Host.Say_f = function(teamonly, message) {
@@ -1235,11 +1235,12 @@ Host.Spawn_f = function() { // signon 2, step 3
     for (let i = 0; i <= 15; i++) {
       SV.server.gameAPI[`parm${i + 1}`] = client.spawn_parms[i];
     }
+    // call the spawn function
     SV.server.gameAPI.time = SV.server.time;
     SV.server.gameAPI.ClientConnect(ent);
-    if ((Sys.FloatTime() - client.netconnection.connecttime) <= SV.server.time) {
-      Sys.Print(client.name + ' entered the game\n');
-    }
+
+    // actually spawn the player
+    SV.server.gameAPI.time = SV.server.time;
     SV.server.gameAPI.PutClientInServer(ent);
   }
 

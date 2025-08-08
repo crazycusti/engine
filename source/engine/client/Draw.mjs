@@ -6,7 +6,7 @@ import W, { WadFileInterface, WadLumpTexture } from '../common/W.mjs';
 
 import { eventBus } from '../registry.mjs';
 import GL, { GLTexture } from './GL.mjs';
-import { version } from '../common/Def.mjs';
+import { productVersion } from '../common/Def.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 
 /** @type {WebGL2RenderingContext} */
@@ -77,8 +77,8 @@ export default class Draw {
 
       // we are writing the version into the conback texture
       const color = ClientEngineAPI.IndexToRGB(95);
-      for (let i = 0; i < version.length; i++) {
-        charToConback(lump.data, conchars.data, version.charCodeAt(i), 59829 - ((version.length - i) * 8), color);
+      for (let i = 0; i < productVersion.length; i++) {
+        charToConback(lump.data, conchars.data, productVersion.charCodeAt(i), 59829 - ((productVersion.length - i) * 8), color);
       }
 
       return GLTexture.FromLumpTexture(lump).lockTextureMode('GL_NEAREST');

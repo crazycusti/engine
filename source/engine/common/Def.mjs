@@ -1,8 +1,13 @@
 
 /**
+ * Name of this fun project.
+ */
+export const productName = 'The Quake Shack';
+
+/**
  * Version string. It will be modified during the build process.
  */
-export const version = '1.1.0+dev';
+export const productVersion = '1.1.0+dev';
 
 export const limits = Object.freeze({
   edicts: 600,

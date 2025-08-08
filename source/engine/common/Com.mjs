@@ -135,6 +135,11 @@ export default class COM {
     return null;
   };
 
+  /**
+   * Gets parameter from command line.
+   * @param {string} parm parameter name
+   * @returns {string|null} value of the parameter or null if not found
+   */
   static GetParm(parm) {
     for (let i = 1; i < this.argv.length; i++) {
       if (this.argv[i] === parm) {
@@ -285,7 +290,7 @@ export default class COM {
   /**
    * @param {string} filename virtual filename
    * @returns {ArrayBuffer} binary content
-   * @deprecated use async version instead
+   * @deprecated this blocks the main thread – use async version instead
    */
   static LoadFile(filename) {
     filename = filename.toLowerCase();

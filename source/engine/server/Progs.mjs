@@ -318,25 +318,15 @@ class ProgsEntity {
       const val_float = new Float32Array(val);
       const val_int = new Int32Array(val);
 
-      // const s = () => {
-      //   if (!stats[name]) {
-      //     stats[name] = { get: 0, set: 0 };
-      //   }
-
-      //   return stats[name];
-      // };
-
       const assignedFunctions = [];
 
       switch (type) {
         case etype.ev_string:
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
               return val_int[ofs] > 0 ? PR.GetString(val_int[ofs]) : null;
             },
             set: function(value) {
-              // s().set++;
               val_int[ofs] = value !== null && value !== '' ? PR.SetString(val_int[ofs], value) : 0;
             },
             configurable: true,
@@ -346,13 +336,6 @@ class ProgsEntity {
         case etype.ev_entity: // TODO: actually accept entity instead of edict and vice-versa
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
-
-              // CR: oh, how I was wrong… it is ALWAYS an entity, 0 = worldspawn.
-              // if (!val_int[ofs]) {
-              //   return null;
-              // }
-
               if (!SV.server?.edicts || !SV.server.edicts[val_int[ofs]]) {
                 return null;
               }
@@ -360,7 +343,6 @@ class ProgsEntity {
               return SV.server.edicts[val_int[ofs]] || null;
             },
             set: function(value) {
-              // s().set++;
               if (value === null) {
                 val_int[ofs] = 0;
                 return;
@@ -390,7 +372,6 @@ class ProgsEntity {
         case etype.ev_function:
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
               const id = val_int[ofs];
               if (id < 0 && assignedFunctions[(-id) - 1] instanceof Function) {
                 return assignedFunctions[(-id) - 1];
@@ -402,7 +383,6 @@ class ProgsEntity {
               }) : null;
             },
             set: function(value) {
-              // s().set++;
               if (value === null) {
                 val_int[ofs] = 0;
                 return;
@@ -439,11 +419,9 @@ class ProgsEntity {
         case etype.ev_field:
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
               return val_int[ofs];
             },
             set: function(value) {
-              // s().set++;
               if (typeof(value.ofs) !== 'undefined') {
                 val_int[ofs] = value.ofs;
                 return;
@@ -457,11 +435,9 @@ class ProgsEntity {
         case etype.ev_float:
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
               return val_float[ofs];
             },
             set: function(value) {
-              // s().set++;
               if (value === undefined || Q.isNaN(value)) {
                 throw new TypeError('EdictProxy.' + name + ': invalid value for ev_float passed: ' + value);
               }
@@ -474,11 +450,9 @@ class ProgsEntity {
         case etype.ev_vector: // TODO: Proxy for Vector?
           Object.defineProperty(this, name, {
             get: function() {
-              // s().get++;
               return new Vector(val_float[ofs], val_float[ofs + 1], val_float[ofs + 2]);
             },
             set: function(value) {
-              // s().set++;
               val_float[ofs] = value[0];
               val_float[ofs+1] = value[1];
               val_float[ofs+2] = value[2];
@@ -900,7 +874,9 @@ PR.LoadProgs = function() {
   ProgsFunctionProxy.proxyCache = []; // free all cached functions
   // hook up progs.dat with our proxies
 
-  const gameAPI = Object.assign(new ProgsEntity(null), {
+  const progsAPI = new ProgsEntity(null);
+
+  const gameAPI = Object.assign(progsAPI, {
     prepareEntity(edict, classname, initialData = {}) {
       if (!edict.entity) { // do not use isFree(), check for unset entity property
         edict.entity = new ProgsEntity(edict);
@@ -1009,6 +985,11 @@ PR.LoadProgs = function() {
 
     // eslint-disable-next-line no-unused-vars
     shutdown(isCrashShutdown) {
+    },
+
+    startFrame() {
+      // pass to the VM
+      progsAPI.StartFrame(null);
     },
   });
 

@@ -296,7 +296,7 @@ NET.Listen_f = function(isListening) {
   }
 };
 
-NET.MaxPlayers_f = function(maxplayers) {
+NET.MaxPlayers_f = function(maxplayers) { // TODO: turn into Cvar with hooks
   if (maxplayers === undefined) {
     Con.Print('"maxplayers" is "' + SV.svs.maxclients + '"\n');
     return;

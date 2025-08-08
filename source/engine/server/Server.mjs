@@ -359,7 +359,7 @@ SV.SendServerData = function(client) {
 
   // first message is always a print message, this is safe to do no matter what version is running
   MSG.WriteByte(message, Protocol.svc.print);
-  MSG.WriteString(message, `\x02\nVERSION ${Def.version} SERVER (${SV.server.gameVersion})\n`);
+  MSG.WriteString(message, `\x02\nVERSION ${Def.productVersion} SERVER (${SV.server.gameVersion})\n`);
 
   MSG.WriteByte(message, Protocol.svc.serverdata);
   MSG.WriteByte(message, Protocol.version);
@@ -450,7 +450,7 @@ SV.ConnectClient = function(client, netconnection) {
       client.spawn_parms[i] = spawn_parms[i];
     }
   } else {
-    SV.server.gameAPI.SetNewParms(client.edict);
+    SV.server.gameAPI.SetNewParms();
     for (let i = 0; i < client.spawn_parms.length; i++) {
       client.spawn_parms[i] = SV.server.gameAPI[`parm${i + 1}`];
     }
@@ -1185,6 +1185,7 @@ SV.ModelIndex = function(name) {
 SV.SaveSpawnparms = function() {
   SV.svs.serverflags = SV.server.gameAPI.serverflags;
   for (let i = 0; i < SV.svs.maxclients; i++) {
+    /** @type {ServerClient} */
     const client = SV.svs.clients[i];
 
     if (!client.active) {
@@ -2362,7 +2363,7 @@ SV.Physics_Step = function(ent) {
 
 SV.Physics = function() {
   SV.server.gameAPI.time = SV.server.time;
-  SV.server.gameAPI.StartFrame(null);
+  SV.server.gameAPI.startFrame();
   for (let i = 0; i < SV.server.num_edicts; i++) {
     /** @type {ServerEdict} */
     const ent = SV.server.edicts[i];

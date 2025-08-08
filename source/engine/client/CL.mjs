@@ -870,20 +870,18 @@ CL.InitGame = function() { // private
   // always assume legacy game code first
   CL.gameCapabilities = PR.capabilities;
 
-  if (!PR.QuakeJS?.ClientGameAPI) {
+  if (!PR.QuakeJS?.identification) {
+    document.title = `${Def.productName} (${Def.productVersion})`;
     return;
   }
 
-  try {
-    if (COM.CheckParm('-noquakejs')) {
-      throw new Error('QuakeJS disabled');
-    }
+  document.title = `${PR.QuakeJS.identification.name} (${PR.QuakeJS.identification.version.join('.')}) on ${Def.productName} (${Def.productVersion})`;
 
+  if (PR.QuakeJS.ClientGameAPI) {
     PR.QuakeJS.ClientGameAPI.Init(ClientEngineAPI);
-    CL.gameCapabilities = PR.QuakeJS.identification.capabilities;
-  } catch (e) {
-    Con.PrintError('CL.InitGame: Failed to import QuakeJS client code, ' + e.message + '.\n');
   }
+
+  CL.gameCapabilities = PR.QuakeJS.identification.capabilities;
 };
 
 // TODO: CL.Shutdown, CL.ShutdownGame, etc.
@@ -1019,6 +1017,8 @@ CL.ParseServerData = function() { // private
     if (game !== COM.game) {
       throw new HostError('Server is running game ' + game + ', not ' + COM.game + '\n');
     }
+
+    document.title = `${game} on ${Def.productName} (${Def.productVersion})`;
   }
 
   CL.state.maxclients = MSG.ReadByte();

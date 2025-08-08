@@ -34,6 +34,8 @@ export default class Cvar {
     CHEAT: 64,
   });
 
+  // TODO: add things like onChange, onPreChange so that we can hook into changes of the variable
+
   /** @type {string} */
   #currentValue = null;
 

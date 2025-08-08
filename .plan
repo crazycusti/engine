@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-08
+
+* about to clean up more the game <-> engine APIs
+
 ### 2025-08-07
 
 * ServerGameAPI.FindInRadius uses area nodes now, cuts down search by 50%
