@@ -2,8 +2,8 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8">
-		<link rel="modulepreload" href="/source/engine/main-browser.mjs">
-		<link rel="modulepreload" href="/source/game/id1/main.mjs">
+		<link rel="modulepreload" href="./source/engine/main-browser.mjs">
+		<link rel="modulepreload" href="./source/game/id1/main.mjs">
 		<title>The Quake Shack</title>
 		<style>
 			body{background: #222; color:#ddd; font-family:monospace; font-size:12px; }
@@ -61,7 +61,7 @@
 		<script src='libs/nipplejs.js'></script>
 
 		<script>
-			import('/source/engine/main-browser.mjs').then((module) => {
+			import('./source/engine/main-browser.mjs').then((module) => {
 				return module.default.Launch();
 			}).catch((error) => {
 				console.error(error);
