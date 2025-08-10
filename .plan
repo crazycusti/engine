@@ -332,6 +332,8 @@ class MainMenu extends BaseMenu {
 
 * cleaned up those state definitions, made them static
 * game related cvars are configured by the game now
+* load/save games now encode server/game cvars
+* Serializer is now good enough to be actually useful for our shenanigans
 
 ### 2025-08-08
 
