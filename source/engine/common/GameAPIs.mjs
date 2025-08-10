@@ -120,6 +120,19 @@ export class CommonEngineAPI {
 };
 
 export class ServerEngineAPI extends CommonEngineAPI {
+  /**
+   * Make sure to free the variable in shutdown().
+   * @see {@link Cvar}
+   * @param {string} name name of the variable
+   * @param {string} value value
+   * @param {number} flags optional flags
+   * @param {?string} description optional description
+   * @returns {Cvar} the created variable
+   */
+  static RegisterCvar(name, value, flags = 0, description = null) {
+    return new Cvar(name, value, flags | Cvar.FLAG.GAME | Cvar.FLAG.SERVER, description);
+  }
+
   static BroadcastPrint(str) {
     Host.BroadcastPrint(str);
   }

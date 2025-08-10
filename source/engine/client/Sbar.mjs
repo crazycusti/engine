@@ -4,6 +4,7 @@ import Cmd from '../common/Cmd.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import VID from './VID.mjs';
 import * as Def from '../common/Def.mjs';
+import Cvar from '../common/Cvar.mjs';
 
 const Sbar = {};
 
@@ -407,7 +408,7 @@ Sbar.DrawFrags = function() {
 };
 
 Sbar.DrawFace = function() {
-  if ((COM.rogue === true) && (CL.state.maxclients !== 1) && (Host.teamplay.value >= 4) && (Host.teamplay.value <= 6)) {
+  if ((COM.rogue === true) && (CL.state.maxclients !== 1) && (Cvar.FindVar('teamplay').value >= 4) && (Cvar.FindVar('teamplay').value <= 6)) { // Legacy cvars
     const s = CL.state.scores[CL.state.viewentity - 1];
     const top = (s.colors & 0xf0) + 8;
     const xofs = CL.state.maxclients === 1 ? 113 : (VID.width >> 1) - 47;

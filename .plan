@@ -5,9 +5,9 @@
 * [_] Porting over the remaining stuff from QuakeC to QuakeJS
 * [_] A proper polish of QuakeJS stuff, cleaning redundant code, fixing some structural shortcomings
 * [_] Fix up the current netcode, implement proper client-side predicition and movement
-* [_] Spin off game code into its own repositories and structure (for easier mod making)
+* [X] Spin off game code into its own repositories and structure (for easier mod making)
 * [_] Remove QuakeC VM from the engine and make it a QuakeJS mod allowing to load a progs.dat
-* [_] Client game code stuff, allowing mods to handle client stuff (tents, sbar, etc.)
+* [X] Client game code stuff, allowing mods to handle client stuff (tents, sbar, etc.)
 
 ## Todos
 
@@ -85,7 +85,7 @@ Grouped by sections and then sorted by priority (more or less).
 * [_] build something that will take a map from defs and makes sure that some properties must be within that range (for movetype, solid, flags)
 * [_] applyBackpack: currentammo not updated
 * [_] cvars: move game related cvars to PR and QuakeJS game
-* [_] BaseEntity: make state definitions static
+* [X] BaseEntity: make state definitions static
 
 ### Modern JavaScript
 
@@ -131,7 +131,7 @@ Grouped by sections and then sorted by priority (more or less).
 * [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 * [X] introduce a required server/client version level and drop clients with wrong version
 * [X] automatically connect to /api/ instead of /
-* [_] ability to specify listen address/interface
+* [X] ability to specify listen address/interface
 
 ### SVC improvements
 
@@ -327,6 +327,11 @@ class MainMenu extends BaseMenu {
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 
 ## Log
+
+### 2025-08-10
+
+* cleaned up those state definitions, made them static
+* game related cvars are configured by the game now
 
 ### 2025-08-08
 

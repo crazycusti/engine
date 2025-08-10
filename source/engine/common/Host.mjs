@@ -89,16 +89,9 @@ Host.InitLocal = function() {
   Host.speeds = new Cvar('host_speeds', '0');
   Host.ticrate = new Cvar('sys_ticrate', '0.05');
   Host.serverprofile = new Cvar('serverprofile', '0');
-  Host.fraglimit = new Cvar('fraglimit', '0', Cvar.FLAG.SERVER); // Legacy
-  Host.timelimit = new Cvar('timelimit', '0', Cvar.FLAG.SERVER); // Legacy
-  Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER); // Legacy
-  Host.samelevel = new Cvar('samelevel', '0', Cvar.FLAG.SERVER, 'Set to 1 to stay on the same map even the map is over'); // Legacy
-  Host.noexit = new Cvar('noexit', '0', Cvar.FLAG.SERVER); // Legacy
-  Host.skill = new Cvar('skill', '1', Cvar.FLAG.SERVER); // Legacy
-  Host.deathmatch = new Cvar('deathmatch', '0', Cvar.FLAG.SERVER); // Legacy
-  Host.coop = new Cvar('coop', '0', Cvar.FLAG.SERVER); // Legacy
   Host.developer = new Cvar('developer', '0');
   Host.pausable = new Cvar('pausable', '1', Cvar.FLAG.SERVER);
+  Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER); // actually a game cvar, but we need it here, since a bunch of server code is using it
 
   // dedicated server settings
   Host.dedicated = new Cvar('dedicated', registry.isDedicatedServer ? '1' : '0', Cvar.FLAG.READONLY, 'Set to 1, if running in dedicated server mode.');
@@ -882,16 +875,16 @@ Host.Savegame_f = function(savename) {
     gameversion: SV.server.gameVersion,
     comment: CL.state.levelname, // TODO: ask the game for a comment
     spawn_parms: client.spawn_parms,
-    current_skill: Host.current_skill,
     mapname: SV.server.gameAPI.mapname,
     time: SV.server.time,
     lightstyles: SV.server.lightstyles,
     globals: null,
+    cvars: [...Cvar.Filter((cvar) => cvar.flags & (Cvar.FLAG.SERVER | Cvar.FLAG.GAME))].map((cvar) => [cvar.name, cvar.string]),
+    clientdata: null,
     edicts: [],
-    particles: R.SerializeParticles(),
     num_edicts: SV.server.num_edicts,
     // TODO: client entities
-    clientdata: null,
+    particles: R.SerializeParticles(),
   };
 
   if (CL.state.gameAPI) {
@@ -946,10 +939,18 @@ Host.Loadgame_f = function (savename) {
     throw new HostError(`Savegame is version ${gamestate.version}, not ${Def.gamestateVersion}\n`);
   }
 
-  Host.current_skill = gamestate.current_skill;
-  Cvar.Set('skill', Host.current_skill);
-
   CL.Disconnect();
+
+  // restore all server/game cvars
+  for (const [name, value] of gamestate.cvars) {
+    const cvar = Cvar.FindVar(name);
+    if (cvar) {
+      cvar.set(value);
+    } else {
+      Con.PrintWarning(`Saved cvar ${name} not found, skipping\n`);
+    }
+  }
+
   SV.SpawnServer(gamestate.mapname);
 
   if (!SV.server.active) {
@@ -1069,7 +1070,7 @@ Host.Say_f = function(teamonly, message) {
     if ((client.active !== true) || (client.spawned !== true)) {
       continue;
     }
-    if ((Host.teamplay.value !== 0) && (teamonly === true) && (client.entity.team !== save.entity.team)) {
+    if ((Host.teamplay.value !== 0) && (teamonly === true) && (client.entity.team !== save.entity.team)) { // Legacy cvars
       continue;
     }
     Host.SendChatMessageToClient(client, save.name, message, false);

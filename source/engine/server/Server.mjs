@@ -1217,7 +1217,7 @@ SV.HasMap = function(mapname) {
 SV.SpawnServer = function(mapname) {
   let i;
 
-  if (!NET.hostname.string) {
+  if (NET.hostname.string.trim() === '') {
     NET.hostname.set('UNNAMED');
   }
 
@@ -1238,17 +1238,6 @@ SV.SpawnServer = function(mapname) {
       client.changelevel();
     }
   }
-
-  if (Host.coop.value !== 0) {
-    Host.deathmatch.set(0);
-  }
-  Host.current_skill = Math.floor(Host.skill.value + 0.5);
-  if (Host.current_skill < 0) {
-    Host.current_skill = 0;
-  } else if (Host.current_skill > 3) {
-    Host.current_skill = 3;
-  }
-  Host.skill.set(Host.current_skill);
 
   Con.DPrint('Clearing memory\n');
   Mod.ClearAll();
@@ -1434,8 +1423,6 @@ SV.WriteCvar = function(msg, cvar) {
  * @param {Cvar} cvar cvar change to write
  */
 SV.CvarChanged = function(cvar) {
-  Con.Print(`"${cvar.name}" changed to "${cvar.string}"\n`);
-
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
     if (!client.active || !client.spawned) {

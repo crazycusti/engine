@@ -565,7 +565,7 @@ export class ServerEdict {
     const end = new Vector(start[0] + 2048.0 * dir[0], start[1] + 2048.0 * dir[1], start[2] + 2048.0 * dir[2]);
     const tr = SV.Move(start, Vector.origin, Vector.origin, end, 0, this);
     if (tr.ent !== null) {
-      if ((tr.ent.entity.takedamage === SV.damage.aim) && (!Host.teamplay.value || this.entity.team <= 0 || this.entity.team !== tr.ent.entity.team)) {
+      if ((tr.ent.entity.takedamage === SV.damage.aim) && (!Host.teamplay.value || this.entity.team <= 0 || this.entity.team !== tr.ent.entity.team)) { // Legacy cvars
         return dir;
       }
     }
@@ -583,7 +583,7 @@ export class ServerEdict {
       if (check.equals(this)) {
         continue;
       }
-      if ((Host.teamplay.value !== 0) && (this.entity.team > 0) && (this.entity.team === check.entity.team)) {
+      if ((Host.teamplay.value !== 0) && (this.entity.team > 0) && (this.entity.team === check.entity.team)) { // Legacy cvars
         continue;
       }
       const corigin = check.entity.origin, cmins = check.entity.mins, cmaxs = check.entity.maxs;

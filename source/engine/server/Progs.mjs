@@ -876,6 +876,10 @@ PR.LoadProgs = function() {
 
   const progsAPI = new ProgsEntity(null);
 
+  const deathmatch = Cvar.FindVar('deathmatch');
+  const skill = Cvar.FindVar('skill');
+  const coop = Cvar.FindVar('coop');
+
   const gameAPI = Object.assign(progsAPI, {
     prepareEntity(edict, classname, initialData = {}) {
       if (!edict.entity) { // do not use isFree(), check for unset entity property
@@ -946,13 +950,13 @@ PR.LoadProgs = function() {
 
       const spawnflags = edict.entity.spawnflags || 0;
 
-      if (Host.deathmatch.value !== 0 && (spawnflags & 2048)) {
+      if (deathmatch.value !== 0 && (spawnflags & 2048)) {
         return false;
       }
 
       const skillFlags = [256, 512, 1024, 1024];
 
-      if (spawnflags & skillFlags[Math.max(0, Math.min(skillFlags.length, Host.current_skill))]) {
+      if (spawnflags & skillFlags[Math.max(0, Math.min(skillFlags.length, skill.value))]) {
         return false;
       }
 
@@ -979,8 +983,17 @@ PR.LoadProgs = function() {
       gameAPI.mapname = mapname;
       gameAPI.serverflags = serverflags;
 
-      gameAPI.coop = Host.coop.value;
-      gameAPI.deathmatch = Host.deathmatch.value;
+      // coop automatically disables deathmatch
+      if (coop.value) {
+        coop.set(true);
+        deathmatch.set(false);
+      }
+
+      // make sure skill is in range
+      skill.set(Math.max(0, Math.min(3, Math.floor(skill.value))));
+
+      gameAPI.coop = coop.value;
+      gameAPI.deathmatch = deathmatch.value;
     },
 
     // eslint-disable-next-line no-unused-vars
@@ -989,6 +1002,7 @@ PR.LoadProgs = function() {
 
     startFrame() {
       // pass to the VM
+      // @ts-ignore
       progsAPI.StartFrame(null);
     },
   });
@@ -1030,7 +1044,6 @@ PR.Init = async function() {
   Cmd.AddCommand('edicts', ED.PrintEdicts);
   Cmd.AddCommand('edictcount', ED.Count);
   Cmd.AddCommand('profile', PR.Profile_f);
-  PR._cvars.push(new Cvar('nomonsters', '0'));
   PR._cvars.push(new Cvar('gamecfg', '0'));
   PR._cvars.push(new Cvar('scratch1', '0'));
   PR._cvars.push(new Cvar('scratch2', '0'));
@@ -1041,6 +1054,15 @@ PR.Init = async function() {
   PR._cvars.push(new Cvar('saved2', '0', Cvar.FLAG.ARCHIVE));
   PR._cvars.push(new Cvar('saved3', '0', Cvar.FLAG.ARCHIVE));
   PR._cvars.push(new Cvar('saved4', '0', Cvar.FLAG.ARCHIVE));
+
+  PR._cvars.push(new Cvar('nomonsters', '0', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('fraglimit', '0', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('timelimit', '0', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('samelevel', '0', Cvar.FLAG.SERVER, 'Set to 1 to stay on the same map even the map is over'));
+  PR._cvars.push(new Cvar('noexit', '0', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('skill', '1', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('deathmatch', '0', Cvar.FLAG.SERVER));
+  PR._cvars.push(new Cvar('coop', '0', Cvar.FLAG.SERVER));
 };
 
 // exec
