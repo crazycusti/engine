@@ -1,11 +1,12 @@
 import { HostError } from '../common/Errors.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-let { Con, NET } = registry;
+let { Con, NET, Sys } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   NET = registry.NET;
+  Sys = registry.Sys;
 });
 
 export class QSocket {
@@ -490,6 +491,10 @@ export class WebSocketDriver extends BaseDriver {
     sock.sendMessage = [];
     sock.sendMessageLength = null;
     sock.state = QSocket.STATE_CONNECTED;
+
+    // set the last message time to now
+    NET.time = Sys.FloatTime();
+    sock.lastMessageTime = NET.time;
 
     ws.on('close', () => {
       Con.DPrint('WebSocketDriver._OnConnectionServer.disconnect: client disconnected\n');
