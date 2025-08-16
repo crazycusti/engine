@@ -54,10 +54,10 @@ const clientGameEvents = [
 ];
 
 export default class CL {
-  /** @deprecated – use Def */
+  /** @deprecated – use Def.contentShift */
   static cshift = Def.contentShift;
 
-  /** @deprecated – use Def */
+  /** @deprecated – use Def.clientConnectionState */
   static active = Def.clientConnectionState;
 
   /** @type {Pmove} */
@@ -139,6 +139,8 @@ export default class CL {
   static state = class ClientState {
     static clientEntities = new ClientEntities();
     static clientMessages = new ClientMessages();
+    /** @type {Record<string,{fields: string[], bitsReader: MSG.ReadByte|MSG.ReadShort|MSG.ReadLong}>} */
+    static clientEntityFields = {};
     /** @type {{[key: string]: import('../../shared/GameInterfaces').SerializableType}} */
     static clientdata = {};
     static movemessages = 0;
@@ -264,6 +266,9 @@ export default class CL {
       // this.loadClientData = null; -- not clearing this, we want to carry it over upon a load game
       for (const cshift of this.cshifts) {
         cshift.fill(0.0);
+      }
+      for (const key of Object.keys(this.clientEntityFields)) {
+        delete this.clientEntityFields[key];
       }
       this.#configureProxyEvents();
     }
@@ -1081,7 +1086,7 @@ CL.ParseServerData = function() { // private
     sound_precache[numsounds] = str;
   }
 
-  if (!CL.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT)) {
+  if (CL.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
     const clientdataFields = [];
 
     while (true) {
@@ -1093,6 +1098,44 @@ CL.ParseServerData = function() { // private
     }
 
     CL.state.clientMessages.clientdataFields = clientdataFields;
+  }
+
+  if (CL.gameCapabilities.includes(gameCapabilities.CAP_ENTITY_EXTENDED)) {
+    while (true) {
+      const classname = MSG.ReadString();
+
+      if (classname === '') {
+        break;
+      }
+
+      const fields = [];
+
+      while (true) {
+        const field = MSG.ReadString();
+
+        if (field === '') {
+          break;
+        }
+
+        fields.push(field);
+      }
+
+      let bitsReader = null;
+
+      console.assert(fields.length <= 32, 'entity fields must not have more than 32 fields');
+
+      if (fields.length <= 8) {
+        bitsReader = MSG.ReadByte;
+      } else if (fields.length <= 16) {
+        bitsReader = MSG.ReadShort;
+      } else {
+        bitsReader = MSG.ReadLong;
+      }
+
+      if (fields.length > 0) {
+        CL.state.clientEntityFields[classname] = { fields, bitsReader };
+      }
+    }
   }
 
   CL.state.model_precache.length = 0;
@@ -1785,6 +1828,33 @@ CL.ParsePacketEntities = function() { // private
     if (bits & Protocol.u.size) {
       clent.maxs.set(MSG.ReadCoordVector());
       clent.mins.set(MSG.ReadCoordVector());
+    }
+
+    if (CL.gameCapabilities.includes(gameCapabilities.CAP_ENTITY_EXTENDED)) {
+      const clientEntityFields = CL.state.clientEntityFields[clent.classname];
+      // let’s check if we have any extended fields for this entity
+      if (clientEntityFields) {
+        const fieldbits = clientEntityFields.bitsReader();
+
+        if (fieldbits > 0) {
+          const fields = [];
+
+          for (let i = 0; i < clientEntityFields.fields.length; i++) {
+            const field = clientEntityFields.fields[i];
+            if ((fieldbits & (1 << i)) !== 0) {
+              fields.push(field);
+            }
+          }
+
+          let counter = 0;
+
+          const values = MSG.ReadSerializablesOnClient();
+
+          for (const value of values) {
+            clent.extended[fields[counter++]] = value;
+          }
+        }
+      }
     }
 
     clent.updatecount++;

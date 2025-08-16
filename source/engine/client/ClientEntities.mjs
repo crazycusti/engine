@@ -21,7 +21,7 @@ export class ClientDlight {
   /** @type {number} light radius */
   radius = 0.0;
 
-  /** @type {Vector} light color */
+  /** @type {Vector} light color, RGB */
   color = new Vector(1.0, 1.0, 1.0);
 
   /** @type {Vector} origin */
@@ -120,6 +120,8 @@ export class ClientEdict {
     this.syncbase = 0.0;
     this.maxs = new Vector();
     this.mins = new Vector();
+    /** @type {Record<string, import('../../shared/GameInterfaces').SerializableType>} entity fields pushed by the server */
+    this.extended = {};
 
     /** @type {ClientEdict} */
     const that = this;
@@ -197,6 +199,10 @@ export class ClientEdict {
     this.mins.clear();
     this.originPrevious = null;
     this.anglesPrevious = null;
+    // make sure we delete the field, not just replace the holding object
+    for (const key of Object.keys(this.extended)) {
+      delete this.extended[key];
+    }
   }
 
   /**

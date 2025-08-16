@@ -89,6 +89,8 @@ export interface ServerGameInterface {
   shutdown(isCrashShutdown: boolean): void;
   startFrame(): void;
 
+  getClientEntityFields(): Record<string, string[]>;
+
   prepareEntity(edict: ServerEdict, classname: string, initialData?: any): boolean;
   spawnPreparedEntity(edict: ServerEdict): boolean;
 

@@ -14,12 +14,11 @@ const PR = {};
 
 export default PR;
 
-let { COM, Con, Host, SV } = registry;
+let { COM, Con, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
   Con = registry.Con;
-  Host = registry.Host;
   SV = registry.SV;
 });
 

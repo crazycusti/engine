@@ -1001,6 +1001,7 @@ R.viewleaf = null;
 
 R.RenderScene = function() {
   R.AnimateLight();
+  // FIXME: the next couple of lines need to be moved before requestAnimationFrame
   const {forward, right, up} = R.refdef.viewangles.angleVectors();
   [R.vpn, R.vright, R.vup] = [forward, right, up];
   R.viewleaf = Mod.PointInLeaf(R.refdef.vieworg, CL.state.worldmodel);

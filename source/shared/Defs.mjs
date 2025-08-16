@@ -189,6 +189,8 @@ export const gameCapabilities = Object.freeze({
   CAP_CLIENTDATA_LEGACY: 'CAP_CLIENTDATA_LEGACY',
   /** this will transmit clientdataFields defined in the player entity to the client and automatically populate clientdata on the ClientGameAPI */
   CAP_CLIENTDATA_DYNAMIC: 'CAP_CLIENTDATA_DYNAMIC',
+  /** will allow updating certain fields from server to client */
+  CAP_ENTITY_EXTENDED: 'CAP_ENTITY_EXTENDED',
   /** the client game code brings its own status bar, in other words: no Sbar required! */
   CAP_HUD_INCLUDES_SBAR: 'CAP_HUD_INCLUDES_SBAR',
   /** the client game code takes care of rendering crosshairs, in other words: V is not required to draw one! */

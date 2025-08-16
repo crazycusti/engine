@@ -139,6 +139,7 @@ NET.GetMessage = function(sock) {
   if (sock.driver !== 0) { // FIXME: hardcoded check for loopback driver
     if (ret === 0) {
       if ((NET.time - sock.lastMessageTime) > NET.messagetimeout.value) {
+        Con.DPrint(`NET.GetMessage: message timeout for ${sock.address}\n`);
         NET.Close(sock);
         return -1;
       }

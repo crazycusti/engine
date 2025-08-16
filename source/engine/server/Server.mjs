@@ -115,6 +115,8 @@ SV.server = {
   clientdataFields: [],
   /** @type {MSG.WriteByte|MSG.WriteShort|MSG.WriteLong} */
   clientdataFieldsBitsWriter: null,
+  /** @type {Record<string, { fields: string[], bitsWriter: MSG.WriteByte|MSG.WriteShort|MSG.WriteLong}>} maps classname to its fields and the apropriate bits writer  */
+  clientEntityFields: {},
 };
 
 export class ServerEntityState {
@@ -135,7 +137,7 @@ export class ServerEntityState {
     this.maxs = new Vector();
     this.velocity = new Vector(0, 0, 0);
 
-    /** @type {{[key: string]: SerializableType}} */
+    /** @type {Record<string, SerializableType>} */
     this.extended = {};
   }
 
@@ -403,6 +405,18 @@ SV.SendServerData = function(client) {
     // write the clientdata fields to the client, so it can build the compression table
     for (const field of SV.server.clientdataFields) {
       MSG.WriteString(message, field);
+    }
+    MSG.WriteByte(message, 0);
+  }
+
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
+    // write the client entity fields to the client, so it can build the compression table
+    for (const [classname, { fields }] of Object.entries(SV.server.clientEntityFields)) {
+      MSG.WriteString(message, classname);
+      for (const field of fields) {
+        MSG.WriteString(message, field);
+      }
+      MSG.WriteByte(message, 0); // end of fields for this classname
     }
     MSG.WriteByte(message, 0);
   }
@@ -799,6 +813,32 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     MSG.WriteCoordVector(msg, to.mins);
   }
 
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
+    // check if this entity has fields to share with the client
+    if (SV.server.clientEntityFields[to.classname]) {
+      const entityFields = SV.server.clientEntityFields[to.classname];
+      const fields = entityFields.fields;
+      const bitsWriter = entityFields.bitsWriter;
+
+      let fieldbits = 0;
+      const values = [];
+
+      for (const field of fields) {
+        // is there a change?
+        if (from.extended[field] !== to.extended[field]) {
+          fieldbits |= 1 << fields.indexOf(field);
+          values.push(to.extended[field]);
+        }
+      }
+
+      bitsWriter(msg, fieldbits);
+
+      if (fieldbits > 0) {
+        MSG.WriteSerializables(msg, values);
+      }
+    }
+  }
+
   return true;
 };
 
@@ -844,6 +884,18 @@ SV.WriteEntitiesToClient = function(clientEdict, msg) {
     toState.free = false;
     toState.maxs.set(ent.entity.maxs);
     toState.mins.set(ent.entity.mins);
+
+    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
+      // check if this entity has fields to share with the client
+      if (SV.server.clientEntityFields[ent.entity.classname]) {
+        const entityFields = SV.server.clientEntityFields[ent.entity.classname];
+        const fields = entityFields.fields;
+
+        for (const field of fields) {
+          toState.extended[field] = ent.entity[field];
+        }
+      }
+    }
 
     /** @type {ServerEntityState} */
     const fromState = cl.getEntityState(ent.num);
@@ -1022,7 +1074,6 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
     }
 
     SV.server.clientdataFieldsBitsWriter(destination, fieldbits);
-
     MSG.WriteSerializables(destination, values);
   }
 
@@ -1305,6 +1356,7 @@ SV.SpawnServer = function(mapname) {
     SV.server.lightstyles[i] = '';
   }
 
+  // build the clientdata compression fields for PlayerEntity
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
     const fields = SV.server.edicts[1].entity.clientdataFields;
     // configure clientdata fields
@@ -1323,6 +1375,29 @@ SV.SpawnServer = function(mapname) {
     // double check that all fields are actually defined
     for (const field of fields) {
       console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
+    }
+  }
+
+  // build the extended fields compression fields
+  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
+    const fields = SV.server.gameAPI.getClientEntityFields();
+    for (const [classname, extendedFields] of Object.entries(fields)) {
+      const clientEntityField = {
+        fields: [],
+        bitsWriter: null,
+      };
+
+      clientEntityField.fields.push(...extendedFields);
+
+      if (extendedFields.length <= 8) {
+        clientEntityField.bitsWriter = MSG.WriteByte;
+      } else if (extendedFields.length <= 16) {
+        clientEntityField.bitsWriter = MSG.WriteShort;
+      } else if (extendedFields.length <= 32) {
+        clientEntityField.bitsWriter = MSG.WriteLong;
+      }
+
+      SV.server.clientEntityFields[classname] = clientEntityField;
     }
   }
 

@@ -655,10 +655,10 @@ export class ClientEngineAPI extends CommonEngineAPI {
   /**
    * @param {number} slot see Def.contentShift
    * @param {Vector} color RGB color vector
-   * @param {number} duration duration in seconds, default is 0.5
+   * @param {number} alpha alpha value, default is 0.5
    */
-  static ContentShift(slot, color, duration = 0.5) {
-    V.ContentShift(slot + 4, color, duration);
+  static ContentShift(slot, color, alpha = 0.5) {
+    V.ContentShift(slot + 4, color, alpha);
   }
 
   static CL = {

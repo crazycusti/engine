@@ -244,7 +244,7 @@ V.CalcBlend = function () {
 
   for (let i = CL.cshift.user1; i < CL.state.cshifts.length; i++) {
     const cshift = CL.state.cshifts[i];
-    cshift[3] -= (Host.frametime / 16.0) * 1000.0;
+    cshift[3] -= Host.frametime * 100.0;
     if (cshift[3] < 0.0) {
       cshift[3] = 0.0;
     }
