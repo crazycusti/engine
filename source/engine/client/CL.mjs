@@ -992,14 +992,26 @@ CL.ParsePmovevars = function() { // private
 };
 
 class ClientScoreSlot {
+  #num = null;
+
+  constructor(num) {
+    this.#num = num;
+
+    this.name = '';
+    this.entertime = 0.0;
+    this.frags = 0;
+    this.colors = 0;
+    this.ping = 0;
+  }
+
   get isActive() {
     return this.name !== '';
   }
-  name = '';
-  entertime = 0.0;
-  frags = 0;
-  colors = 0;
-  ping = 0;
+
+  /** @returns {ClientEdict} the corresponding client entity for this client score slot */
+  get entity() {
+    return CL.state.clientEntities.getEntity(this.#num + 1);
+  }
 };
 
 CL.ParseServerData = function() { // private
@@ -1056,7 +1068,7 @@ CL.ParseServerData = function() { // private
   CL.state.scores.length = 0;
 
   for (let i = 0; i < CL.state.maxclients; i++) {
-    CL.state.scores[i] = new ClientScoreSlot();
+    CL.state.scores[i] = new ClientScoreSlot(i);
   }
 
   CL.state.levelname = MSG.ReadString();
