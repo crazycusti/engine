@@ -7,7 +7,7 @@ import * as Def from './../common/Def.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
 import { ED, ServerEdict } from './Edict.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
@@ -103,6 +103,8 @@ SV.server = {
   edicts: [],
   mapname: null,
   worldmodel: null,
+  /** server game event bus, will be reset on every map load */
+  eventBus: new EventBus('server-game'),
   /** @type {import('../../shared/GameInterfaces').ServerGameInterface} */
   gameAPI: null,
   /** @type {string?} game version string */
@@ -1400,6 +1402,9 @@ SV.SpawnServer = function(mapname) {
       SV.server.clientEntityFields[classname] = clientEntityField;
     }
   }
+
+  // reset the event bus subscriptions
+  SV.server.eventBus.unsubscribeAll();
 
   // init the game
   SV.server.gameAPI.init(mapname, SV.svs.serverflags);

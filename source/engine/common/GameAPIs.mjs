@@ -459,6 +459,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
     this.#DispatchClientEventOnDestination(destination, eventCode, ...args);
   }
+
+  static get eventBus() {
+    return SV.server.eventBus;
+  }
 };
 
 export class ClientEngineAPI extends CommonEngineAPI {

@@ -328,6 +328,17 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-16
+
+* fixed the ContentShift stuff (after I got it how it worked lol)
+* added infrastructure for updating client entity fields
+* restructured client entities and server entities a bit
+* also exposing the event bus to the server game code, gradually using it to synchronize states and decouple components
+
+### 2025-08-14
+
+* fixed that “Lost Connection” issue upon connect when the server was idle for more than a minute
+
 ### 2025-08-10
 
 * cleaned up those state definitions, made them static
