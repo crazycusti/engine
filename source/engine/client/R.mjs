@@ -1330,7 +1330,7 @@ R.Init = async function() {
   R.polyblend = new Cvar('gl_polyblend', '1');
   R.flashblend = new Cvar('gl_flashblend', '0');
   R.nocolors = new Cvar('gl_nocolors', '0');
-  R.interpolation = new Cvar('r_interpolation', '0', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
+  R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
 
   await R.InitParticles();
 
