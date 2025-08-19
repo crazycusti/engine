@@ -694,10 +694,10 @@ R.DrawAliasModel = function(e) {
       }
     }
   } else if (R.interpolation.value) {
-    const [previousFrame, nextFrame] = e.lerp.frame;
+    const [previousFrame, nextFrame, f] = e.lerp.frame;
     frameA = clmodel.frames[previousFrame];
     frameB = clmodel.frames[nextFrame];
-    targettime = (CL.state.clientMessages.mtime[0] - e.lerpTime[0]) / (e.lerpTime[1] - e.lerpTime[0]);
+    targettime = f;
   }
   gl.uniform1f(program.uAlpha, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
   gl.uniform1f(program.uTime, Host.realtime);

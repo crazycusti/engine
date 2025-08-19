@@ -138,6 +138,7 @@ export class ServerEntityState {
     this.mins = new Vector();
     this.maxs = new Vector();
     this.velocity = new Vector(0, 0, 0);
+    this.nextthink = 0;
 
     /** @type {Record<string, SerializableType>} */
     this.extended = {};
@@ -160,6 +161,7 @@ export class ServerEntityState {
     this.classname = other.classname;
     this.mins.set(other.mins);
     this.maxs.set(other.maxs);
+    this.nextthink = other.nextthink;
 
     for (const [key, value] of Object.entries(other.extended)) {
       this.extended[key] = value;
@@ -733,12 +735,17 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     bits |= Protocol.u.solid;
   }
 
+  // transmit any valid nextthink
+  if (to.nextthink >= SV.server.time && Math.abs(from.nextthink - to.nextthink) > 0.001) {
+    bits |= Protocol.u.nextthink;
+  }
+
   for (let i = 0; i < 3; i++) {
     if (isFinite(to.origin[i]) && Math.abs(from.origin[i] - to.origin[i]) > EPSILON) {
       bits |= Protocol.u.origin1 << i;
     }
 
-    if (isFinite(to.angles[i]) && Math.abs(from.angles[i] - to.angles[i]) > 0.0) { // no epsilon check for angles?
+    if (isFinite(to.angles[i]) && Math.abs(from.angles[i] - to.angles[i]) > EPSILON) {
       bits |= Protocol.u.angle1 << i;
     }
 
@@ -755,6 +762,11 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     bits |= Protocol.u.size;
   }
 
+  if (bits === 0) {
+    // nothing changed, no need to write anything
+    return false;
+  }
+
   console.assert(to.num > 0, 'valid entity num', to.num);
 
   MSG.WriteShort(msg, to.num);
@@ -768,12 +780,12 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     MSG.WriteByte(msg, to.free ? 1 : 0);
   }
 
-  if (bits & Protocol.u.model) {
-    MSG.WriteByte(msg, to.modelindex);
-  }
-
   if (bits & Protocol.u.frame) {
     MSG.WriteByte(msg, to.frame);
+  }
+
+  if (bits & Protocol.u.model) {
+    MSG.WriteByte(msg, to.modelindex);
   }
 
   if (bits & Protocol.u.colormap) {
@@ -803,16 +815,13 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     }
   }
 
-  // if (bits & (Protocol.u.origin1 | Protocol.u.origin2 | Protocol.u.origin3)) {
-  //   console.log('SV.WriteDeltaEntity: sending origin', to.num, to.origin.toString());
-  //   if (to.origin.isOrigin()) {
-  //     debugger;
-  //   }
-  // }
-
   if (bits & Protocol.u.size) {
     MSG.WriteCoordVector(msg, to.maxs);
     MSG.WriteCoordVector(msg, to.mins);
+  }
+
+  if (bits & Protocol.u.nextthink) {
+    MSG.WriteFloat(msg, to.nextthink - from.nextthink); // always send difference, otherwise things get jittery
   }
 
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
@@ -886,6 +895,7 @@ SV.WriteEntitiesToClient = function(clientEdict, msg) {
     toState.free = false;
     toState.maxs.set(ent.entity.maxs);
     toState.mins.set(ent.entity.mins);
+    toState.nextthink = ent.entity.nextthink || 0;
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
       // check if this entity has fields to share with the client

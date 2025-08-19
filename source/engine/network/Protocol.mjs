@@ -16,7 +16,7 @@ export const u = Object.freeze({
   angle2: 1 << 5,
   angle3: 1 << 6,
 
-  nolerp: 1 << 7,
+  nextthink: 1 << 7,
 
   frame: 1 << 8,
   free: 1 << 9,

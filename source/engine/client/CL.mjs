@@ -179,8 +179,9 @@ export default class CL {
     static latency = 0.0;
     /** @type {number} last received message from server time */
     static last_received_message = 0.0;
+    /** @type {number} used for position and stuff */
     static viewentity = 0;
-    /** @type {ClientEdict} */
+    /** @type {ClientEdict} the view model */
     static viewent = null;
     static cdtrack = 0;
     static looptrack = 0;
@@ -1789,19 +1790,22 @@ CL.ParsePacketEntities = function() { // private
       clent.free = MSG.ReadByte() !== 0;
     }
 
+    if (bits & Protocol.u.frame) {
+      clent.framePrevious = clent.frame;
+      clent.frame = MSG.ReadByte();
+    }
+
     if (bits & Protocol.u.model) {
       const modelindex = MSG.ReadByte();
       clent.model = CL.state.model_precache[modelindex] || null;
+
+      // a new model will cause the frame lerp to reset
       clent.framePrevious = null;
+      clent.frameTime = 0.0;
 
       if (clent.model) {
         clent.syncbase = clent.model.random ? Math.random() : 0.0;
       }
-    }
-
-    if (bits & Protocol.u.frame) {
-      clent.framePrevious = clent.frame;
-      clent.frame = MSG.ReadByte();
     }
 
     if (bits & Protocol.u.colormap) {
@@ -1844,6 +1848,10 @@ CL.ParsePacketEntities = function() { // private
       clent.mins.set(MSG.ReadCoordVector());
     }
 
+    if (bits & Protocol.u.nextthink) {
+      clent.nextthink = CL.state.clientMessages.mtime[0] + MSG.ReadFloat();
+    }
+
     if (CL.gameCapabilities.includes(gameCapabilities.CAP_ENTITY_EXTENDED)) {
       const clientEntityFields = CL.state.clientEntityFields[clent.classname];
       // let’s check if we have any extended fields for this entity
@@ -1871,36 +1879,38 @@ CL.ParsePacketEntities = function() { // private
       }
     }
 
+    // keep track of time of changes
+    const time = CL.state.clientMessages.mtime[0];
+
+    if (clent.nextthink > time) {
+      // origin change requested
+      if (!clent.msg_origins[0].equals(clent.origin)) {
+        clent.originTime = time;
+        clent.originPrevious.set(clent.origin);
+      }
+
+      // angles change requested
+      if (!clent.msg_angles[0].equals(clent.angles)) {
+        clent.anglesTime = time;
+        clent.anglesPrevious.set(clent.angles);
+      }
+
+      // velocity change requested
+      if (!clent.msg_velocity[0].equals(clent.velocity)) {
+        clent.velocityTime = time;
+        clent.velocityPrevious.set(clent.velocity);
+      }
+
+      if (bits & Protocol.u.frame) {
+        clent.frameTime = time;
+      }
+    }
+
     clent.updatecount++;
 
-    // in case the origin changed, let’s check if we want to lerp the position
-    if (!clent.msg_origins[0].equals(clent.origin) || !clent.msg_angles[0].equals(clent.angles) || !clent.msg_velocity[0].equals(clent.velocity)) {
-      const time = CL.state.clientMessages.mtime[0];
-      if (clent.originPrevious === null) {
-        clent.originPrevious = new Vector();
-      }
-      clent.originPrevious.set(clent.origin);
-      if (clent.anglesPrevious === null) {
-        clent.anglesPrevious = new Vector();
-      }
-      clent.anglesPrevious.set(clent.angles);
-      if (clent.msg_origins[0].distanceTo(clent.origin) < 128) {
-        clent.lerpTime[0] = time;
-        clent.lerpTime[1] = time + 0.100; // TODO: needs to come from the server, based on nextthink time
-      } else {
-        clent.lerpTime[0] = time - 1;
-        clent.lerpTime[1] = time;
-      }
-    }
-
-    if (bits & (Protocol.u.origin1 | Protocol.u.origin2 | Protocol.u.origin3)) {
-      clent.msg_origins[1].set(clent.msg_origins[0]);
-    }
-
-    if (bits & (Protocol.u.angle1 | Protocol.u.angle2 | Protocol.u.angle3)) {
-      clent.msg_angles[1].set(clent.msg_angles[0]);
-      clent.msg_velocity[1].set(clent.msg_velocity[0]);
-    }
+    clent.msg_origins[1].set(clent.msg_origins[0]);
+    clent.msg_angles[1].set(clent.msg_angles[0]);
+    clent.msg_velocity[1].set(clent.msg_velocity[0]);
 
     if (clent.free) {
       // make sure that we clear this ClientEntity before we throw it back in

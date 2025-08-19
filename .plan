@@ -164,7 +164,7 @@ Grouped by sections and then sorted by priority (more or less).
 ### Rendering improvements
 
 * [_] improve lighting and materials https://chatgpt.com/share/677d90a2-f364-800d-b077-9a93c9343b54
-* [_] frame interpolation based on the PR state machine
+* [X] frame interpolation based on the PR state machine
 * [X] rewrite everything to use GL.Upload32 etc., index to RGBA is done on a pic/texture loading level now
 * [_] use precalculated mipmaps (e.g. from WAD3), when uploading textures
 
@@ -327,6 +327,12 @@ class MainMenu extends BaseMenu {
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 
 ## Log
+
+### 2025-08-19
+
+* added lerping of entity origins, angles and also between frames
+* found a looping state in all monster definitions causing bloating up the main loop
+* absurdly stupid: a missing if caused always to spam entity updates
 
 ### 2025-08-16
 

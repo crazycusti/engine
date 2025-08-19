@@ -91,22 +91,23 @@ export class ClientEdict {
     this.num = num;
     this.model = null;
     this.framePrevious = null;
+    this.frameTime = 0.0;
     this.frame = 0;
     this.skinnum = 0;
     this.colormap = 0;
     this.effects = 0;
     this.solid = 0;
-    /** @type {?Vector} used to keep track of origin changes, unset when no previous origin is known */
-    this.originPrevious = null;
+    this.originPrevious = new Vector(Infinity, Infinity, Infinity);
+    this.originTime = 0.0;
     this.origin = new Vector(Infinity, Infinity, Infinity);
-    /** @type {?Vector} used to keep track of angles changes, unset when no previous angles is known */
-    this.anglesPrevious = null;
+    this.anglesPrevious = new Vector(Infinity, Infinity, Infinity);
+    this.anglesTime = 0.0;
     this.angles = new Vector(Infinity, Infinity, Infinity);
+    this.velocityPrevious = new Vector(Infinity, Infinity, Infinity);;
+    this.velocityTime = 0.0;
     this.velocity = new Vector();
     this.dlightbits = 0;
     this.dlightframe = 0;
-    /** [update time, expected next update time] */
-    this.lerpTime = [0.0, 0.0];
     /** keeps track of origin changes */
     this.msg_origins = [new Vector(), new Vector()];
     /** keeps track of angle changes */
@@ -119,6 +120,8 @@ export class ClientEdict {
     /** whether is ClientEntity is ready to be recycled */
     this.free = false;
     this.syncbase = 0.0;
+    /** we are using this to lerp animations and positions as well as in future steering client entities */
+    this.nextthink = -1;
     this.maxs = new Vector();
     this.mins = new Vector();
     /** @type {Record<string, import('../../shared/GameInterfaces').SerializableType>} entity fields pushed by the server */
@@ -132,18 +135,18 @@ export class ClientEdict {
      */
     this.lerp = {
       get frame() {
-        if (that.framePrevious === null || CL.nolerp.value) {
-          return [that.frame, that.frame];
+        const time = CL.state.clientMessages.mtime[0];
+        if (that.nextthink <= time || that.framePrevious === null || CL.nolerp.value) {
+          return [that.frame, that.frame, 0];
         }
-
-        return [that.framePrevious, that.frame];
+        return [that.framePrevious, that.frame, (time - that.frameTime) / (that.nextthink - that.frameTime)];
       },
       get origin() {
-        if (that.originPrevious === null || CL.nolerp.value) {
+        const time = CL.state.clientMessages.mtime[0];
+        if (that.nextthink <= time || CL.nolerp.value) {
           return that.origin;
         }
-        const time = CL.state.clientMessages.mtime[0];
-        const f = Math.min(1, Math.max(0, (time - that.lerpTime[0]) / (that.lerpTime[1] - that.lerpTime[0])));
+        const f = Math.min(1, Math.max(0, (time - that.originTime) / (that.nextthink - that.originTime)));
         const o0 = that.origin;
         const o1 = that.originPrevious;
         const l = new Vector(
@@ -151,25 +154,30 @@ export class ClientEdict {
           o1[1] + (o0[1] - o1[1]) * f,
           o1[2] + (o0[2] - o1[2]) * f,
         );
-        if (that.num === 120) {
-          console.log('lerp origin', f, `${that.originPrevious} -> ${that.origin}, ${l}`);
-        }
+        // if (that.num === 120) {
+        //   console.log('lerp origin', f, `${that.originPrevious} -> ${that.origin}, ${l}`);
+        // }
         return l;
       },
       get angles() {
-        if (that.anglesPrevious === null || CL.nolerp.value) {
+        const time = CL.state.clientMessages.mtime[0];
+        if (that.nextthink <= time || CL.nolerp.value) {
           return that.angles;
         }
-        const time = CL.state.clientMessages.mtime[0];
-        const f = Math.min(1, Math.max(0, (time - that.lerpTime[0]) / (that.lerpTime[1] - that.lerpTime[0])));
-
+        const f = Math.min(1, Math.max(0, (time - that.anglesTime) / (that.nextthink - that.anglesTime)));
         const a0 = that.angles;
         const a1 = that.anglesPrevious;
-        return new Vector(
-          a1[0] + (a0[0] - a1[0]) * f,
-          a1[1] + (a0[1] - a1[1]) * f,
-          a1[2] + (a0[2] - a1[2]) * f,
+        const d = a0.copy().subtract(a1);
+        for (let i = 0; i < 3; i++) { // avoid snapping around
+          if (d[i] > 180)  { d[i] -= 360; };
+          if (d[i] < -180) { d[i] += 360; };
+        }
+        const v = new Vector(
+          a1[0] + d[0] * f,
+          a1[1] + d[1] * f,
+          a1[2] + d[2] * f,
         );
+        return v;
       },
     };
 
@@ -188,6 +196,8 @@ export class ClientEdict {
 
   freeEdict() {
     this.model = null;
+    this.framePrevious = null;
+    this.frameTime = 0.0;
     this.frame = 0;
     this.skinnum = 0;
     this.colormap = 0;
@@ -207,8 +217,13 @@ export class ClientEdict {
     this.free = false;
     this.maxs.clear();
     this.mins.clear();
-    this.originPrevious = null;
-    this.anglesPrevious = null;
+    this.originTime = 0.0;
+    this.originPrevious.setTo(Infinity, Infinity, Infinity);
+    this.anglesTime = 0.0;
+    this.anglesPrevious.setTo(Infinity, Infinity, Infinity);
+    this.velocityTime = 0.0;
+    this.velocityPrevious.setTo(Infinity, Infinity, Infinity);
+    this.nextthink = -1;
     // make sure we delete the field, not just replace the holding object
     for (const key of Object.keys(this.extended)) {
       delete this.extended[key];
@@ -266,6 +281,15 @@ export class ClientEdict {
    * @param {boolean} doLerp whether to do a point lerp
    */
   updatePosition(doLerp) {
+
+    const time = CL.state.clientMessages.mtime[0];
+
+    // not precisely a position, but it is part of the lerp too
+    if (time > this.nextthink || this.framePrevious === null) {
+      this.frameTime = time;
+      this.framePrevious = this.frame;
+    }
+
     if (!doLerp) {
       this.origin.set(this.msg_origins[0]);
       this.angles.set(this.msg_angles[0]);
@@ -273,16 +297,24 @@ export class ClientEdict {
       return;
     }
 
-    if (this.originPrevious === null) {
-      this.originPrevious = this.origin.copy();
-    } else if (CL.state.clientMessages.mtime[0] >= this.lerpTime[1]) {
+    // if (this.num === 120) {
+    //   console.log('updatePosition', this.num, this.classname, this.origin, this.angles, this.velocity);
+    // }
+
+    // reset previous values when nextthink is over
+    if (time > this.nextthink || this.originPrevious.isInfinite() || this.origin.distanceTo(this.originPrevious) > 150) {
+      this.originTime = time;
       this.originPrevious.set(this.origin);
     }
 
-    if (this.anglesPrevious === null) {
-      this.anglesPrevious = this.angles.copy();
-    } else if (CL.state.clientMessages.mtime[0] >= this.lerpTime[1]) {
+    if (time > this.nextthink || this.anglesPrevious.isInfinite()) {
+      this.anglesTime = time;
       this.anglesPrevious.set(this.angles);
+    }
+
+    if (time > this.nextthink || this.velocityPrevious.isInfinite() || this.velocity.distanceTo(this.velocityPrevious) > 150) {
+      this.velocityTime = time;
+      this.velocityPrevious.set(this.velocity);
     }
 
     this.angles.set(this.msg_angles[0]);
