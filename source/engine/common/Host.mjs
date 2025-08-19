@@ -1557,8 +1557,10 @@ Host.InitCommands = function() {
   Cmd.AddCommand('prespawn', Host.PreSpawn_f);
   Cmd.AddCommand('kick', Host.Kick_f);
   Cmd.AddCommand('ping', Host.Ping_f);
-  Cmd.AddCommand('load', Host.Loadgame_f);
-  Cmd.AddCommand('save', Host.Savegame_f);
+  if (!registry.isDedicatedServer) {
+    Cmd.AddCommand('load', Host.Loadgame_f);
+    Cmd.AddCommand('save', Host.Savegame_f);
+  }
   Cmd.AddCommand('give', Host.Give_f);
   Cmd.AddCommand('viewmodel', Host.Viewmodel_f);
   Cmd.AddCommand('viewframe', Host.Viewframe_f);

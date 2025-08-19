@@ -1792,6 +1792,7 @@ CL.ParsePacketEntities = function() { // private
     if (bits & Protocol.u.model) {
       const modelindex = MSG.ReadByte();
       clent.model = CL.state.model_precache[modelindex] || null;
+      clent.framePrevious = null;
 
       if (clent.model) {
         clent.syncbase = clent.model.random ? Math.random() : 0.0;
@@ -1799,6 +1800,7 @@ CL.ParsePacketEntities = function() { // private
     }
 
     if (bits & Protocol.u.frame) {
+      clent.framePrevious = clent.frame;
       clent.frame = MSG.ReadByte();
     }
 
@@ -1871,12 +1873,34 @@ CL.ParsePacketEntities = function() { // private
 
     clent.updatecount++;
 
-    clent.msg_time[1] = clent.msg_time[0];
-    clent.msg_time[0] = CL.state.mtime[0];
+    // in case the origin changed, let’s check if we want to lerp the position
+    if (!clent.msg_origins[0].equals(clent.origin) || !clent.msg_angles[0].equals(clent.angles) || !clent.msg_velocity[0].equals(clent.velocity)) {
+      const time = CL.state.clientMessages.mtime[0];
+      if (clent.originPrevious === null) {
+        clent.originPrevious = new Vector();
+      }
+      clent.originPrevious.set(clent.origin);
+      if (clent.anglesPrevious === null) {
+        clent.anglesPrevious = new Vector();
+      }
+      clent.anglesPrevious.set(clent.angles);
+      if (clent.msg_origins[0].distanceTo(clent.origin) < 128) {
+        clent.lerpTime[0] = time;
+        clent.lerpTime[1] = time + 0.100; // TODO: needs to come from the server, based on nextthink time
+      } else {
+        clent.lerpTime[0] = time - 1;
+        clent.lerpTime[1] = time;
+      }
+    }
 
-    clent.msg_origins[1].set(clent.msg_origins[0]);
-    clent.msg_angles[1].set(clent.msg_angles[0]);
-    clent.msg_velocity[1].set(clent.msg_velocity[0]);
+    if (bits & (Protocol.u.origin1 | Protocol.u.origin2 | Protocol.u.origin3)) {
+      clent.msg_origins[1].set(clent.msg_origins[0]);
+    }
+
+    if (bits & (Protocol.u.angle1 | Protocol.u.angle2 | Protocol.u.angle3)) {
+      clent.msg_angles[1].set(clent.msg_angles[0]);
+      clent.msg_velocity[1].set(clent.msg_velocity[0]);
+    }
 
     if (clent.free) {
       // make sure that we clear this ClientEntity before we throw it back in

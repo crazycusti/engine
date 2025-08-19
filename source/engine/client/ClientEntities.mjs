@@ -90,6 +90,7 @@ export class ClientEdict {
     this.classname = null;
     this.num = num;
     this.model = null;
+    this.framePrevious = null;
     this.frame = 0;
     this.skinnum = 0;
     this.colormap = 0;
@@ -104,8 +105,8 @@ export class ClientEdict {
     this.velocity = new Vector();
     this.dlightbits = 0;
     this.dlightframe = 0;
-    /** keeps track of last updates */
-    this.msg_time = [0.0, 0.0];
+    /** [update time, expected next update time] */
+    this.lerpTime = [0.0, 0.0];
     /** keeps track of origin changes */
     this.msg_origins = [new Vector(), new Vector()];
     /** keeps track of angle changes */
@@ -130,34 +131,45 @@ export class ClientEdict {
      * holds lerped origin and angles for rendering purposes
      */
     this.lerp = {
+      get frame() {
+        if (that.framePrevious === null || CL.nolerp.value) {
+          return [that.frame, that.frame];
+        }
+
+        return [that.framePrevious, that.frame];
+      },
       get origin() {
-        // if (that.originPrevious === null || CL.nolerp.value) {
+        if (that.originPrevious === null || CL.nolerp.value) {
           return that.origin;
-        // }
-        // const f = 1; // CL.LerpPoint();
-        // const o0 = that.origin;
-        // const o1 = that.originPrevious;
-        // if (o0.distanceTo(o1) > 100.0) {
-        //   return o0; // clamp sudden origin changes
-        // }
-        // return new Vector(
-        //   o1[0] + (o0[0] - o1[0]) * f,
-        //   o1[1] + (o0[1] - o1[1]) * f,
-        //   o1[2] + (o0[2] - o1[2]) * f,
-        // );
+        }
+        const time = CL.state.clientMessages.mtime[0];
+        const f = Math.min(1, Math.max(0, (time - that.lerpTime[0]) / (that.lerpTime[1] - that.lerpTime[0])));
+        const o0 = that.origin;
+        const o1 = that.originPrevious;
+        const l = new Vector(
+          o1[0] + (o0[0] - o1[0]) * f,
+          o1[1] + (o0[1] - o1[1]) * f,
+          o1[2] + (o0[2] - o1[2]) * f,
+        );
+        if (that.num === 120) {
+          console.log('lerp origin', f, `${that.originPrevious} -> ${that.origin}, ${l}`);
+        }
+        return l;
       },
       get angles() {
-        // if (that.anglesPrevious === null || CL.nolerp.value) {
+        if (that.anglesPrevious === null || CL.nolerp.value) {
           return that.angles;
-        // }
-        // const f = 1; // CL.LerpPoint();
-        // const a0 = that.angles;
-        // const a1 = that.anglesPrevious;
-        // return new Vector(
-        //   a1[0] + (a0[0] - a1[0]) * f,
-        //   a1[1] + (a0[1] - a1[1]) * f,
-        //   a1[2] + (a0[2] - a1[2]) * f,
-        // );
+        }
+        const time = CL.state.clientMessages.mtime[0];
+        const f = Math.min(1, Math.max(0, (time - that.lerpTime[0]) / (that.lerpTime[1] - that.lerpTime[0])));
+
+        const a0 = that.angles;
+        const a1 = that.anglesPrevious;
+        return new Vector(
+          a1[0] + (a0[0] - a1[0]) * f,
+          a1[1] + (a0[1] - a1[1]) * f,
+          a1[2] + (a0[2] - a1[2]) * f,
+        );
       },
     };
 
@@ -186,8 +198,6 @@ export class ClientEdict {
     this.velocity.clear();
     this.dlightbits = 0;
     this.dlightframe = 0;
-    this.msg_time[0] = 0.0;
-    this.msg_time[1] = 0.0;
     this.msg_origins[0].clear();
     this.msg_origins[1].clear();
     this.msg_angles[0].clear();
@@ -263,47 +273,21 @@ export class ClientEdict {
       return;
     }
 
-    // if (this.classname === 'player') {
-    //   console.log('updatePosition', this.num, this.classname, this.origin, this.angles);
-    // }
-
     if (this.originPrevious === null) {
       this.originPrevious = this.origin.copy();
-    } else {
+    } else if (CL.state.clientMessages.mtime[0] >= this.lerpTime[1]) {
       this.originPrevious.set(this.origin);
     }
 
     if (this.anglesPrevious === null) {
       this.anglesPrevious = this.angles.copy();
-    } else {
+    } else if (CL.state.clientMessages.mtime[0] >= this.lerpTime[1]) {
       this.anglesPrevious.set(this.angles);
     }
 
-    const origin_old = this.msg_origins[0].copy();
-    const angles_old = this.msg_angles[0].copy();
-
-    let f = 1; // CL.LerpPoint();
-
-    const delta = new Vector();
-
-    // clamp sudden origin changes and don’t lerp here
-    for (let j = 0; j < 3; j++) {
-      delta[j] = this.msg_origins[0][j] - origin_old[j];
-      if ((delta[j] > 100.0) || (delta[j] < -100.0)) {
-        f = 1.0;
-      }
-    }
-
-    for (let j = 0; j < 3; j++) {
-      this.origin[j] = origin_old[j] + f * delta[j];
-      let d = this.msg_angles[0][j] - angles_old[j];
-      if (d > 180.0) {
-        d -= 360.0;
-      } else if (d < -180.0) {
-        d += 360.0;
-      }
-      this.angles[j] = angles_old[j] + f * d;
-    }
+    this.angles.set(this.msg_angles[0]);
+    this.origin.set(this.msg_origins[0]);
+    this.velocity.set(this.msg_velocity[0]);
   }
 
   spawn() {
@@ -597,8 +581,6 @@ export default class ClientEntities {
       if (clent.free) {
         continue;
       }
-
-      // const oldorg = clent.originPrevious ? clent.originPrevious : clent.origin;
 
       // apply prediction for non-player entities
       // if (clent.classname !== 'player') {

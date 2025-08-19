@@ -693,14 +693,17 @@ R.DrawAliasModel = function(e) {
         break;
       }
     }
+  } else if (R.interpolation.value) {
+    const [previousFrame, nextFrame] = e.lerp.frame;
+    frameA = clmodel.frames[previousFrame];
+    frameB = clmodel.frames[nextFrame];
+    targettime = (CL.state.clientMessages.mtime[0] - e.lerpTime[0]) / (e.lerpTime[1] - e.lerpTime[0]);
   }
   gl.uniform1f(program.uAlpha, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
   gl.uniform1f(program.uTime, Host.realtime);
   gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
   gl.vertexAttribPointer(program.aPositionA.location, 3, gl.FLOAT, false, 24, frameA.cmdofs);
-  if (program.aPositionB) {
-    gl.vertexAttribPointer(program.aPositionB.location, 3, gl.FLOAT, false, 24, frameB.cmdofs);
-  }
+  gl.vertexAttribPointer(program.aPositionB.location, 3, gl.FLOAT, false, 24, frameB.cmdofs);
   gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 24, frameA.cmdofs + 12);
   gl.vertexAttribPointer(program.aTexCoord.location, 2, gl.FLOAT, false, 0, 0);
 
