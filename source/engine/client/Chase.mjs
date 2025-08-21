@@ -27,7 +27,7 @@ export default class Chase {
     Chase.active = new Cvar('chase_active', '0');
   }
 
-  static Update2() {
+  static Update2() { // side scroller style
     const { forward, right } = CL.state.viewangles.angleVectors();
     const back = forward.copy().subtract(new Vector(0.0, 128.0, 0.0));
     const trace = { plane: {} };
@@ -61,8 +61,16 @@ export default class Chase {
       dist = 1.0;
     }
     R.refdef.viewangles[0] = Math.atan(stop[2] / dist) / Math.PI * -180.0;
-    org[0] -= forward[0] * Chase.back.value + right[0] * Chase.right.value;
-    org[1] -= forward[1] * Chase.back.value + right[1] * Chase.right.value;
-    org[2] += Chase.up.value;
+    const org2 = R.refdef.vieworg.copy();
+    org2[0] -= forward[0] * Chase.back.value + right[0] * Chase.right.value;
+    org2[1] -= forward[1] * Chase.back.value + right[1] * Chase.right.value;
+    org2[2] += Chase.up.value;
+    const trace2 = { plane: {} };
+    SV.RecursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, org2, trace2);
+    if (trace2.endpos) {
+      org.set(trace2.endpos);
+    } else {
+      org.set(org2);
+    }
   }
 };

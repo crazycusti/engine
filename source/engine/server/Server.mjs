@@ -3147,8 +3147,6 @@ SV.TestEntityPosition = function(ent) {
 };
 
 /**
- * Iterative version of SV.RecursiveHullCheck.
- * It simulates the recursive process via an explicit stack.
  * @param {object} hull what hull to check against
  * @param {number} num starting clipnode number (typically hull.firstclipnode)
  * @param {number} p1f fraction at p1 (usually 0.0)
@@ -3158,7 +3156,7 @@ SV.TestEntityPosition = function(ent) {
  * @param {Trace} trace object to store trace results
  * @returns {boolean} true means going down, false means going up
  */
-SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: rewrite to iterative check
+SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: rewrite to iterative check, also move to client/server shared
   // check for empty
   if (num < 0) {
     if (num !== Mod.contents.solid) {

@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-21
+
+* fixed chase cam to not go into the void or behind walls
+
 ### 2025-08-19
 
 * added lerping of entity origins, angles and also between frames
