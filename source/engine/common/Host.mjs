@@ -366,9 +366,9 @@ Host._Frame = function() {
   }
 
   if (CL.cls.signon === 4) {
-    S.Update(R.refdef.vieworg, R.vpn, R.vright, R.vup);
+    S.Update(R.refdef.vieworg, R.vpn, R.vright, R.vup, R.viewleaf ? R.viewleaf.contents <= Mod.contents.water : false);
   } else {
-    S.Update(Vector.origin, Vector.origin, Vector.origin, Vector.origin);
+    S.Update(Vector.origin, Vector.origin, Vector.origin, Vector.origin, false);
   }
   CDAudio.Update();
 

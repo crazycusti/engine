@@ -223,6 +223,8 @@ class AudioContextChannel extends SoundBaseChannel {
       gain0: this._S._context.createGain(),
       gain1: this._S._context.createGain(),
       merger2: this._S._context.createChannelMerger(2),
+      effectWet: this._S._context.createGain(),
+      effectDry: this._S._context.createGain(),
     };
 
     nodes.source.buffer = sc.data;
@@ -246,7 +248,19 @@ class AudioContextChannel extends SoundBaseChannel {
     // Merge back to stereo
     nodes.gain0.connect(nodes.merger2, 0, 0);
     nodes.gain1.connect(nodes.merger2, 0, 1);
-    nodes.merger2.connect(this._S._context.destination);
+    nodes.merger2.connect(nodes.effectDry);
+    nodes.merger2.connect(nodes.effectWet);
+
+    // Connect to the context destination
+    nodes.effectDry.connect(this._S._context.destination);
+
+    // Connect underwater effect if available
+    if (this._S._underwaterFilter) {
+      nodes.effectWet.connect(this._S._underwaterFilter.input);
+      this._S._underwaterFilter.output.connect(this._S._context.destination);
+    } else {
+      nodes.effectWet.connect(this._S._context.destination);
+    }
 
     this._nodes = nodes;
 
@@ -267,6 +281,14 @@ class AudioContextChannel extends SoundBaseChannel {
     const rightVol = Math.min(this.right_vol, 1.0) * this._S.volume.value;
     this._nodes.gain0.gain.value = leftVol;
     this._nodes.gain1.gain.value = rightVol;
+
+    if (this._S._listenerUnderwater && this.entchannel >= 0) {
+      this._nodes.effectWet.gain.value = 1.0;
+      this._nodes.effectDry.gain.value = 0.0;
+    } else {
+      this._nodes.effectWet.gain.value = 0.0;
+      this._nodes.effectDry.gain.value = 1.0;
+    }
 
     return this;
   }
@@ -524,6 +546,8 @@ class AudioElementChannel extends SoundBaseChannel {
   }
 }
 
+/** @typedef {{input: GainNode, output: GainNode}} SpecialEffectFilter */
+
 const S = {
   /** @type {SoundBaseChannel[]} */
   _channels: [],
@@ -539,6 +563,7 @@ const S = {
   _listenerForward: new Vector(),
   _listenerRight: new Vector(),
   _listenerUp: new Vector(),
+  _listenerUnderwater: false,
 
   _started: false,
   /** @type {AudioContext|null} */
@@ -556,6 +581,10 @@ const S = {
 
   // Event listeners
   _eventListeners: [],
+
+  // Optional special effects
+  /** @type {SpecialEffectFilter?} */
+  _underwaterFilter: null,
 
   _NewChannel() {
     return new this._channelDriver(this);
@@ -628,6 +657,8 @@ const S = {
     try {
       this._context = new AudioContext({sampleRate: 22050});
       this._channelDriver = AudioContextChannel;
+
+      this._underwaterFilter = this._MakeUnderwaterChain();
     } catch (err) {
       Con.Print(`S.Init: failed to initialize AudioContextChannel (${err.message}), falling back to AudioElementChannel.\n`);
       this._context = null;
@@ -1285,8 +1316,9 @@ const S = {
    * @param {Vector} forward angle vector forward
    * @param {Vector} right angle vector right
    * @param {Vector} up angle vector up
+   * @param {boolean} underwater whether the listener is underwater (for special effects)
    */
-  Update(origin, forward, right, up) {
+  Update(origin, forward, right, up, underwater) {
     if (this._nosound.value !== 0) {
       return;
     }
@@ -1308,6 +1340,8 @@ const S = {
     this._listenerUp[1] = up[1];
     this._listenerUp[2] = up[2];
 
+    this._listenerUnderwater = underwater;
+
     // Bound volume [0..1]
     if (this.volume.value < 0.0) {
       Cvar.Set('volume', 0.0);
@@ -1327,6 +1361,78 @@ const S = {
   LocalSound(sfx) {
     // Plays a sound at the view entity, entchannel = -1
     this.StartSound(CL.state.viewentity, -1, sfx, Vector.origin, 1.0, 1.0);
+  },
+
+  _MakeUnderwaterChain({
+    cutoffHz = 900,       // main muffling cutoff
+    highShelfCut = -18,   // dB cut above ~1 kHz
+    lowShelfBoost = 3,    // gentle bass lift
+    wobbleHz = 0.25,      // LFO speed; set 0 to disable
+    wobbleDepth = 250,    // Hz of cutoff modulation
+  } = {}) {
+    const input = this._context.createGain();
+    const output = this._context.createGain();
+
+    // Tone-shaping
+    const lowShelf = this._context.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.value = 120;
+    lowShelf.gain.value = lowShelfBoost;
+
+    // Two cascaded lowpasses → steeper slope
+    const lp1 = this._context.createBiquadFilter();
+    lp1.type = 'lowpass';
+    lp1.frequency.value = cutoffHz;
+    lp1.Q.value = 0.6;
+
+    const lp2 = this._context.createBiquadFilter();
+    lp2.type = 'lowpass';
+    lp2.frequency.value = cutoffHz;
+    lp2.Q.value = 0.6;
+
+    const highShelf = this._context.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.value = 1000;
+    highShelf.gain.value = highShelfCut;
+
+    // (Optional) a couple of allpass filters to smear transients slightly
+    const ap1 = this._context.createBiquadFilter(); ap1.type = 'allpass'; ap1.frequency.value = 600;
+    const ap2 = this._context.createBiquadFilter(); ap2.type = 'allpass'; ap2.frequency.value = 1400;
+
+    // Dynamics to tame plosives/attacks (water is dense!)
+    const comp = this._context.createDynamicsCompressor();
+    comp.threshold.value = -26;
+    comp.knee.value = 20;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.25;
+
+    // Wire it up
+    input
+      .connect(lowShelf)
+      .connect(lp1)
+      .connect(lp2)
+      .connect(highShelf)
+      .connect(ap1)
+      .connect(ap2)
+      .connect(comp)
+      .connect(output);
+
+    // Optional slow wobble of the cutoff → “pressure” vibe
+    if (wobbleHz > 0 && wobbleDepth > 0) {
+      const lfo = this._context.createOscillator();
+      const lfoGain = this._context.createGain();
+      lfo.frequency.value = wobbleHz;
+      lfoGain.gain.value = wobbleDepth;       // Hz of modulation
+      lfo.connect(lfoGain);
+      // Modulate both lowpasses together
+      lfoGain.connect(lp1.frequency);
+      lfoGain.connect(lp2.frequency);
+      lfo.start();
+    }
+
+    // Expose I/O
+    return { input, output };
   },
 };
 
