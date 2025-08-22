@@ -335,6 +335,7 @@ class MainMenu extends BaseMenu {
 * spent too much time on adding pause/resume on sound channels
 * that sound cracking came from gainers not set to zero when the file is ready to be used
 * played around with AudioContext graphs: added underwater sound weffect
+* serialized types are now optimized for u8, i16 and i32 as well as float
 
 ### 2025-08-21
 
