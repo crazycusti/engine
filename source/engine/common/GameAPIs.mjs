@@ -286,9 +286,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * Finds all edicts around origin in given radius.
    * @param {Vector} origin
    * @param {number} radius
+   * @param {(ent: ServerEdict) => boolean} filterFn optional filter function, if provided, will be used to filter entities
    * @returns {ServerEdict[]} matching edict
    */
-  static FindInRadius(origin, radius) {
+  static FindInRadius(origin, radius, filterFn = null) {
     const vradius = new Vector(radius, radius, radius);
     const mins = origin.copy().subtract(vradius);
     const maxs = origin.copy().add(vradius);
@@ -306,7 +307,9 @@ export class ServerEngineAPI extends CommonEngineAPI {
         continue;
       }
 
-      edicts.push(ent);
+      if (!filterFn || filterFn(ent)) {
+        edicts.push(ent);
+      }
     }
 
     return edicts; // used to be a generator, but we need to return an array due to changing linked lists in between
@@ -339,6 +342,18 @@ export class ServerEngineAPI extends CommonEngineAPI {
       if (ent.entity[field] === value) {
         yield ent;
       }
+    }
+  }
+
+  static *GetClients() {
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      const client = SV.svs.clients[i];
+
+      if (!client.active || !client.spawned) {
+        continue;
+      }
+
+      yield client.edict;
     }
   }
 

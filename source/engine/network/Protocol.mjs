@@ -134,13 +134,16 @@ export const clc = Object.freeze({
 
 export const serializableTypes = Object.freeze({
   none: 0,
-  number: 1,
+  long: 1,
   vector: 2,
   string: 3,
   true: 4,
   false: 5,
   null: 6,
   array: 7,
+  float: 8,
+  short: 9,
+  byte: 10,
   // anything else is a custom type and must be registered with MSG.RegisterSerializableType for more magic
 });
 

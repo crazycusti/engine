@@ -221,8 +221,17 @@ export class ClientMessages {
       console.assert(clientdata[field] !== undefined, `Unknown clientdata field ${field} for data type ${dataType}`);
 
       switch (dataType) {
-        case Protocol.serializableTypes.number:
+        case Protocol.serializableTypes.long:
           clientdata[field] = MSG.ReadLong();
+          break;
+        case Protocol.serializableTypes.short:
+          clientdata[field] = MSG.ReadShort();
+          break;
+        case Protocol.serializableTypes.byte:
+          clientdata[field] = MSG.ReadByte();
+          break;
+        case Protocol.serializableTypes.float:
+          clientdata[field] = MSG.ReadFloat();
           break;
         case Protocol.serializableTypes.vector:
           clientdata[field] = MSG.ReadCoordVector();

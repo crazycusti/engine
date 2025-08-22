@@ -509,8 +509,21 @@ export default class MSG {
         MSG.WriteString(sb, serializable);
         continue;
       case typeof serializable === 'number':
-        MSG.WriteByte(sb, Protocol.serializableTypes.number);
-        MSG.WriteLong(sb, serializable);
+        if (Number.isInteger(serializable)) {
+          if (serializable >= 0 && serializable < 256) {
+            MSG.WriteByte(sb, Protocol.serializableTypes.byte);
+            MSG.WriteByte(sb, serializable);
+          } else if (serializable >= -32768 && serializable < 32768) {
+            MSG.WriteByte(sb, Protocol.serializableTypes.short);
+            MSG.WriteShort(sb, serializable);
+          } else {
+            MSG.WriteByte(sb, Protocol.serializableTypes.long);
+            MSG.WriteLong(sb, serializable);
+          }
+        } else {
+          MSG.WriteByte(sb, Protocol.serializableTypes.float);
+          MSG.WriteFloat(sb, serializable);
+        }
         continue;
       case typeof serializable === 'boolean':
         MSG.WriteByte(sb, serializable ? Protocol.serializableTypes.true : Protocol.serializableTypes.false);
@@ -717,8 +730,17 @@ export default class MSG {
       case Protocol.serializableTypes.string:
         serializables.push(MSG.ReadString());
         continue;
-      case Protocol.serializableTypes.number:
+      case Protocol.serializableTypes.long:
         serializables.push(MSG.ReadLong());
+        continue;
+      case Protocol.serializableTypes.short:
+        serializables.push(MSG.ReadShort());
+        continue;
+      case Protocol.serializableTypes.byte:
+        serializables.push(MSG.ReadByte());
+        continue;
+      case Protocol.serializableTypes.float:
+        serializables.push(MSG.ReadFloat());
         continue;
       case Protocol.serializableTypes.true:
         serializables.push(true);
