@@ -22,6 +22,7 @@ export class SFX {
     FAILED: 'failed',
   };
 
+  /** @param {string} name sfx filename */
   constructor(name) {
     this.name = name;
     this.cache = null;
@@ -68,6 +69,9 @@ class SoundBaseChannel {
     PLAYING: 'playing',
   };
 
+  /**
+   * @param {typeof S} S Sound system reference
+   */
   constructor(S) {
     this._S = S;
     this.reset();
@@ -96,13 +100,10 @@ class SoundBaseChannel {
     return this;
   }
 
-  withOrigin(origin) {
-    this.origin = origin.copy();
-    this.spatialize();
-
-    return this;
-  }
-
+  /**
+   * @param {SFX} sfx sfx to play
+   * @returns {this} this channel
+   */
   withSfx(sfx) {
     this.sfx = sfx;
 
@@ -130,6 +131,14 @@ class SoundBaseChannel {
     return this;
   }
 
+  pause() {
+    return this;
+  }
+
+  resume() {
+    return this;
+  }
+
   updateVol() {
     return this;
   }
@@ -140,10 +149,9 @@ class SoundBaseChannel {
 
   /**
    * (Re)computes left_vol and right_vol for a channel based on the listener position/orientation.
+   * @returns {this} the channel
    */
   spatialize() {
-    this._S = S;
-
     // If channel is from the player's own gun, full volume in both ears
     if (this.entnum === CL.state.viewentity) {
       this.left_vol = this.master_vol;
@@ -194,7 +202,8 @@ class AudioContextChannel extends SoundBaseChannel {
   reset() {
     super.reset();
 
-    this._nodes = null;
+  this._nodes = null;
+  this._startTime = null; // used for AudioContextChannel to track when playback started
 
     return this;
   }
@@ -234,15 +243,15 @@ class AudioContextChannel extends SoundBaseChannel {
     nodes.splitter.connect(nodes.gain0, 0);
     nodes.splitter.connect(nodes.gain1, 1);
 
-    // Set initial volume
-    this.updateVol();
-
     // Merge back to stereo
     nodes.gain0.connect(nodes.merger2, 0, 0);
     nodes.gain1.connect(nodes.merger2, 0, 1);
     nodes.merger2.connect(this._S._context.destination);
 
     this._nodes = nodes;
+
+    // Set initial volume
+    this.updateVol();
 
     this._state = SoundBaseChannel.STATE.STOPPED;
 
@@ -263,13 +272,18 @@ class AudioContextChannel extends SoundBaseChannel {
   }
 
   stop() {
-    if (this._state !== SoundBaseChannel.STATE.PLAYING) {
-      return this;
+    // Stop regardless of state if we have an active source
+    try {
+      if (this._nodes && this._nodes.source) {
+        this._nodes.source.stop(0);
+      }
+    } catch {
+      // ignore exceptions from stopping an already stopped source
     }
 
-    if (this._nodes.source) {
-      this._nodes.source.stop(0);
-    }
+    this._startTime = null;
+    // discard nodes so we recreate them on resume (AudioBufferSourceNodes are single-use)
+    this._nodes = null;
 
     this._state = SoundBaseChannel.STATE.STOPPED;
     return this;
@@ -280,11 +294,100 @@ class AudioContextChannel extends SoundBaseChannel {
       return this;
     }
 
-    if (this._nodes.source) {
-      this._nodes.source.start(0, this.pos);
+    if (this._nodes && this._nodes.source) {
+      // record start time so we can calculate pausing offset
+      try {
+        this._nodes.source.start(0, this.pos);
+      } catch {
+        // if starting fails, try to recreate nodes and start again
+        this.loadData();
+        if (this._nodes && this._nodes.source) {
+          this._nodes.source.start(0, this.pos);
+        }
+      }
+      this._startTime = this._S._context.currentTime;
     }
 
     this._state = SoundBaseChannel.STATE.PLAYING;
+    return this;
+  }
+
+  pause() {
+    // Pause must capture playback position and stop the source. On resume we'll recreate nodes.
+    if (this._state !== SoundBaseChannel.STATE.PLAYING) {
+      return this;
+    }
+
+    if (this._nodes && this._nodes.source && this._startTime !== null) {
+      const now = this._S._context.currentTime;
+      let elapsed = now - this._startTime;
+
+      // Advance position by elapsed
+      this.pos += elapsed;
+
+      // If looped, wrap into loop region
+      try {
+        const sc = this.sfx && this.sfx.cache;
+        if (sc && sc.data && sc.loopstart !== null) {
+          const duration = sc.data.duration;
+          const loopStart = sc.loopstart;
+          const loopLen = duration - loopStart;
+          if (loopLen > 0) {
+            if (this.pos >= duration) {
+              this.pos = loopStart + ((this.pos - loopStart) % loopLen);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Stop and drop nodes
+    try {
+      if (this._nodes && this._nodes.source) {
+        this._nodes.source.stop(0);
+      }
+    } catch {
+      // ignore
+    }
+    this._nodes = null;
+    this._startTime = null;
+    this._state = SoundBaseChannel.STATE.STOPPED;
+
+    return this;
+  }
+
+  resume() {
+    if (this._state === SoundBaseChannel.STATE.PLAYING) {
+      return this;
+    }
+
+    // Recreate nodes if needed and start from stored pos
+    if (!this._nodes) {
+      this.loadData();
+    }
+
+    // Ensure we have data and are allowed to start
+    if (!this._nodes || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
+      return this;
+    }
+
+    // Clip pos to duration for non-looped sounds
+    try {
+      const sc = this.sfx.cache;
+      if (sc && sc.data) {
+        const duration = sc.data.duration;
+        if (sc.loopstart === null && this.pos >= duration) {
+          // nothing to resume
+          return this;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    this.start();
     return this;
   }
 }
@@ -331,8 +434,8 @@ class AudioElementChannel extends SoundBaseChannel {
     try {
       this._audio.currentTime = this.sfx.cache.loopstart;
       this.end = Host.realtime + this.sfx.cache.length - (this.sfx.cache.loopstart || 0);
-    } catch (e) {
-      Con.DPrint(`AudioElementChannel.updateLoop: failed to set currentTime, ${e.message}`);
+    } catch (err) {
+      Con.DPrint(`AudioElementChannel.updateLoop: failed to set currentTime, ${err.message}`);
       this.end = Host.realtime;
     }
 
@@ -347,6 +450,54 @@ class AudioElementChannel extends SoundBaseChannel {
     this._audio.pause();
 
     this._state = SoundBaseChannel.STATE.STOPPED;
+    return this;
+  }
+
+  pause() {
+    if (this._state !== SoundBaseChannel.STATE.PLAYING) {
+      return this;
+    }
+
+    try {
+      this.pos = this._audio.currentTime;
+    } catch {
+      // ignore
+    }
+
+    this._audio.pause();
+    this._state = SoundBaseChannel.STATE.STOPPED;
+    return this;
+  }
+
+  resume() {
+    if (this._state === SoundBaseChannel.STATE.PLAYING) {
+      return this;
+    }
+
+    if (!this._audio) {
+      this.loadData();
+    }
+
+    if (!this._audio || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
+      return this;
+    }
+
+    // If not looped and position is past length, nothing to resume
+    try {
+      const sc = this.sfx.cache;
+      if (sc && sc.length && sc.loopstart === null && this.pos >= sc.length) {
+        return this;
+      }
+    } catch {
+      // ignore
+    }
+
+    this._audio.currentTime = this.pos;
+    this._audio.play().catch((err) => {
+      Con.Print(`AudioElementChannel.resume: failed to resume audio, ${err.message}\n`);
+    });
+
+    this._state = SoundBaseChannel.STATE.PLAYING;
     return this;
   }
 
@@ -374,9 +525,13 @@ class AudioElementChannel extends SoundBaseChannel {
 }
 
 const S = {
+  /** @type {SoundBaseChannel[]} */
   _channels: [],
+  /** @type {SoundBaseChannel[]} */
   _staticChannels: [],
+  /** @type {SoundBaseChannel[]} */
   _ambientChannels: [],
+  /** @type {SFX[]} */
   _knownSfx: [],
 
   // Listener state
@@ -386,6 +541,7 @@ const S = {
   _listenerUp: new Vector(),
 
   _started: false,
+  /** @type {AudioContext|null} */
   _context: null,
 
   // Cvars
@@ -398,6 +554,9 @@ const S = {
   volume: null,
   bgmvolume: null,
 
+  // Event listeners
+  _eventListeners: [],
+
   _NewChannel() {
     return new this._channelDriver(this);
   },
@@ -405,8 +564,9 @@ const S = {
   /**
    * Picks or finds an available channel for a new sound to Play on.
    * Possibly kills an older channel from same entnum/entchannel.
-   * @param entnum
-   * @param entchannel
+   * @param {number} entnum entity number that owns the sound
+   * @param {number} entchannel channel index for the entity (0 = any, -1 = local)
+   * @returns {SoundBaseChannel} allocated or reused channel
    */
   PickChannel(entnum, entchannel) {
     let i;
@@ -468,8 +628,8 @@ const S = {
     try {
       this._context = new AudioContext({sampleRate: 22050});
       this._channelDriver = AudioContextChannel;
-    } catch (e) {
-      Con.Print(`S.Init: failed to initialize AudioContextChannel (${e.message}), falling back to AudioElementChannel.\n`);
+    } catch (err) {
+      Con.Print(`S.Init: failed to initialize AudioContextChannel (${err.message}), falling back to AudioElementChannel.\n`);
       this._context = null;
       this._channelDriver = AudioElementChannel;
     }
@@ -505,10 +665,16 @@ const S = {
       }
     }
 
+    this._eventListeners.push(eventBus.subscribe('client.paused', () => this._PauseAllSounds()));
+    this._eventListeners.push(eventBus.subscribe('client.unpaused', () => this._ResumeAllSounds()));
+
     Con.Print('Sound subsystem initialized.\n');
   },
 
   Shutdown() {
+    for (const unsubscribe of this._eventListeners) {
+      unsubscribe();
+    }
     this.StopAllSounds();
     setTimeout(() => this.StopAllSounds(), 1000); // poor man’s version of fixing issues
     this._started = false;
@@ -547,7 +713,7 @@ const S = {
 
   /**
    * Precache a sound by name. Optionally load it if precache cvar is set.
-   * @param name
+   * @param {string} name sound filename
    * @returns {SFX|null} The SFX object or null if sound is disabled.
    */
   PrecacheSound(name) {
@@ -596,7 +762,8 @@ const S = {
 
   /**
    * Actually load sound data and decode it.
-   * @param sfx
+   * @param {SFX} sfx The SFX object to load
+   * @returns {Promise<boolean>} Resolves to true if loaded, false if failed or sound disabled.
    */
   async LoadSound(sfx) {
     if (!this._started || this._nosound.value !== 0) {
@@ -853,6 +1020,42 @@ const S = {
     }
   },
 
+  _PauseAllSounds() {
+    if (this._nosound.value !== 0) {
+      return;
+    }
+
+    for (const ch of this._channels) {
+      ch.pause();
+    }
+
+    for (const ch of this._ambientChannels) {
+      ch.pause();
+    }
+
+    for (const ch of this._staticChannels) {
+      ch.pause();
+    }
+  },
+
+  _ResumeAllSounds() {
+    if (this._nosound.value !== 0) {
+      return;
+    }
+
+    for (const ch of this._channels) {
+      ch.resume();
+    }
+
+    for (const ch of this._ambientChannels) {
+      ch.resume();
+    }
+
+    for (const ch of this._staticChannels) {
+      ch.resume();
+    }
+  },
+
   StaticSound(sfx, origin, vol, attenuation) {
     if (this._nosound.value !== 0 || !sfx) {
       return;
@@ -1076,6 +1279,13 @@ const S = {
     }
   },
 
+  /**
+   * Respatialize all sounds based on the current listener position/orientation.
+   * @param {Vector} origin origin
+   * @param {Vector} forward angle vector forward
+   * @param {Vector} right angle vector right
+   * @param {Vector} up angle vector up
+   */
   Update(origin, forward, right, up) {
     if (this._nosound.value !== 0) {
       return;
@@ -1100,9 +1310,9 @@ const S = {
 
     // Bound volume [0..1]
     if (this.volume.value < 0.0) {
-      Cvar.SetValue('volume', 0.0);
+      Cvar.Set('volume', 0.0);
     } else if (this.volume.value > 1.0) {
-      Cvar.SetValue('volume', 1.0);
+      Cvar.Set('volume', 1.0);
     }
 
     this.UpdateAmbientSounds();
@@ -1110,9 +1320,13 @@ const S = {
     this.UpdateStaticSounds();
   },
 
-  LocalSound(sound) {
+  /**
+   * Plays a local sound (non-spatialized)
+   * @param {SFX} sfx sound to play
+   */
+  LocalSound(sfx) {
     // Plays a sound at the view entity, entchannel = -1
-    this.StartSound(CL.state.viewentity, -1, sound, Vector.origin, 1.0, 1.0);
+    this.StartSound(CL.state.viewentity, -1, sfx, Vector.origin, 1.0, 1.0);
   },
 };
 

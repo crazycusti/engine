@@ -14,8 +14,6 @@ eventBus.subscribe('registry.frozen', () => {
 export default class CDAudio {
   /** @type {Function[]} */
   static #eventListeners = [];
-  /** @type {string[]} */
-  static known = [];
   static initialized = false;
   static enabled = false;
   static playTrack = null;
@@ -27,7 +25,6 @@ export default class CDAudio {
     if (CDAudio.initialized !== true || CDAudio.enabled !== true) {
       return;
     }
-    track -= 2;
     if (CDAudio.playTrack === track) {
       if (CDAudio.cd !== null) {
         CDAudio.cd.loop = looping;
@@ -37,16 +34,15 @@ export default class CDAudio {
       }
       return;
     }
-    if (track < 0 || track >= CDAudio.known.length) {
-      Con.DPrint('CDAudio.Play: Bad track number ' + (track + 2) + '.\n');
-      return;
-    }
     CDAudio.Stop();
     CDAudio.playTrack = track;
-    CDAudio.cd = new Audio(CDAudio.known[track]);
+    CDAudio.cd = new Audio(`quakefs/music/${track}.opus`);
     CDAudio.cd.loop = looping;
     CDAudio.cd.volume = CDAudio.cdvolume;
-    CDAudio.cd.play(); // FIXME: await
+    CDAudio.cd.play().catch((e) => {
+      Con.PrintWarning(`Could not play track ${track}: ${e}\n`);
+      CDAudio.Stop();
+    });
   }
 
   static Stop() {
@@ -79,10 +75,11 @@ export default class CDAudio {
   }
 
   static CD_f(command, track) {
-    if (!CDAudio.initialized || !command || !track) {
+    if (!CDAudio.initialized) {
+      Con.PrintWarning('CD Audio not initialized\n');
       return;
     }
-    switch (command.toLowerCase()) {
+    switch (new String(command).toLowerCase()) {
       case 'on':
         CDAudio.enabled = true;
         return;
@@ -106,13 +103,15 @@ export default class CDAudio {
         CDAudio.Resume();
         return;
       case 'info':
-        Con.Print(CDAudio.known.length + ' tracks\n');
         if (CDAudio.cd !== null) {
           if (CDAudio.cd.paused !== true) {
-            Con.Print('Currently ' + (CDAudio.cd.loop === true ? 'looping' : 'playing') + ' track ' + (CDAudio.playTrack + 2) + '\n');
+            Con.Print('Currently ' + (CDAudio.cd.loop === true ? 'looping' : 'playing') + ' ' + (new URL(CDAudio.cd.src).pathname) + '\n');
           }
         }
         Con.Print('Volume is ' + CDAudio.cdvolume + '\n');
+        return;
+      default:
+        Con.Print('Unknown command.  Commands are on, off, play, loop, stop, pause, resume, info\n');
         return;
     }
   }
@@ -125,9 +124,9 @@ export default class CDAudio {
       return;
     }
     if (S.bgmvolume.value < 0.0) {
-      Cvar.SetValue('bgmvolume', 0.0);
+      Cvar.Set('bgmvolume', 0.0);
     } else if (S.bgmvolume.value > 1.0) {
-      Cvar.SetValue('bgmvolume', 1.0);
+      Cvar.Set('bgmvolume', 1.0);
     }
     CDAudio.cdvolume = S.bgmvolume.value;
     if (CDAudio.cd !== null) {
@@ -138,31 +137,6 @@ export default class CDAudio {
   static async Init() {
     Cmd.AddCommand('cd', CDAudio.CD_f.bind(CDAudio));
     if (COM.CheckParm('-nocdaudio')) {
-      return;
-    }
-    for (let i = 1; i <= 99; i++) {
-      const track = '/media/quake' + (i <= 9 ? '0' : '') + i + '.ogg';
-      let found = false;
-      for (let j = COM.searchpaths.length - 1; j >= 0; j--) {
-        try {
-          const res = await fetch(COM.searchpaths[j].filename + track, { method: 'HEAD' });
-          if (res.ok) {
-            CDAudio.known[i - 1] = COM.searchpaths[j].filename + track;
-            found = true;
-            break;
-          }
-        // eslint-disable-next-line no-unused-vars
-        } catch (e) {
-          // ignore fetch errors
-        }
-      }
-      if (!found) {
-        break;
-      }
-    }
-    if (CDAudio.known.length === 0) {
-      Con.Print('No CD Audio tracks found.\n');
-      CDAudio.initialized = CDAudio.enabled = false;
       return;
     }
     CDAudio.initialized = CDAudio.enabled = true;
@@ -182,7 +156,6 @@ export default class CDAudio {
       CDAudio.cd = null;
     }
     CDAudio.playTrack = null;
-    CDAudio.known = [];
     CDAudio.initialized = false;
     CDAudio.enabled = false;
   }

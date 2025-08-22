@@ -328,9 +328,17 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-22
+
+* fixed CDAudio using `music/track-number.opus` matching the format found here: https://github.com/fzwoch/quake_map_source
+* fixed a couple of setting `Cvar.value` attempts
+* spent too much time on adding pause/resume on sound channels
+* that sound cracking came from gainers not set to zero when the file is ready to be used
+
 ### 2025-08-21
 
 * fixed chase cam to not go into the void or behind walls
+* since the lerping something is wrong with the sound spatialization, might be the Infinity values
 
 ### 2025-08-19
 

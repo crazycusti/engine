@@ -547,68 +547,78 @@ M.AdjustSliders = function(dir) {
   S.LocalSound(M.sfx_menu3);
 
   switch (M.options_cursor) {
-    case 3: // screen size
-      SCR.viewsize.value += dir * 10;
-      if (SCR.viewsize.value < 30) {
-        SCR.viewsize.value = 30;
-      } else if (SCR.viewsize.value > 120) {
-        SCR.viewsize.value = 120;
+    case 3: { // screen size
+      let viewsize = SCR.viewsize.value;
+      viewsize += dir * 10;
+      if (viewsize < 30) {
+        viewsize = 30;
+      } else if (viewsize > 120) {
+        viewsize = 120;
       }
-      Cvar.SetValue('viewsize', SCR.viewsize.value);
+      Cvar.Set('viewsize', viewsize);
       return;
-    case 4: // gamma
-      V.gamma.value -= dir * 0.05;
-      if (V.gamma.value < 0.5) {
-        V.gamma.value = 0.5;
-      } else if (V.gamma.value > 1.0) {
-        V.gamma.value = 1.0;
+    }
+    case 4: { // gamma
+      let gamma = V.gamma.value;
+      gamma -= dir * 0.05;
+      if (gamma < 0.5) {
+        gamma = 0.5;
+      } else if (gamma > 1.0) {
+        gamma = 1.0;
       }
-      Cvar.SetValue('gamma', V.gamma.value);
+      Cvar.Set('gamma', gamma);
       return;
-    case 5: // mouse speed
-      CL.sensitivity.value += dir * 0.5;
-      if (CL.sensitivity.value < 1.0) {
-        CL.sensitivity.value = 1.0;
-      } else if (CL.sensitivity.value > 11.0) {
-        CL.sensitivity.value = 11.0;
+    }
+    case 5: { // mouse speed
+      let sensitivity = CL.sensitivity.value;
+      sensitivity += dir * 0.5;
+      if (sensitivity < 1.0) {
+        sensitivity = 1.0;
+      } else if (sensitivity > 11.0) {
+        sensitivity = 11.0;
       }
-      Cvar.SetValue('sensitivity', CL.sensitivity.value);
+      Cvar.Set('sensitivity', sensitivity);
       return;
-    case 6: // music volume
-      S.bgmvolume.value += dir * 0.1;
-      if (S.bgmvolume.value < 0.0) {
-        S.bgmvolume.value = 0.0;
-      } else if (S.bgmvolume.value > 1.0) {
-        S.bgmvolume.value = 1.0;
+    }
+    case 6: { // music volume
+      let bgmvolume = S.bgmvolume.value;
+      bgmvolume += dir * 0.1;
+      if (bgmvolume < 0.0) {
+        bgmvolume = 0.0;
+      } else if (bgmvolume > 1.0) {
+        bgmvolume = 1.0;
       }
-      Cvar.SetValue('bgmvolume', S.bgmvolume.value);
+      Cvar.Set('bgmvolume', bgmvolume);
       return;
-    case 7: // sfx volume
-      S.volume.value += dir * 0.1;
-      if (S.volume.value < 0.0) {
-        S.volume.value = 0.0;
-      } else if (S.volume.value > 1.0) {
-        S.volume.value = 1.0;
+    }
+    case 7: { // sfx volume
+      let volume = S.volume.value;
+      volume += dir * 0.1;
+      if (volume < 0.0) {
+        volume = 0.0;
+      } else if (volume > 1.0) {
+        volume = 1.0;
       }
-      Cvar.SetValue('volume', S.volume.value);
+      Cvar.Set('volume', volume);
       return;
+    }
     case 8: // allways run
       if (CL.forwardspeed.value > 200.0) {
-        Cvar.SetValue('cl_forwardspeed', 200.0);
-        Cvar.SetValue('cl_backspeed', 200.0);
+        Cvar.Set('cl_forwardspeed', 200.0);
+        Cvar.Set('cl_backspeed', 200.0);
         return;
       }
-      Cvar.SetValue('cl_forwardspeed', 400.0);
-      Cvar.SetValue('cl_backspeed', 400.0);
+      Cvar.Set('cl_forwardspeed', 400.0);
+      Cvar.Set('cl_backspeed', 400.0);
       return;
     case 9: // invert mouse
-      Cvar.SetValue('m_pitch', -CL.m_pitch.value);
+      Cvar.Set('m_pitch', -CL.m_pitch.value);
       return;
     case 10: // lookspring
-      Cvar.SetValue('lookspring', (CL.lookspring.value !== 0) ? 0 : 1);
+      Cvar.Set('lookspring', (CL.lookspring.value !== 0) ? 0 : 1);
       return;
     case 11: // lookstrafe
-      Cvar.SetValue('lookstrafe', (CL.lookstrafe.value !== 0) ? 0 : 1);
+      Cvar.Set('lookstrafe', (CL.lookstrafe.value !== 0) ? 0 : 1);
   }
 };
 
