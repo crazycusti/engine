@@ -323,7 +323,7 @@ Host._Frame = function() {
   }
 
   if (CL.cls.state === CL.active.connecting) {
-    NET.CheckForResend();
+    CL.CheckConnectingState();
     SCR.UpdateScreen();
     return;
   }
@@ -388,7 +388,7 @@ Host._Frame = function() {
 			Math.floor(pass3) + ' snd\n');
   }
 
-  ++Host.framecount;
+  Host.framecount++;
 };
 
 let inHandleCrash = false;
@@ -752,7 +752,7 @@ Host.Map_f = function(mapname, ...spawnparms) {
     }
 
     if (!registry.isDedicatedServer) {
-      Cmd.ExecuteString('connect local');
+      CL.Connect('local');
     }
   });
 };
@@ -827,9 +827,9 @@ Host.Connect_f = function(address) {
 
   if (address === 'self') {
     const url = new URL(location.href);
-    CL.EstablishConnection(url.host + url.pathname + (!url.pathname.endsWith('/') ? '/' : '') + 'api/');
+    CL.Connect(url.host + url.pathname + (!url.pathname.endsWith('/') ? '/' : '') + 'api/');
   } else {
-    CL.EstablishConnection(address);
+    CL.Connect(address);
   }
 
   CL.cls.signon = 0;

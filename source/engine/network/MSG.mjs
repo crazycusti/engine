@@ -198,6 +198,7 @@ export class SzBuffer {
   readChar() {
     if (this.readcount >= this.cursize) {
       this.badread = true;
+      // debugger;
       return -1;
     }
     const c = new Int8Array(this.data, this.readcount, 1)[0];
@@ -208,6 +209,7 @@ export class SzBuffer {
   readByte() {
     if (this.readcount >= this.cursize) {
       this.badread = true;
+      // debugger;
       return -1;
     }
     const c = new Uint8Array(this.data, this.readcount, 1)[0];
@@ -218,6 +220,7 @@ export class SzBuffer {
   readShort() {
     if ((this.readcount + 2) > this.cursize) {
       this.badread = true;
+      // debugger;
       return -1;
     }
     const num = new DataView(this.data).getInt16(this.readcount, true);
@@ -228,6 +231,7 @@ export class SzBuffer {
   readLong() {
     if ((this.readcount + 4) > this.cursize) {
       this.badread = true;
+      // debugger;
       return -1;
     }
     const num = new DataView(this.data).getInt32(this.readcount, true);
@@ -238,6 +242,7 @@ export class SzBuffer {
   readFloat() {
     if ((this.readcount + 4) > this.cursize) {
       this.badread = true;
+      // debugger;
       return -1;
     }
     const num = new DataView(this.data).getFloat32(this.readcount, true);

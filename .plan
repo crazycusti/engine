@@ -328,9 +328,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
-### 2025-08-24
+### 2025-08-25
 
 * reducing loadtimes by parallelizing load models/sounds
+* keep new connections alive while loading assets when connection is slow
+* fined tuning lerp and delta encoding
+* need to kick out all this sync NET crap, the whole code is written for synchroneous IO and UDP in mind
 
 ### 2025-08-22
 

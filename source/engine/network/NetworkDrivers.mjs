@@ -165,6 +165,9 @@ export class LoopDriver extends BaseDriver {
     this._server.driverdata = this._client; // client is directly feeding into the server
     this._client.driverdata = this._server; // and vice-versa
 
+    this._client.state = QSocket.STATE_CONNECTED;
+    this._server.state = QSocket.STATE_CONNECTED;
+
     return this._server;
   }
 

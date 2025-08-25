@@ -750,7 +750,6 @@ R.DrawEntitiesOnList = function() {
     }
   }
   GL.StreamFlush();
-  gl.depthMask(false);
   gl.enable(gl.BLEND);
   for (const currententity of CL.state.clientEntities.getVisibleEntities()) {
     R.currententity = currententity;
@@ -763,7 +762,6 @@ R.DrawEntitiesOnList = function() {
   }
   GL.StreamFlush();
   gl.disable(gl.BLEND);
-  gl.depthMask(true);
 };
 
 R.DrawViewModel = function() {

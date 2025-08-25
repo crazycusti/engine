@@ -101,6 +101,7 @@ export default class CL {
     static serverInfo = {};
 
     static lastcmdsent = 0;
+    static isLocalGame = false;
 
     /** interval to simulate movement */
     static movearound = null;
@@ -682,35 +683,59 @@ CL.Disconnect = function() { // public, by Host.js
     }
   }
   CL.ClearState(); // clear all client state
-  // CL.cls.demoplayback = CL.cls.timedemo = false;
   CL.cls.signon = 0;
   CL.cls.changelevel = false;
   CL.ResetCheatCvars();
+  eventBus.publish('client.disconnected');
 };
 
-CL.Connect = function(sock) { // public, by NET.js, deprecated
-  CL.cls.netcon = sock;
-  Con.DPrint('CL.Connect: connected to ' + sock.address + '\n');
-  CL.cls.demonum = -1;
-  CL.cls.state = CL.active.connected;
-  CL.cls.signon = 0;
-  CL.SetConnectingStep(10, 'Connected to ' + sock.address);
+CL.CheckConnectingState = function() { // public, by Host.js
+  const sock = CL.cls.netcon;
+
+  switch (sock.state) {
+    case QSocket.STATE_CONNECTED:
+      CL.cls.lastcmdsent = Host.realtime;
+      Con.DPrint('CL.Connect: connected to ' + sock.address + '\n');
+      CL.cls.demonum = -1;
+      CL.cls.state = Def.clientConnectionState.connected;
+      CL.cls.signon = 0;
+      CL.SetConnectingStep(10, 'Connecting to ' + sock.address);
+      eventBus.publish('client.connected', sock.address);
+      break;
+
+    case QSocket.STATE_CONNECTING:
+      break;
+
+    case QSocket.STATE_DISCONNECTED:
+      throw new HostError('CL.CheckConnectingState: connection failed');
+  }
 };
 
-CL.EstablishConnection = function(host) { // public, by Host.js
+CL.Connect = function(host) { // public, by Host.js
   if (CL.cls.demoplayback === true) {
     return;
   }
   CL.Disconnect();
   CL.SetConnectingStep(5, 'Connecting to ' + host);
 
+  if (host === 'local') {
+    CL.cls.isLocalGame = true;
+  } else {
+    CL.cls.isLocalGame = false;
+  }
+
+  CL.cls.state = Def.clientConnectionState.connecting;
+  CL.cls.lastcmdsent = Host.realtime;
+
+  eventBus.publish('client.connecting', host);
+
   const sock = NET.Connect(host);
 
   if (sock === null) {
-    throw new HostError('CL.EstablishConnection: connect failed\n');
+    throw new HostError('CL.Connect: connect failed\n');
   }
 
-  CL.Connect(sock);
+  CL.cls.netcon = sock;
 };
 
 CL.SignonReply = function() { // private
@@ -795,7 +820,7 @@ CL.ReadFromServer = function() { // public, by Host.js
 };
 
 CL.SendCmd = function() { // public, by Host.js
-  if (CL.cls.state !== CL.active.connected) {
+  if (CL.cls.state === CL.active.disconnected) {
     return;
   }
 
@@ -807,6 +832,9 @@ CL.SendCmd = function() { // public, by Host.js
     // always include a read back of the time
     MSG.WriteByte(CL.cls.message, Protocol.clc.sync);
     MSG.WriteFloat(CL.cls.message, CL.state.clientMessages.mtime[0]);
+  } else if (!CL.cls.isLocalGame && Host.realtime - CL.cls.lastcmdsent > 10.0) {
+    Con.DPrint('<-- client to server keepalive\n');
+    // MSG.WriteByte(CL.cls.message, Protocol.clc.nop);
   }
 
   if (CL.cls.demoplayback) {
@@ -1165,15 +1193,19 @@ CL.ParseServerData = function() { // private
       const chunksize = Math.min(nummodels, 10);
       nummodels -= chunksize;
 
-      CL.SetConnectingStep(25 + (models.length / model_precache.length) * 40, 'Loading models');
+      CL.SetConnectingStep(25 + (models.length / model_precache.length) * 30, 'Loading models');
       models.push(...await Promise.all(model_precache.slice(models.length, models.length + chunksize).map((m) => Mod.ForNameAsync(m))));
+
+      CL.SendCmd();
     }
 
     while (numsounds > 0) {
       const chunksize = Math.min(numsounds, 10);
       numsounds -= chunksize;
-      CL.SetConnectingStep(65 + (sounds.length / sound_precache.length) * 20, 'Loading sounds');
+      CL.SetConnectingStep(55 + (sounds.length / sound_precache.length) * 30, 'Loading sounds');
       sounds.push(...await Promise.all(sound_precache.slice(sounds.length, sounds.length + chunksize).map((s) => S.PrecacheSoundAsync(s))));
+
+      CL.SendCmd();
     }
 
     return { models, sounds };
@@ -1193,8 +1225,10 @@ CL.ParseServerData = function() { // private
     ent.loadHandler();
     ent.model = CL.state.worldmodel;
     ent.spawn();
-    CL.SetConnectingStep(66, 'Preparing map');
+    CL.SetConnectingStep(85, 'Preparing map');
+    CL.SendCmd();
     R.NewMap();
+    CL.SendCmd();
     Host.noclip_anglehack = false;
     if (CL.state.gameAPI) {
       CL.state.gameAPI.init();
@@ -1336,7 +1370,7 @@ CL.ParseServerMessage = function() { // private
       CL._lastServerMessages.shift();
     }
 
-    Con.DPrint('CL.ParseServerMessage: parsing ' + CL.svc_strings[cmd] + ' ' + cmd + '\n');
+    // Con.DPrint('CL.ParseServerMessage: parsing ' + CL.svc_strings[cmd] + ' ' + cmd + '\n');
 
     const parser = CL.state.clientMessages;
 
@@ -1472,6 +1506,7 @@ CL.ParseServerMessage = function() { // private
         }
         console.assert(i >= 0 && i <= 4, 'signon must be in range 0-4');
         CL.cls.signon = /** @type {0|1|2|3|4} */(i);
+        Con.DPrint(`Received signon ${i}\n`);
         CL.SignonReply();
         continue;
       case Protocol.svc.killedmonster:
@@ -1861,7 +1896,7 @@ CL.ParsePacketEntities = function() { // private
     }
 
     if (bits & Protocol.u.nextthink) {
-      clent.nextthink = CL.state.clientMessages.mtime[0] + MSG.ReadFloat();
+      clent.nextthink = CL.state.clientMessages.mtime[0] + MSG.ReadByte() / 255.0;
     }
 
     if (CL.gameCapabilities.includes(gameCapabilities.CAP_ENTITY_EXTENDED)) {

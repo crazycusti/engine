@@ -372,7 +372,9 @@ Key.Init = function() {
 };
 
 Key.Event = function(key, down) {
-  if (CL.cls.state === CL.active.connecting) {
+  if (CL.cls.state === CL.active.connecting && key === Key.k.escape && down === true) {
+    CL.Disconnect();
+    M.ToggleMenu_f();
     return;
   }
   if (down === true) {

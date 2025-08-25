@@ -154,9 +154,6 @@ export class ClientEdict {
           o1[1] + (o0[1] - o1[1]) * f,
           o1[2] + (o0[2] - o1[2]) * f,
         );
-        // if (that.num === 120) {
-        //   console.log('lerp origin', f, `${that.originPrevious} -> ${that.origin}, ${l}`);
-        // }
         return l;
       },
       get angles() {
@@ -302,17 +299,17 @@ export class ClientEdict {
     // }
 
     // reset previous values when nextthink is over
-    if (time > this.nextthink || this.originPrevious.isInfinite() || this.origin.distanceTo(this.originPrevious) > 150) {
+    if (time >= this.nextthink || this.originPrevious.isInfinite() || this.origin.distanceTo(this.originPrevious) > 150) {
       this.originTime = time;
       this.originPrevious.set(this.origin);
     }
 
-    if (time > this.nextthink || this.anglesPrevious.isInfinite()) {
+    if (time >= this.nextthink || this.anglesPrevious.isInfinite()) {
       this.anglesTime = time;
       this.anglesPrevious.set(this.angles);
     }
 
-    if (time > this.nextthink || this.velocityPrevious.isInfinite() || this.velocity.distanceTo(this.velocityPrevious) > 150) {
+    if (time >= this.nextthink || this.velocityPrevious.isInfinite() || this.velocity.distanceTo(this.velocityPrevious) > 150) {
       this.velocityTime = time;
       this.velocityPrevious.set(this.velocity);
     }

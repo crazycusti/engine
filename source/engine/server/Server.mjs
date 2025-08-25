@@ -167,6 +167,22 @@ export class ServerEntityState {
       this.extended[key] = value;
     }
   }
+
+  freeEdict() {
+    this.free = true;
+    this.flags = 0;
+    this.angles.setTo(Infinity, Infinity, Infinity);
+    this.origin.setTo(Infinity, Infinity, Infinity);
+    this.velocity.setTo(0, 0, 0);
+    this.nextthink = 0;
+    this.modelindex = 0;
+    this.frame = 0;
+    this.colormap = 0;
+    this.skin = 0;
+    this.effects = 0;
+    this.solid = 0;
+    this.classname = null;
+  }
 };
 
 SV.EntityState = ServerEntityState;
@@ -487,9 +503,9 @@ SV.ConnectClient = function(client, netconnection) {
 SV.fatpvs = [];
 
 SV.CheckForNewClients = function() {
-  let ret; let i;
+  let i;
   for (;;) {
-    ret = NET.CheckNewConnections();
+    const ret = NET.CheckNewConnections();
     if (!ret) {
       return;
     }
@@ -697,7 +713,7 @@ SV.WritePlayersToClient = function(clent, pvs, msg) {
  * @returns {boolean} true, when to differs from from
  */
 SV.WriteDeltaEntity = function(msg, from, to) {
-  const EPSILON = 0.1;
+  const EPSILON = 0.01;
 
   let bits = 0;
 
@@ -736,7 +752,7 @@ SV.WriteDeltaEntity = function(msg, from, to) {
   }
 
   // transmit any valid nextthink
-  if (to.nextthink >= SV.server.time && Math.abs(from.nextthink - to.nextthink) > 0.001) {
+  if (to.nextthink >= SV.server.time && (to.nextthink - from.nextthink) > 0.001) {
     bits |= Protocol.u.nextthink;
   }
 
@@ -821,7 +837,11 @@ SV.WriteDeltaEntity = function(msg, from, to) {
   }
 
   if (bits & Protocol.u.nextthink) {
-    MSG.WriteFloat(msg, to.nextthink - from.nextthink); // always send difference, otherwise things get jittery
+    if (from.nextthink <= 0) {
+      from.nextthink = SV.server.time;
+    }
+    console.log('SV.WriteDeltaEntity: writing nextthink delta', to.nextthink - from.nextthink, 'for entity', to.num);
+    MSG.WriteByte(msg, to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0); // always send difference, otherwise things get jittery
   }
 
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
@@ -932,7 +952,7 @@ SV.WriteEntitiesToClient = function(clientEdict, msg) {
     /** @type {ServerEntityState} */
     const fromState = cl.getEntityState(ent.num);
     const toState = new SV.EntityState(ent.num);
-    toState.free = true;
+    toState.freeEdict();
 
     changes |= SV.WriteDeltaEntity(msg, fromState, toState) ? 1 : 0;
 
@@ -2823,9 +2843,10 @@ SV.ReadClientMessage = function(client) {
       }
 
       switch (cmd) {
-        case Protocol.clc.nop:
-          // No operation, continue reading
+        case Protocol.clc.nop: {
+          Con.DPrint(`${client.netconnection.address} sent a nop\n`);
           continue;
+        }
 
         case Protocol.clc.stringcmd: {
           const input = MSG.ReadString();

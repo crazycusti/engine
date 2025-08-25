@@ -354,7 +354,7 @@ SCR.UpdateScreen = function() {
     }
 
     if (CL.cls.state === CL.active.connecting) {
-      SCR.DrawConsole();
+      CL.Draw();
     } else if ((CL.state.intermission === 1) && (Key.dest.value === Key.dest.game)) {
       if (!CL.sbarDisabled) {
         Sbar.IntermissionOverlay();

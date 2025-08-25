@@ -29,6 +29,7 @@ NET.message = new SzBuffer(8192, 'NET.message');
 NET.activeconnections = 0;
 NET.listening = false;
 
+/** @returns {QSocket} new QSocket */
 NET.NewQSocket = function() {
   let i;
   for (i = 0; i < NET.activeSockets.length; i++) {
@@ -49,7 +50,7 @@ NET.Connect = function(host) {
   }
 
   let dfunc; let ret = null;
-  for (NET.driverlevel = 1; NET.driverlevel < NET.drivers.length; ++NET.driverlevel) {
+  for (NET.driverlevel = 1; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
     dfunc = /** @type {BaseDriver} */ (NET.drivers[NET.driverlevel]);
     if (dfunc.initialized !== true) {
       continue;
@@ -68,41 +69,10 @@ NET.Connect = function(host) {
   return null;
 };
 
-NET.CheckForResend = function() {
-  NET.time = Sys.FloatTime();
-  const dfunc = NET.drivers[NET.newsocket.driver];
-  if (NET.reps <= 2) {
-    if ((NET.time - NET.start_time) >= (2.5 * (NET.reps + 1))) {
-      Con.Print('still trying...\n');
-      ++NET.reps;
-    }
-  } else if (NET.reps === 3) {
-    if ((NET.time - NET.start_time) >= 10.0) {
-      NET.Close(NET.newsocket);
-      CL.cls.state = CL.active.disconnected;
-      Con.Print('No Response\n');
-      throw new HostError('NET.CheckForResend: connect failed\n');
-    }
-  }
-  const ret = dfunc.CheckForResend();
-  if (ret === 1) {
-    // NET.newsocket.disconnected = false;
-    CL.Connect(NET.newsocket);
-  } else if (ret === -1) {
-    // NET.newsocket.disconnected = false;
-    NET.Close(NET.newsocket);
-    CL.cls.state = CL.active.disconnected;
-    Con.Print('Network Error\n');
-    throw new HostError('NET.CheckForResend: connect failed\n');
-  }
-
-  Con.DPrint(`NET.CheckForResend: invalid CheckForResend response ${ret} by ${dfunc.constructor.name}`);
-};
-
 NET.CheckNewConnections = function() {
   NET.time = Sys.FloatTime();
   let dfunc; let ret;
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; ++NET.driverlevel) {
+  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
     dfunc = NET.drivers[NET.driverlevel];
     if (dfunc.initialized !== true) {
       continue;
@@ -158,8 +128,8 @@ NET.SendMessage = function(sock, data) {
     Con.DPrint('NET.SendMessage: disconnected socket\n');
     return -1;
   }
-  // console.debug(`NET.SendMessage: ${sock.address} ${data.cursize}`, data.toHexString());
   NET.time = Sys.FloatTime();
+  sock.lastMessageTime = NET.time;
   return sock.SendMessage(data);
 };
 
@@ -179,6 +149,7 @@ NET.SendUnreliableMessage = function(sock, data) {
   }
   // console.debug(`NET.SendUnreliableMessage: ${sock.address} ${data.cursize}`, data.toHexString());
   NET.time = Sys.FloatTime();
+  sock.lastMessageTime = NET.time;
   return sock.SendUnreliableMessage(data);
 };
 
@@ -260,7 +231,7 @@ NET.Init = function() {
   Cmd.AddCommand('net_drivers', NET.Drivers_f);
 
   NET.drivers = [new LoopDriver(), new WebSocketDriver()];
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; ++NET.driverlevel) {
+  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
     NET.drivers[NET.driverlevel].Init(NET.driverlevel);
   }
 };
@@ -288,7 +259,7 @@ NET.Listen_f = function(isListening) {
 
   NET.listening = isListening ? true : false;
 
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; ++NET.driverlevel) {
+  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
     if (!NET.drivers[NET.driverlevel].initialized) {
       continue;
     }
