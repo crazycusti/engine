@@ -37,7 +37,7 @@ const notexture_mip = {name: 'notexture', width: 16, height: 16, texturenum: nul
  * Mod.AliasModel
  */
 
-class BaseModel {
+export class BaseModel {
   static STATE = {
     NOT_READY: 'not-ready',
     LOADING: 'loading',
@@ -47,6 +47,7 @@ class BaseModel {
 
   constructor(name) {
     this.name = name;
+    this.type = null;
     this.reset();
   }
 
@@ -228,17 +229,17 @@ Mod.LoadModel = function(mod, crash) { // private method
     }
     return null;
   }
-  Mod.loadmodel = mod; // TODO: refactor into this
+  const loadmodel = mod; // TODO: refactor into this
   mod.needload = false;
   switch ((new DataView(buf)).getUint32(0, true)) {
     case 0x4f504449:
-      Mod.LoadAliasModel(buf);
+      Mod.LoadAliasModel(loadmodel, buf);
       break;
     case 0x50534449:
-      Mod.LoadSpriteModel(buf);
+      Mod.LoadSpriteModel(loadmodel, buf);
       break;
     default:
-      Mod.LoadBrushModel(buf);
+      Mod.LoadBrushModel(loadmodel, buf);
   }
   return mod;
 };
@@ -254,17 +255,17 @@ Mod.LoadModelAsync = async function(mod, crash) { // private method
     }
     return null;
   }
-  Mod.loadmodel = mod; // TODO: refactor into this
+  const loadmodel = mod; // TODO: refactor into this
   mod.needload = false;
   switch ((new DataView(buf)).getUint32(0, true)) {
     case 0x4f504449:
-      Mod.LoadAliasModel(buf);
+      Mod.LoadAliasModel(loadmodel, buf);
       break;
     case 0x50534449:
-      Mod.LoadSpriteModel(buf);
+      Mod.LoadSpriteModel(loadmodel, buf);
       break;
     default:
-      Mod.LoadBrushModel(buf);
+      Mod.LoadBrushModel(loadmodel, buf);
   }
   return mod;
 };
@@ -281,7 +282,7 @@ Mod.ForName = function(name, crash = false) { // public method
 /**
  * @param {string} name filename
  * @param {boolean} crash whether to throw an error if the model is not found
- * @returns {BaseModel|null} the loaded model or null if not found
+ * @returns {Promise<BaseModel|null>} the loaded model or null if not found
  */
 Mod.ForNameAsync = async function(name, crash = false) { // public method
   return await Mod.LoadModelAsync(Mod.FindName(name), crash);
@@ -331,11 +332,11 @@ Mod.contents = {
   current_down: -14,
 };
 
-Mod.LoadTextures = function(buf) {
+Mod.LoadTextures = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.textures << 3) + 4, true);
   // const filelen = view.getUint32((Mod.lump.textures << 3) + 8, true);
-  Mod.loadmodel.textures = [];
+  loadmodel.textures = [];
   const nummiptex = view.getUint32(fileofs, true);
   let dataofs = fileofs + 4;
   let i; let miptexofs;
@@ -343,7 +344,7 @@ Mod.LoadTextures = function(buf) {
     miptexofs = view.getInt32(dataofs, true);
     dataofs += 4;
     if (miptexofs === -1) {
-      Mod.loadmodel.textures[i] = notexture_mip;
+      loadmodel.textures[i] = notexture_mip;
       continue;
     }
     miptexofs += fileofs;
@@ -362,7 +363,7 @@ Mod.LoadTextures = function(buf) {
     //     tx.width = tex.width;
     //     tx.height = tex.height;
     //     tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, tex.data);
-    //     Mod.loadmodel.textures[i] = tx;
+    //     loadmodel.textures[i] = tx;
     //     continue;
     //   }
     // } catch(e) {
@@ -381,12 +382,12 @@ Mod.LoadTextures = function(buf) {
         }
       }
     }
-    Mod.loadmodel.textures[i] = tx;
+    loadmodel.textures[i] = tx;
   }
 
   let j; let tx2; let num; let name;
   for (i = 0; i < nummiptex; i++) {
-    const tx = Mod.loadmodel.textures[i];
+    const tx = loadmodel.textures[i];
     if (tx.name[0] !== '+') {
       continue;
     }
@@ -397,7 +398,7 @@ Mod.LoadTextures = function(buf) {
     tx.anims = [i];
     tx.alternate_anims = [];
     for (j = 0; j < nummiptex; j++) {
-      tx2 = Mod.loadmodel.textures[j];
+      tx2 = loadmodel.textures[j];
       if (tx2.name[0] !== '+') {
         continue;
       }
@@ -435,75 +436,75 @@ Mod.LoadTextures = function(buf) {
         throw new Error('Missing frame ' + j + ' of ' + tx.name);
       }
     }
-    Mod.loadmodel.textures[i] = tx;
+    loadmodel.textures[i] = tx;
   }
 
-  Mod.loadmodel.textures[Mod.loadmodel.textures.length] = notexture_mip;
+  loadmodel.textures[loadmodel.textures.length] = notexture_mip;
 };
 
-Mod.LoadLighting = function(buf) {
+Mod.LoadLighting = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.lighting << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.lighting << 3) + 8, true);
   if (filelen === 0) {
     return;
   }
-  Mod.loadmodel.lightdata = new Uint8Array(new ArrayBuffer(filelen));
-  Mod.loadmodel.lightdata.set(new Uint8Array(buf, fileofs, filelen));
+  loadmodel.lightdata = new Uint8Array(new ArrayBuffer(filelen));
+  loadmodel.lightdata.set(new Uint8Array(buf, fileofs, filelen));
 };
 
-Mod.LoadVisibility = function(buf) {
+Mod.LoadVisibility = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.visibility << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.visibility << 3) + 8, true);
   if (filelen === 0) {
     return;
   }
-  Mod.loadmodel.visdata = new Uint8Array(new ArrayBuffer(filelen));
-  Mod.loadmodel.visdata.set(new Uint8Array(buf, fileofs, filelen));
+  loadmodel.visdata = new Uint8Array(new ArrayBuffer(filelen));
+  loadmodel.visdata.set(new Uint8Array(buf, fileofs, filelen));
 };
 
-Mod.LoadEntities = function(buf) {
+Mod.LoadEntities = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.entities << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.entities << 3) + 8, true);
-  Mod.loadmodel.entities = Q.memstr(new Uint8Array(buf, fileofs, filelen));
+  loadmodel.entities = Q.memstr(new Uint8Array(buf, fileofs, filelen));
 };
 
-Mod.LoadVertexes = function(buf) {
+Mod.LoadVertexes = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.vertexes << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.vertexes << 3) + 8, true);
   if ((filelen % 12) !== 0) {
-    throw new Error('Mod.LoadVisibility: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadVisibility: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 12;
-  Mod.loadmodel.vertexes = [];
+  loadmodel.vertexes = [];
   let i;
   for (i = 0; i < count; i++) {
-    Mod.loadmodel.vertexes[i] = new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true));
+    loadmodel.vertexes[i] = new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true));
     fileofs += 12;
   }
 };
 
-Mod.LoadSubmodels = function(buf) {
+Mod.LoadSubmodels = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.models << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.models << 3) + 8, true);
   const count = filelen >> 6;
   if (count === 0) {
-    throw new Error('Mod.LoadSubmodels: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadSubmodels: funny lump size in ' + loadmodel.name);
   }
-  Mod.loadmodel.submodels = [];
+  loadmodel.submodels = [];
 
-  Mod.loadmodel.mins = new Vector(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
-  Mod.loadmodel.maxs = new Vector(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
-  Mod.loadmodel.hulls[0].firstclipnode = view.getUint32(fileofs + 36, true);
-  Mod.loadmodel.hulls[1].firstclipnode = view.getUint32(fileofs + 40, true);
-  Mod.loadmodel.hulls[2].firstclipnode = view.getUint32(fileofs + 44, true);
+  loadmodel.mins = new Vector(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
+  loadmodel.maxs = new Vector(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
+  loadmodel.hulls[0].firstclipnode = view.getUint32(fileofs + 36, true);
+  loadmodel.hulls[1].firstclipnode = view.getUint32(fileofs + 40, true);
+  loadmodel.hulls[2].firstclipnode = view.getUint32(fileofs + 44, true);
   fileofs += 64;
 
-  let i; const clipnodes = Mod.loadmodel.hulls[0].clipnodes; let out;
+  let i; const clipnodes = loadmodel.hulls[0].clipnodes; let out;
   for (i = 1; i < count; i++) {
     out = Mod.FindName('*' + i); // TODO: out = new BrushModel('*' + 1), Mod._RegisterModel(out)
     out.needload = false;
@@ -516,63 +517,63 @@ Mod.LoadSubmodels = function(buf) {
       {
         clipnodes: clipnodes,
         firstclipnode: view.getUint32(fileofs + 36, true),
-        lastclipnode: Mod.loadmodel.nodes.length - 1,
-        planes: Mod.loadmodel.planes,
+        lastclipnode: loadmodel.nodes.length - 1,
+        planes: loadmodel.planes,
         clip_mins: new Vector(),
         clip_maxs: new Vector(),
       },
       {
-        clipnodes: Mod.loadmodel.clipnodes,
+        clipnodes: loadmodel.clipnodes,
         firstclipnode: view.getUint32(fileofs + 40, true),
-        lastclipnode: Mod.loadmodel.clipnodes.length - 1,
-        planes: Mod.loadmodel.planes,
+        lastclipnode: loadmodel.clipnodes.length - 1,
+        planes: loadmodel.planes,
         clip_mins: new Vector(-16.0, -16.0, -24.0),
         clip_maxs: new Vector(16.0, 16.0, 32.0),
       },
       {
-        clipnodes: Mod.loadmodel.clipnodes,
+        clipnodes: loadmodel.clipnodes,
         firstclipnode: view.getUint32(fileofs + 44, true),
-        lastclipnode: Mod.loadmodel.clipnodes.length - 1,
-        planes: Mod.loadmodel.planes,
+        lastclipnode: loadmodel.clipnodes.length - 1,
+        planes: loadmodel.planes,
         clip_mins: new Vector(-32.0, -32.0, -24.0),
         clip_maxs: new Vector(32.0, 32.0, 64.0),
       },
     ];
-    out.textures = Mod.loadmodel.textures;
-    out.lightdata = Mod.loadmodel.lightdata;
-    out.faces = Mod.loadmodel.faces;
+    out.textures = loadmodel.textures;
+    out.lightdata = loadmodel.lightdata;
+    out.faces = loadmodel.faces;
     out.firstface = view.getUint32(fileofs + 56, true);
     out.numfaces = view.getUint32(fileofs + 60, true);
-    Mod.loadmodel.submodels[i - 1] = out;
+    loadmodel.submodels[i - 1] = out;
     fileofs += 64;
   }
 };
 
-Mod.LoadEdges = function(buf) {
+Mod.LoadEdges = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.edges << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.edges << 3) + 8, true);
   if ((filelen & 3) !== 0) {
-    throw new Error('Mod.LoadEdges: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadEdges: funny lump size in ' + loadmodel.name);
   }
   const count = filelen >> 2;
-  Mod.loadmodel.edges = [];
+  loadmodel.edges = [];
   let i;
   for (i = 0; i < count; i++) {
-    Mod.loadmodel.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
+    loadmodel.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
     fileofs += 4;
   }
 };
 
-Mod.LoadTexinfo = function(buf) {
+Mod.LoadTexinfo = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.texinfo << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.texinfo << 3) + 8, true);
   if ((filelen % 40) !== 0) {
-    throw new Error('Mod.LoadTexinfo: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadTexinfo: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 40;
-  Mod.loadmodel.texinfo = [];
+  loadmodel.texinfo = [];
   let i; let out;
   for (i = 0; i < count; i++) {
     out = {
@@ -583,33 +584,33 @@ Mod.LoadTexinfo = function(buf) {
       texture: view.getUint32(fileofs + 32, true),
       flags: view.getUint32(fileofs + 36, true),
     };
-    if (out.texture >= Mod.loadmodel.textures.length) {
-      out.texture = Mod.loadmodel.textures.length - 1;
+    if (out.texture >= loadmodel.textures.length) {
+      out.texture = loadmodel.textures.length - 1;
       out.flags = 0;
     }
-    Mod.loadmodel.texinfo[i] = out;
+    loadmodel.texinfo[i] = out;
     fileofs += 40;
   }
 };
 
-Mod.LoadFaces = function(buf) {
+Mod.LoadFaces = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.faces << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.faces << 3) + 8, true);
   if ((filelen % 20) !== 0) {
-    throw new Error('Mod.LoadFaces: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadFaces: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 20;
-  Mod.loadmodel.firstface = 0;
-  Mod.loadmodel.numfaces = count;
-  Mod.loadmodel.faces = [];
+  loadmodel.firstface = 0;
+  loadmodel.numfaces = count;
+  loadmodel.faces = [];
   let i; let styles; let out;
   let mins; let maxs; let j; let e; let tex; let v; let val;
   for (i = 0; i < count; i++) {
     styles = new Uint8Array(buf, fileofs + 12, 4);
     out =
     {
-      plane: Mod.loadmodel.planes[view.getUint16(fileofs, true)],
+      plane: loadmodel.planes[view.getUint16(fileofs, true)],
       firstedge: view.getUint16(fileofs + 4, true),
       numedges: view.getUint16(fileofs + 8, true),
       texinfo: view.getUint16(fileofs + 10, true),
@@ -631,14 +632,14 @@ Mod.LoadFaces = function(buf) {
 
     mins = [999999, 999999];
     maxs = [-99999, -99999];
-    tex = Mod.loadmodel.texinfo[out.texinfo];
+    tex = loadmodel.texinfo[out.texinfo];
     out.texture = tex.texture;
     for (j = 0; j < out.numedges; j++) {
-      e = Mod.loadmodel.surfedges[out.firstedge + j];
+      e = loadmodel.surfedges[out.firstedge + j];
       if (e >= 0) {
-        v = Mod.loadmodel.vertexes[Mod.loadmodel.edges[e][0]];
+        v = loadmodel.vertexes[loadmodel.edges[e][0]];
       } else {
-        v = Mod.loadmodel.vertexes[Mod.loadmodel.edges[-e][1]];
+        v = loadmodel.vertexes[loadmodel.edges[-e][1]];
       }
       val = v.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3];
       if (val < mins[0]) {
@@ -658,13 +659,13 @@ Mod.LoadFaces = function(buf) {
     out.texturemins = [Math.floor(mins[0] / 16) * 16, Math.floor(mins[1] / 16) * 16];
     out.extents = [Math.ceil(maxs[0] / 16) * 16 - out.texturemins[0], Math.ceil(maxs[1] / 16) * 16 - out.texturemins[1]];
 
-    if (Mod.loadmodel.textures[tex.texture].turbulent === true) {
+    if (loadmodel.textures[tex.texture].turbulent === true) {
       out.turbulent = true;
-    } else if (Mod.loadmodel.textures[tex.texture].sky === true) {
+    } else if (loadmodel.textures[tex.texture].sky === true) {
       out.sky = true;
     }
 
-    Mod.loadmodel.faces[i] = out;
+    loadmodel.faces[i] = out;
     fileofs += 20;
   }
 };
@@ -678,18 +679,18 @@ Mod.SetParent = function(node, parent) {
   Mod.SetParent(node.children[1], node);
 };
 
-Mod.LoadNodes = function(buf) {
+Mod.LoadNodes = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.nodes << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.nodes << 3) + 8, true);
   if ((filelen === 0) || ((filelen % 24) !== 0)) {
-    throw new Error('Mod.LoadNodes: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadNodes: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 24;
-  Mod.loadmodel.nodes = [];
+  loadmodel.nodes = [];
   let i; let out;
   for (i = 0; i < count; i++) {
-    Mod.loadmodel.nodes[i] = {
+    loadmodel.nodes[i] = {
       num: i,
       contents: 0,
       planenum: view.getUint32(fileofs, true),
@@ -703,31 +704,31 @@ Mod.LoadNodes = function(buf) {
     fileofs += 24;
   }
   for (i = 0; i < count; i++) {
-    out = Mod.loadmodel.nodes[i];
-    out.plane = Mod.loadmodel.planes[out.planenum];
+    out = loadmodel.nodes[i];
+    out.plane = loadmodel.planes[out.planenum];
     if (out.children[0] >= 0) {
-      out.children[0] = Mod.loadmodel.nodes[out.children[0]];
+      out.children[0] = loadmodel.nodes[out.children[0]];
     } else {
-      out.children[0] = Mod.loadmodel.leafs[-1 - out.children[0]];
+      out.children[0] = loadmodel.leafs[-1 - out.children[0]];
     }
     if (out.children[1] >= 0) {
-      out.children[1] = Mod.loadmodel.nodes[out.children[1]];
+      out.children[1] = loadmodel.nodes[out.children[1]];
     } else {
-      out.children[1] = Mod.loadmodel.leafs[-1 - out.children[1]];
+      out.children[1] = loadmodel.leafs[-1 - out.children[1]];
     }
   }
-  Mod.SetParent(Mod.loadmodel.nodes[0]);
+  Mod.SetParent(loadmodel.nodes[0]);
 };
 
-Mod.LoadLeafs = function(buf) {
+Mod.LoadLeafs = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.leafs << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.leafs << 3) + 8, true);
   if ((filelen % 28) !== 0) {
-    throw new Error('Mod.LoadLeafs: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadLeafs: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 28;
-  Mod.loadmodel.leafs = [];
+  loadmodel.leafs = [];
   let i; let out;
   for (i = 0; i < count; i++) {
     out = {
@@ -743,38 +744,38 @@ Mod.LoadLeafs = function(buf) {
       skychain: 0,
       waterchain: 0,
     };
-    Mod.loadmodel.leafs[i] = out;
+    loadmodel.leafs[i] = out;
     fileofs += 28;
   };
 };
 
-Mod.LoadClipnodes = function(buf) {
+Mod.LoadClipnodes = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.clipnodes << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.clipnodes << 3) + 8, true);
   const count = filelen >> 3;
-  Mod.loadmodel.clipnodes = [];
+  loadmodel.clipnodes = [];
 
-  Mod.loadmodel.hulls = [];
-  Mod.loadmodel.hulls[1] = {
-    clipnodes: Mod.loadmodel.clipnodes,
+  loadmodel.hulls = [];
+  loadmodel.hulls[1] = {
+    clipnodes: loadmodel.clipnodes,
     firstclipnode: 0,
     lastclipnode: count - 1,
-    planes: Mod.loadmodel.planes,
+    planes: loadmodel.planes,
     clip_mins: new Vector(-16.0, -16.0, -24.0),
     clip_maxs: new Vector(16.0, 16.0, 32.0),
   };
-  Mod.loadmodel.hulls[2] = {
-    clipnodes: Mod.loadmodel.clipnodes,
+  loadmodel.hulls[2] = {
+    clipnodes: loadmodel.clipnodes,
     firstclipnode: 0,
     lastclipnode: count - 1,
-    planes: Mod.loadmodel.planes,
+    planes: loadmodel.planes,
     clip_mins: new Vector(-32.0, -32.0, -24.0),
     clip_maxs: new Vector(32.0, 32.0, 64.0),
   };
   let i;
   for (i = 0; i < count; i++) {
-    Mod.loadmodel.clipnodes[i] = {
+    loadmodel.clipnodes[i] = {
       planenum: view.getUint32(fileofs, true),
       children: [view.getInt16(fileofs + 4, true), view.getInt16(fileofs + 6, true)],
     };
@@ -782,17 +783,17 @@ Mod.LoadClipnodes = function(buf) {
   }
 };
 
-Mod.MakeHull0 = function() {
+Mod.MakeHull0 = function(loadmodel) {
   let node; let child; const clipnodes = []; let i; let out;
   const hull = {
     clipnodes: clipnodes,
-    lastclipnode: Mod.loadmodel.nodes.length - 1,
-    planes: Mod.loadmodel.planes,
+    lastclipnode: loadmodel.nodes.length - 1,
+    planes: loadmodel.planes,
     clip_mins: new Vector(),
     clip_maxs: new Vector(),
   };
-  for (i = 0; i < Mod.loadmodel.nodes.length; i++) {
-    node = Mod.loadmodel.nodes[i];
+  for (i = 0; i < loadmodel.nodes.length; i++) {
+    node = loadmodel.nodes[i];
     out = {planenum: node.planenum, children: []};
     child = node.children[0];
     out.children[0] = child.contents < 0 ? child.contents : child.num;
@@ -800,46 +801,46 @@ Mod.MakeHull0 = function() {
     out.children[1] = child.contents < 0 ? child.contents : child.num;
     clipnodes[i] = out;
   }
-  Mod.loadmodel.hulls[0] = hull;
+  loadmodel.hulls[0] = hull;
 };
 
-Mod.LoadMarksurfaces = function(buf) {
+Mod.LoadMarksurfaces = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.marksurfaces << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.marksurfaces << 3) + 8, true);
   const count = filelen >> 1;
-  Mod.loadmodel.marksurfaces = [];
+  loadmodel.marksurfaces = [];
   let i; let j;
   for (i = 0; i < count; i++) {
     j = view.getUint16(fileofs + (i << 1), true);
-    if (j > Mod.loadmodel.faces.length) {
+    if (j > loadmodel.faces.length) {
       throw new Error('Mod.LoadMarksurfaces: bad surface number');
     }
-    Mod.loadmodel.marksurfaces[i] = j;
+    loadmodel.marksurfaces[i] = j;
   }
 };
 
-Mod.LoadSurfedges = function(buf) {
+Mod.LoadSurfedges = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.surfedges << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.surfedges << 3) + 8, true);
   const count = filelen >> 2;
-  Mod.loadmodel.surfedges = [];
+  loadmodel.surfedges = [];
   let i;
   for (i = 0; i < count; i++) {
-    Mod.loadmodel.surfedges[i] = view.getInt32(fileofs + (i << 2), true);
+    loadmodel.surfedges[i] = view.getInt32(fileofs + (i << 2), true);
   }
 };
 
-Mod.LoadPlanes = function(buf) {
+Mod.LoadPlanes = function(loadmodel, buf) {
   const view = new DataView(buf);
   let fileofs = view.getUint32((Mod.lump.planes << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.planes << 3) + 8, true);
   if ((filelen % 20) !== 0) {
-    throw new Error('Mod.LoadPlanes: funny lump size in ' + Mod.loadmodel.name);
+    throw new Error('Mod.LoadPlanes: funny lump size in ' + loadmodel.name);
   }
   const count = filelen / 20;
-  Mod.loadmodel.planes = [];
+  loadmodel.planes = [];
   let i; let out;
   for (i = 0; i < count; i++) {
     out = {
@@ -857,37 +858,37 @@ Mod.LoadPlanes = function(buf) {
     if (out.normal[2] < 0) {
       out.signbits += 4;
     }
-    Mod.loadmodel.planes[i] = out;
+    loadmodel.planes[i] = out;
     fileofs += 20;
   }
 };
 
-Mod.LoadBrushModel = function(buffer) {
-  Mod.loadmodel.type = Mod.type.brush;
+Mod.LoadBrushModel = function(loadmodel, buffer) {
+  loadmodel.type = Mod.type.brush;
   const version = (new DataView(buffer)).getUint32(0, true);
   if (version !== Mod.version.brush) {
-    throw new CorruptedResourceError(Mod.loadmodel.name, 'wrong version number (' + version + ' should be ' + Mod.version.brush + ')');
+    throw new CorruptedResourceError(loadmodel.name, 'wrong version number (' + version + ' should be ' + Mod.version.brush + ')');
   }
-  Mod.LoadVertexes(buffer);
-  Mod.LoadEdges(buffer);
-  Mod.LoadSurfedges(buffer);
-  Mod.LoadTextures(buffer);
-  Mod.LoadLighting(buffer);
-  Mod.LoadPlanes(buffer);
-  Mod.LoadTexinfo(buffer);
-  Mod.LoadFaces(buffer);
-  Mod.LoadMarksurfaces(buffer);
-  Mod.LoadVisibility(buffer);
-  Mod.LoadLeafs(buffer);
-  Mod.LoadNodes(buffer);
-  Mod.LoadClipnodes(buffer);
-  Mod.MakeHull0();
-  Mod.LoadEntities(buffer);
-  Mod.LoadSubmodels(buffer);
+  Mod.LoadVertexes(loadmodel, buffer);
+  Mod.LoadEdges(loadmodel, buffer);
+  Mod.LoadSurfedges(loadmodel, buffer);
+  Mod.LoadTextures(loadmodel, buffer);
+  Mod.LoadLighting(loadmodel, buffer);
+  Mod.LoadPlanes(loadmodel, buffer);
+  Mod.LoadTexinfo(loadmodel, buffer);
+  Mod.LoadFaces(loadmodel, buffer);
+  Mod.LoadMarksurfaces(loadmodel, buffer);
+  Mod.LoadVisibility(loadmodel, buffer);
+  Mod.LoadLeafs(loadmodel, buffer);
+  Mod.LoadNodes(loadmodel, buffer);
+  Mod.LoadClipnodes(loadmodel, buffer);
+  Mod.MakeHull0(loadmodel);
+  Mod.LoadEntities(loadmodel, buffer);
+  Mod.LoadSubmodels(loadmodel, buffer);
 
   const mins = new Vector(), maxs = new Vector();
-  for (let i = 0; i < Mod.loadmodel.vertexes.length; i++) {
-    const vert = Mod.loadmodel.vertexes[i];
+  for (let i = 0; i < loadmodel.vertexes.length; i++) {
+    const vert = loadmodel.vertexes[i];
     if (vert[0] < mins[0]) {
       mins[0] = vert[0];
     } else if (vert[0] > maxs[0]) {
@@ -906,7 +907,7 @@ Mod.LoadBrushModel = function(buffer) {
       maxs[2] = vert[2];
     }
   };
-  Mod.loadmodel.radius = (new Vector(
+  loadmodel.radius = (new Vector(
     Math.abs(mins[0]) > Math.abs(maxs[0]) ? Math.abs(mins[0]) : Math.abs(maxs[0]),
     Math.abs(mins[1]) > Math.abs(maxs[1]) ? Math.abs(mins[1]) : Math.abs(maxs[1]),
     Math.abs(mins[2]) > Math.abs(maxs[2]) ? Math.abs(mins[2]) : Math.abs(maxs[2]),
@@ -921,13 +922,13 @@ ALIAS MODELS
 ==============================================================================
 */
 
-Mod.TranslatePlayerSkin = function(data, skin) {
+Mod.TranslatePlayerSkin = function(loadmodel, data, skin) {
   if (registry.isDedicatedServer) {
     return;
   }
 
-  if ((Mod.loadmodel._skin_width !== 512) || (Mod.loadmodel._skin_height !== 256)) {
-    data = resampleTexture8(data, Mod.loadmodel._skin_width, Mod.loadmodel._skin_height, 512, 256);
+  if ((loadmodel._skin_width !== 512) || (loadmodel._skin_height !== 256)) {
+    data = resampleTexture8(data, loadmodel._skin_width, loadmodel._skin_height, 512, 256);
   }
 
   const out = new Uint8Array(new ArrayBuffer(524288));
@@ -943,10 +944,10 @@ Mod.TranslatePlayerSkin = function(data, skin) {
     }
   }
 
-  skin.playertexture = GLTexture.Allocate(Mod.loadmodel.name + '_playerskin', 512, 256, out);
+  skin.playertexture = GLTexture.Allocate(loadmodel.name + '_playerskin', 512, 256, out);
 };
 
-Mod.FloodFillSkin = function(skin) {
+Mod.FloodFillSkin = function(loadmodel, skin) {
   const fillcolor = skin[0];
   const filledcolor = W.filledColor;
 
@@ -954,8 +955,8 @@ Mod.FloodFillSkin = function(skin) {
     return;
   }
 
-  const width = Mod.loadmodel._skin_width;
-  const height = Mod.loadmodel._skin_height;
+  const width = loadmodel._skin_width;
+  const height = loadmodel._skin_height;
 
   const lifo = [[0, 0]]; let sp; let cur; let x; let y;
 
@@ -987,24 +988,24 @@ Mod.FloodFillSkin = function(skin) {
   }
 };
 
-Mod.LoadAllSkins = function(buffer, inmodel) {
-  Mod.loadmodel.skins = [];
+Mod.LoadAllSkins = function(loadmodel, buffer, inmodel) {
+  loadmodel.skins = [];
   const model = new DataView(buffer);
   let i; let j; let group; let numskins;
-  const skinsize = Mod.loadmodel._skin_width * Mod.loadmodel._skin_height;
+  const skinsize = loadmodel._skin_width * loadmodel._skin_height;
   let skin;
-  for (i = 0; i < Mod.loadmodel._num_skins; i++) {
+  for (i = 0; i < loadmodel._num_skins; i++) {
     inmodel += 4;
     if (model.getUint32(inmodel - 4, true) === 0) {
       skin = new Uint8Array(buffer, inmodel, skinsize);
-      Mod.FloodFillSkin(skin);
-      const rgba = translateIndexToRGBA(skin, Mod.loadmodel._skin_width, Mod.loadmodel._skin_height);
-      Mod.loadmodel.skins[i] = {
+      Mod.FloodFillSkin(loadmodel, skin);
+      const rgba = translateIndexToRGBA(skin, loadmodel._skin_width, loadmodel._skin_height);
+      loadmodel.skins[i] = {
         group: false,
-        texturenum: !registry.isDedicatedServer ? GLTexture.Allocate(Mod.loadmodel.name + '_' + i, Mod.loadmodel._skin_width, Mod.loadmodel._skin_height, rgba) : null,
+        texturenum: !registry.isDedicatedServer ? GLTexture.Allocate(loadmodel.name + '_' + i, loadmodel._skin_width, loadmodel._skin_height, rgba) : null,
       };
-      if (Mod.loadmodel.player === true) {
-        Mod.TranslatePlayerSkin(new Uint8Array(buffer, inmodel, skinsize), Mod.loadmodel.skins[i]);
+      if (loadmodel.player === true) {
+        Mod.TranslatePlayerSkin(loadmodel, new Uint8Array(buffer, inmodel, skinsize), loadmodel.skins[i]);
       }
       inmodel += skinsize;
     } else {
@@ -1023,26 +1024,26 @@ Mod.LoadAllSkins = function(buffer, inmodel) {
       }
       for (j = 0; j < numskins; j++) {
         skin = new Uint8Array(buffer, inmodel, skinsize);
-        Mod.FloodFillSkin(skin);
-        const rgba = translateIndexToRGBA(skin, Mod.loadmodel._skin_width, Mod.loadmodel._skin_height);
-        group.skins[j].texturenum = !registry.isDedicatedServer ? GLTexture.Allocate(Mod.loadmodel.name + '_' + i + '_' + j, Mod.loadmodel._skin_width, Mod.loadmodel._skin_height, rgba) : null;
-        if (Mod.loadmodel.player === true) {
-          Mod.TranslatePlayerSkin(new Uint8Array(buffer, inmodel, skinsize), group.skins[j]);
+        Mod.FloodFillSkin(loadmodel, skin);
+        const rgba = translateIndexToRGBA(skin, loadmodel._skin_width, loadmodel._skin_height);
+        group.skins[j].texturenum = !registry.isDedicatedServer ? GLTexture.Allocate(loadmodel.name + '_' + i + '_' + j, loadmodel._skin_width, loadmodel._skin_height, rgba) : null;
+        if (loadmodel.player === true) {
+          Mod.TranslatePlayerSkin(loadmodel, new Uint8Array(buffer, inmodel, skinsize), group.skins[j]);
         }
         inmodel += skinsize;
       }
-      Mod.loadmodel.skins[i] = group;
+      loadmodel.skins[i] = group;
     }
   }
   return inmodel;
 };
 
-Mod.LoadAllFrames = function(buffer, inmodel) {
+Mod.LoadAllFrames = function(loadmodel, buffer, inmodel) {
   // TODO: class AliasModelFrame
-  Mod.loadmodel.frames = [];
+  loadmodel.frames = [];
   const model = new DataView(buffer);
   let i; let j; let k; let frame; let group; let numframes;
-  for (i = 0; i < Mod.loadmodel._frames; i++) {
+  for (i = 0; i < loadmodel._frames; i++) {
     inmodel += 4;
     if (model.getUint32(inmodel - 4, true) === 0) {
       frame = {
@@ -1053,14 +1054,14 @@ Mod.LoadAllFrames = function(buffer, inmodel) {
         v: [],
       };
       inmodel += 24;
-      for (j = 0; j < Mod.loadmodel._num_verts; j++) {
+      for (j = 0; j < loadmodel._num_verts; j++) {
         frame.v[j] = {
           v: new Vector(model.getUint8(inmodel), model.getUint8(inmodel + 1), model.getUint8(inmodel + 2)),
           lightnormalindex: model.getUint8(inmodel + 3),
         };
         inmodel += 4;
       }
-      Mod.loadmodel.frames[i] = frame;
+      loadmodel.frames[i] = frame;
     } else {
       group = {
         group: true,
@@ -1084,7 +1085,7 @@ Mod.LoadAllFrames = function(buffer, inmodel) {
         frame.name = Q.memstr(new Uint8Array(buffer, inmodel + 8, 16));
         frame.v = [];
         inmodel += 24;
-        for (k = 0; k < Mod.loadmodel._num_verts; k++) {
+        for (k = 0; k < loadmodel._num_verts; k++) {
           frame.v[k] = {
             v: new Vector(model.getUint8(inmodel), model.getUint8(inmodel + 1), model.getUint8(inmodel + 2)),
             lightnormalindex: model.getUint8(inmodel + 3),
@@ -1092,52 +1093,52 @@ Mod.LoadAllFrames = function(buffer, inmodel) {
           inmodel += 4;
         }
       }
-      Mod.loadmodel.frames[i] = group;
+      loadmodel.frames[i] = group;
     }
   }
 };
 
-Mod.LoadAliasModel = function(buffer) {
+Mod.LoadAliasModel = function(loadmodel, buffer) {
   let i; let j; let k; let l;
 
-  Mod.loadmodel.type = Mod.type.alias;
-  Mod.loadmodel.player = Mod.loadmodel.name === 'progs/player.mdl';
+  loadmodel.type = Mod.type.alias;
+  loadmodel.player = loadmodel.name === 'progs/player.mdl';
   const model = new DataView(buffer);
   const version = model.getUint32(4, true);
   if (version !== Mod.version.alias) {
-    throw new Error(Mod.loadmodel.name + ' has wrong version number (' + version + ' should be ' + Mod.version.alias + ')');
+    throw new Error(loadmodel.name + ' has wrong version number (' + version + ' should be ' + Mod.version.alias + ')');
   }
-  Mod.loadmodel._scale = new Vector(model.getFloat32(8, true), model.getFloat32(12, true), model.getFloat32(16, true));
-  Mod.loadmodel._scale_origin = new Vector(model.getFloat32(20, true), model.getFloat32(24, true), model.getFloat32(28, true));
-  Mod.loadmodel.boundingradius = model.getFloat32(32, true);
-  Mod.loadmodel._num_skins = model.getUint32(48, true);
-  if (Mod.loadmodel._num_skins === 0) {
-    throw new Error('model ' + Mod.loadmodel.name + ' has no skins');
+  loadmodel._scale = new Vector(model.getFloat32(8, true), model.getFloat32(12, true), model.getFloat32(16, true));
+  loadmodel._scale_origin = new Vector(model.getFloat32(20, true), model.getFloat32(24, true), model.getFloat32(28, true));
+  loadmodel.boundingradius = model.getFloat32(32, true);
+  loadmodel._num_skins = model.getUint32(48, true);
+  if (loadmodel._num_skins === 0) {
+    throw new Error('model ' + loadmodel.name + ' has no skins');
   }
-  Mod.loadmodel._skin_width = model.getUint32(52, true);
-  Mod.loadmodel._skin_height = model.getUint32(56, true);
-  Mod.loadmodel._num_verts = model.getUint32(60, true);
-  if (Mod.loadmodel._num_verts === 0) {
-    throw new Error('model ' + Mod.loadmodel.name + ' has no vertices');
+  loadmodel._skin_width = model.getUint32(52, true);
+  loadmodel._skin_height = model.getUint32(56, true);
+  loadmodel._num_verts = model.getUint32(60, true);
+  if (loadmodel._num_verts === 0) {
+    throw new Error('model ' + loadmodel.name + ' has no vertices');
   }
-  Mod.loadmodel._num_tris = model.getUint32(64, true);
-  if (Mod.loadmodel._num_tris === 0) {
-    throw new Error('model ' + Mod.loadmodel.name + ' has no triangles');
+  loadmodel._num_tris = model.getUint32(64, true);
+  if (loadmodel._num_tris === 0) {
+    throw new Error('model ' + loadmodel.name + ' has no triangles');
   }
-  Mod.loadmodel._frames = model.getUint32(68, true);
-  if (Mod.loadmodel._frames === 0) {
-    throw new Error('model ' + Mod.loadmodel.name + ' has no frames');
+  loadmodel._frames = model.getUint32(68, true);
+  if (loadmodel._frames === 0) {
+    throw new Error('model ' + loadmodel.name + ' has no frames');
   }
-  Mod.loadmodel.random = model.getUint32(72, true) === 1;
-  Mod.loadmodel.flags = model.getUint32(76, true);
-  Mod.loadmodel.mins = new Vector(-16.0, -16.0, -16.0);
-  Mod.loadmodel.maxs = new Vector(16.0, 16.0, 16.0);
+  loadmodel.random = model.getUint32(72, true) === 1;
+  loadmodel.flags = model.getUint32(76, true);
+  loadmodel.mins = new Vector(-16.0, -16.0, -16.0);
+  loadmodel.maxs = new Vector(16.0, 16.0, 16.0);
 
-  let inmodel = Mod.LoadAllSkins(buffer, 84);
+  let inmodel = Mod.LoadAllSkins(loadmodel, buffer, 84);
 
-  Mod.loadmodel._stverts = [];
-  for (i = 0; i < Mod.loadmodel._num_verts; i++) {
-    Mod.loadmodel._stverts[i] = {
+  loadmodel._stverts = [];
+  for (i = 0; i < loadmodel._num_verts; i++) {
+    loadmodel._stverts[i] = {
       onseam: model.getUint32(inmodel, true) !== 0,
       s: model.getUint32(inmodel + 4, true),
       t: model.getUint32(inmodel + 8, true),
@@ -1145,9 +1146,9 @@ Mod.LoadAliasModel = function(buffer) {
     inmodel += 12;
   }
 
-  Mod.loadmodel._triangles = [];
-  for (i = 0; i < Mod.loadmodel._num_tris; i++) {
-    Mod.loadmodel._triangles[i] = {
+  loadmodel._triangles = [];
+  for (i = 0; i < loadmodel._num_tris; i++) {
+    loadmodel._triangles[i] = {
       facesfront: model.getUint32(inmodel, true) !== 0,
       vertindex: [
         model.getUint32(inmodel + 4, true),
@@ -1158,7 +1159,7 @@ Mod.LoadAliasModel = function(buffer) {
     inmodel += 16;
   }
 
-  Mod.LoadAllFrames(buffer, inmodel);
+  Mod.LoadAllFrames(loadmodel, buffer, inmodel);
 
   if (registry.isDedicatedServer) {
     // skip frontend-only data
@@ -1168,48 +1169,48 @@ Mod.LoadAliasModel = function(buffer) {
   const cmds = [];
 
   let triangle; let vert;
-  for (i = 0; i < Mod.loadmodel._num_tris; i++) {
-    triangle = Mod.loadmodel._triangles[i];
+  for (i = 0; i < loadmodel._num_tris; i++) {
+    triangle = loadmodel._triangles[i];
     if (triangle.facesfront === true) {
-      vert = Mod.loadmodel._stverts[triangle.vertindex[0]];
-      cmds[cmds.length] = (vert.s + 0.5) / Mod.loadmodel._skin_width;
-      cmds[cmds.length] = (vert.t + 0.5) / Mod.loadmodel._skin_height;
-      vert = Mod.loadmodel._stverts[triangle.vertindex[1]];
-      cmds[cmds.length] = (vert.s + 0.5) / Mod.loadmodel._skin_width;
-      cmds[cmds.length] = (vert.t + 0.5) / Mod.loadmodel._skin_height;
-      vert = Mod.loadmodel._stverts[triangle.vertindex[2]];
-      cmds[cmds.length] = (vert.s + 0.5) / Mod.loadmodel._skin_width;
-      cmds[cmds.length] = (vert.t + 0.5) / Mod.loadmodel._skin_height;
+      vert = loadmodel._stverts[triangle.vertindex[0]];
+      cmds[cmds.length] = (vert.s + 0.5) / loadmodel._skin_width;
+      cmds[cmds.length] = (vert.t + 0.5) / loadmodel._skin_height;
+      vert = loadmodel._stverts[triangle.vertindex[1]];
+      cmds[cmds.length] = (vert.s + 0.5) / loadmodel._skin_width;
+      cmds[cmds.length] = (vert.t + 0.5) / loadmodel._skin_height;
+      vert = loadmodel._stverts[triangle.vertindex[2]];
+      cmds[cmds.length] = (vert.s + 0.5) / loadmodel._skin_width;
+      cmds[cmds.length] = (vert.t + 0.5) / loadmodel._skin_height;
       continue;
     }
     for (j = 0; j < 3; j++) {
-      vert = Mod.loadmodel._stverts[triangle.vertindex[j]];
+      vert = loadmodel._stverts[triangle.vertindex[j]];
       if (vert.onseam === true) {
-        cmds[cmds.length] = (vert.s + Mod.loadmodel._skin_width / 2 + 0.5) / Mod.loadmodel._skin_width;
+        cmds[cmds.length] = (vert.s + loadmodel._skin_width / 2 + 0.5) / loadmodel._skin_width;
       } else {
-        cmds[cmds.length] = (vert.s + 0.5) / Mod.loadmodel._skin_width;
+        cmds[cmds.length] = (vert.s + 0.5) / loadmodel._skin_width;
       }
-      cmds[cmds.length] = (vert.t + 0.5) / Mod.loadmodel._skin_height;
+      cmds[cmds.length] = (vert.t + 0.5) / loadmodel._skin_height;
     }
   }
 
   let group; let frame;
-  for (i = 0; i < Mod.loadmodel._frames; i++) {
-    group = Mod.loadmodel.frames[i];
+  for (i = 0; i < loadmodel._frames; i++) {
+    group = loadmodel.frames[i];
     if (group.group === true) {
       for (j = 0; j < group.frames.length; j++) {
         frame = group.frames[j];
         frame.cmdofs = cmds.length * 4;
-        for (k = 0; k < Mod.loadmodel._num_tris; k++) {
-          triangle = Mod.loadmodel._triangles[k];
+        for (k = 0; k < loadmodel._num_tris; k++) {
+          triangle = loadmodel._triangles[k];
           for (l = 0; l < 3; l++) {
             vert = frame.v[triangle.vertindex[l]];
             if (vert.lightnormalindex >= 162) {
               throw new Error('lightnormalindex >= NUMVERTEXNORMALS');
             }
-            cmds[cmds.length] = vert.v[0] * Mod.loadmodel._scale[0] + Mod.loadmodel._scale_origin[0];
-            cmds[cmds.length] = vert.v[1] * Mod.loadmodel._scale[1] + Mod.loadmodel._scale_origin[1];
-            cmds[cmds.length] = vert.v[2] * Mod.loadmodel._scale[2] + Mod.loadmodel._scale_origin[2];
+            cmds[cmds.length] = vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0];
+            cmds[cmds.length] = vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1];
+            cmds[cmds.length] = vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2];
             cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][0];
             cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][1];
             cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][2];
@@ -1220,16 +1221,16 @@ Mod.LoadAliasModel = function(buffer) {
     }
     frame = group;
     frame.cmdofs = cmds.length * 4;
-    for (j = 0; j < Mod.loadmodel._num_tris; j++) {
-      triangle = Mod.loadmodel._triangles[j];
+    for (j = 0; j < loadmodel._num_tris; j++) {
+      triangle = loadmodel._triangles[j];
       for (k = 0; k < 3; k++) {
         vert = frame.v[triangle.vertindex[k]];
         if (vert.lightnormalindex >= 162) {
           throw new Error('lightnormalindex >= NUMVERTEXNORMALS');
         }
-        cmds[cmds.length] = vert.v[0] * Mod.loadmodel._scale[0] + Mod.loadmodel._scale_origin[0];
-        cmds[cmds.length] = vert.v[1] * Mod.loadmodel._scale[1] + Mod.loadmodel._scale_origin[1];
-        cmds[cmds.length] = vert.v[2] * Mod.loadmodel._scale[2] + Mod.loadmodel._scale_origin[2];
+        cmds[cmds.length] = vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0];
+        cmds[cmds.length] = vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1];
+        cmds[cmds.length] = vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2];
         cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][0];
         cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][1];
         cmds[cmds.length] = R.avertexnormals[vert.lightnormalindex][2];
@@ -1237,8 +1238,8 @@ Mod.LoadAliasModel = function(buffer) {
     }
   }
 
-  Mod.loadmodel.cmds = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, Mod.loadmodel.cmds);
+  loadmodel.cmds = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, loadmodel.cmds);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
 };
 
@@ -1262,39 +1263,39 @@ Mod.LoadSpriteFrame = function(identifier, buffer, inframe, frame) {
   return inframe + 16 + frame.width * frame.height;
 };
 
-Mod.LoadSpriteModel = function(buffer) {
-  Mod.loadmodel.type = Mod.type.sprite;
+Mod.LoadSpriteModel = function(loadmodel, buffer) {
+  loadmodel.type = Mod.type.sprite;
   const model = new DataView(buffer);
   const version = model.getUint32(4, true);
   if (version !== Mod.version.sprite) {
-    throw new Error(Mod.loadmodel.name + ' has wrong version number (' + version + ' should be ' + Mod.version.sprite + ')');
+    throw new Error(loadmodel.name + ' has wrong version number (' + version + ' should be ' + Mod.version.sprite + ')');
   }
-  Mod.loadmodel.oriented = model.getUint32(8, true) === 3;
-  Mod.loadmodel.boundingradius = model.getFloat32(12, true);
-  Mod.loadmodel.width = model.getUint32(16, true);
-  Mod.loadmodel.height = model.getUint32(20, true);
-  Mod.loadmodel._frames = model.getUint32(24, true);
-  if (Mod.loadmodel._frames === 0) {
-    throw new Error('model ' + Mod.loadmodel.name + ' has no frames');
+  loadmodel.oriented = model.getUint32(8, true) === 3;
+  loadmodel.boundingradius = model.getFloat32(12, true);
+  loadmodel.width = model.getUint32(16, true);
+  loadmodel.height = model.getUint32(20, true);
+  loadmodel._frames = model.getUint32(24, true);
+  if (loadmodel._frames === 0) {
+    throw new Error('model ' + loadmodel.name + ' has no frames');
   }
-  Mod.loadmodel.random = model.getUint32(32, true) === 1;
-  Mod.loadmodel.mins = new Vector(Mod.loadmodel.width * -0.5, Mod.loadmodel.width * -0.5, Mod.loadmodel.height * -0.5);
-  Mod.loadmodel.maxs = new Vector(Mod.loadmodel.width * 0.5, Mod.loadmodel.width * 0.5, Mod.loadmodel.height * 0.5);
+  loadmodel.random = model.getUint32(32, true) === 1;
+  loadmodel.mins = new Vector(loadmodel.width * -0.5, loadmodel.width * -0.5, loadmodel.height * -0.5);
+  loadmodel.maxs = new Vector(loadmodel.width * 0.5, loadmodel.width * 0.5, loadmodel.height * 0.5);
 
-  Mod.loadmodel.frames = [];
+  loadmodel.frames = [];
   let inframe = 36; let i; let j; let frame; let group; let numframes;
-  for (i = 0; i < Mod.loadmodel._frames; i++) {
+  for (i = 0; i < loadmodel._frames; i++) {
     inframe += 4;
     if (model.getUint32(inframe - 4, true) === 0) {
       frame = {group: false};
-      Mod.loadmodel.frames[i] = frame;
-      inframe = Mod.LoadSpriteFrame(Mod.loadmodel.name + '_' + i, buffer, inframe, frame);
+      loadmodel.frames[i] = frame;
+      inframe = Mod.LoadSpriteFrame(loadmodel.name + '_' + i, buffer, inframe, frame);
     } else {
       group = {
         group: true,
         frames: [],
       };
-      Mod.loadmodel.frames[i] = group;
+      loadmodel.frames[i] = group;
       numframes = model.getUint32(inframe, true);
       inframe += 4;
       for (j = 0; j < numframes; j++) {
@@ -1305,7 +1306,7 @@ Mod.LoadSpriteModel = function(buffer) {
         inframe += 4;
       }
       for (j = 0; j < numframes; j++) {
-        inframe = Mod.LoadSpriteFrame(Mod.loadmodel.name + '_' + i + '_' + j, buffer, inframe, group.frames[j]);
+        inframe = Mod.LoadSpriteFrame(loadmodel.name + '_' + i + '_' + j, buffer, inframe, group.frames[j]);
       }
     }
   }

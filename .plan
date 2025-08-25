@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-24
+
+* reducing loadtimes by parallelizing load models/sounds
+
 ### 2025-08-22
 
 * fixed CDAudio using `music/track-number.opus` matching the format found here: https://github.com/fzwoch/quake_map_source

@@ -16,6 +16,7 @@ import { HostError } from '../common/Errors.mjs';
 import ClientEntities, { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { ClientMessages, ClientPlayerState } from './ClientMessages.mjs';
 import VID from './VID.mjs';
+import { BaseModel } from '../common/Mod.mjs';
 
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
@@ -187,7 +188,7 @@ export default class CL {
     static looptrack = 0;
     /** @type {{name: string, message: string, direct: boolean}[]} chat messages */
     static chatlog = [];
-    /** @type {{name: string, type: number}[]} */
+    /** @type {BaseModel[]} */
     static model_precache = [];
     /** @type {SFX[]} */
     static sound_precache = [];
@@ -1151,28 +1152,39 @@ CL.ParseServerData = function() { // private
     }
   }
 
-  CL.state.model_precache.length = 0;
-  CL.state.sound_precache.length = 0;
-
   CL._processingServerDataState = 1;
 
   (async () => {
-    for (let i = 1; i < nummodels; i++) {
-      CL.SetConnectingStep(25 + (i / nummodels) * 20, 'Loading model: ' + model_precache[i]);
-      // eslint-disable-next-line require-atomic-updates
-      CL.state.model_precache[i] = await Mod.ForNameAsync(model_precache[i]);
-      if (CL.state.model_precache[i] === null) {
-        Con.Print('Model ' + model_precache[i] + ' not found\n');
-        return;
-      }
+    const models = [null], sounds = [null]; // index 0 is always null, reserved for “no model”/“no sound”
+
+    // load world first and wait, it will fill up the submodels
+    models[1] = await Mod.ForNameAsync(model_precache[1]);
+    nummodels--;
+
+    while (nummodels > 0) {
+      const chunksize = Math.min(nummodels, 10);
+      nummodels -= chunksize;
+
+      CL.SetConnectingStep(25 + (models.length / model_precache.length) * 40, 'Loading models');
+      models.push(...await Promise.all(model_precache.slice(models.length, models.length + chunksize).map((m) => Mod.ForNameAsync(m))));
     }
 
-    for (let i = 1; i < numsounds; i++) {
-      CL.SetConnectingStep(45 + (i / numsounds) * 20, 'Loading sound: ' + sound_precache[i]);
-      // eslint-disable-next-line require-atomic-updates
-      CL.state.sound_precache[i] = await S.PrecacheSoundAsync(sound_precache[i]);
+    while (numsounds > 0) {
+      const chunksize = Math.min(numsounds, 10);
+      numsounds -= chunksize;
+      CL.SetConnectingStep(65 + (sounds.length / sound_precache.length) * 20, 'Loading sounds');
+      sounds.push(...await Promise.all(sound_precache.slice(sounds.length, sounds.length + chunksize).map((s) => S.PrecacheSoundAsync(s))));
     }
-  })().then(() => {
+
+    return { models, sounds };
+  })().then(({ models, sounds }) => {
+    // TODO: check if we got another load/map/connect event in before
+    CL.state.model_precache.length = 0;
+    CL.state.sound_precache.length = 0;
+
+    CL.state.model_precache.push(...models);
+    CL.state.sound_precache.push(...sounds);
+
     CL._processingServerDataState = 2;
     CL.state.worldmodel = CL.state.model_precache[1];
     CL.pmove.setWorldmodel(CL.state.worldmodel);

@@ -489,9 +489,6 @@ Host.Init = async function() {
     }
 
     IN.Init();
-  } else {
-    // we need a few frontend things for dedicated
-    // await R.Init();
   }
 
   Cmd.text = 'exec better-quake.rc\n' + Cmd.text;
