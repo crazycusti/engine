@@ -650,7 +650,7 @@ export default class CL {
   }
 
   static ResumeGame(clientdata, particles) {
-    this.EstablishConnection('local');
+    this.Connect('local');
     this.state.loadClientData = [clientdata, particles];
   }
 };

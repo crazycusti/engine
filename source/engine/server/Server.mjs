@@ -840,8 +840,8 @@ SV.WriteDeltaEntity = function(msg, from, to) {
     if (from.nextthink <= 0) {
       from.nextthink = SV.server.time;
     }
-    console.log('SV.WriteDeltaEntity: writing nextthink delta', to.nextthink - from.nextthink, 'for entity', to.num);
-    MSG.WriteByte(msg, to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0); // always send difference, otherwise things get jittery
+    // always make sure we are sending a valid nextthink less than 250ms, otherwise we force it to 0 to skip lerping on the client side
+    MSG.WriteByte(msg, to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0);
   }
 
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
