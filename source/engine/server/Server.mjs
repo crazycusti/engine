@@ -4,7 +4,7 @@ import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from './../common/Def.mjs';
-import Cmd from '../common/Cmd.mjs';
+import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
 import { ED, ServerEdict } from './Edict.mjs';
 import { EventBus, eventBus, registry } from '../registry.mjs';
@@ -12,6 +12,7 @@ import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
 import { HostError } from '../common/Errors.mjs';
+import { Navigation } from './Navigation.mjs';
 
 let { COM, Con, Host, Mod, NET, PR, V } = registry;
 
@@ -105,6 +106,8 @@ SV.server = {
   worldmodel: null,
   /** server game event bus, will be reset on every map load */
   eventBus: new EventBus('server-game'),
+  /** @type {Navigation} navigation graph management */
+  navigation: null,
   /** @type {import('../../shared/GameInterfaces').ServerGameInterface} */
   gameAPI: null,
   /** @type {string?} game version string */
@@ -274,6 +277,17 @@ SV.Init = function() {
   SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
   SV.waterfriction = new Cvar('sv_waterfriction', '4');
   SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
+
+  Cmd.AddCommand('nav', class extends ConsoleCommand {
+    run() {
+      if (!SV.server.navigation) {
+        Con.Print('navigation not initialized\n');
+        return;
+      }
+
+      SV.server.navigation.build();
+    }
+  });
 
   eventBus.subscribe('cvar.changed', (name) => {
     const cvar = Cvar.FindVar(name);
@@ -1436,6 +1450,9 @@ SV.SpawnServer = function(mapname) {
   // reset the event bus subscriptions
   SV.server.eventBus.unsubscribeAll();
 
+  // init navigation graph
+  SV.server.navigation = new Navigation(SV.server.worldmodel);
+
   // init the game
   SV.server.gameAPI.init(mapname, SV.svs.serverflags);
 
@@ -1468,6 +1485,7 @@ SV.SpawnServer = function(mapname) {
     }
     SV.SendServerData(Host.client);
   }
+  SV.server.navigation.init();
   eventBus.publish('server.spawned', {
     mapname,
   });
@@ -1500,6 +1518,9 @@ SV.ShutdownServer = function (isCrashShutdown) {
 
   SV.server.edicts = [];
   SV.server.num_edicts = 0;
+
+  SV.server.navigation.shutdown();
+  SV.server.navigation = null;
 
   if (isCrashShutdown) {
     Con.Print('Server shut down due to a crash!\n');

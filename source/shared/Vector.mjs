@@ -535,7 +535,7 @@ export default class Vector extends Array {
   /**
    * Cross product of this x other, returns a new Vector.
    * @param {Vector} other other vector
-   * @returns {Vector} cross product of this and the other vector
+   * @returns {Vector} cross product of this and the other vector as a new Vector
    */
   cross(other) {
     // console.assert(other instanceof Vector, 'not a Vector');

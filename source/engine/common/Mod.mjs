@@ -70,10 +70,9 @@ export class BaseModel {
     // public variables just for rendering purposes (IDEA: refactor into ModelRenderer classes)
     this.cmds = []; // required by R
   }
-}
+};
 
-// eslint-disable-next-line no-unused-vars
-class AliasModel extends BaseModel {
+export class AliasModel extends BaseModel {
   reset() {
     super.reset();
 
@@ -92,7 +91,53 @@ class AliasModel extends BaseModel {
     this.boundingradius = 0; // R requires that
     this.player = false; // R requires that (to change colors)
   }
-}
+};
+
+export class Plane { // TODO: move to shared
+  type = 0;
+  signbits = 0;
+
+  constructor(normal, dist) {
+    /** @type {Vector} */
+    this.normal = normal;
+    /** @type {number} */
+    this.dist = dist;
+  }
+};
+
+export class Face {
+  submodel = false;
+  /** @type {Plane} */
+  plane = null;
+  firstedge = 0;
+  numedges = 0;
+  texinfo = 0;
+  /** @type {number[]} */
+  styles = [];
+  lightofs = 0;
+  texture = 0;
+  texturemins = [0, 0];
+  extents = [0, 0];
+  turbulent = false;
+  sky = false;
+};
+
+export class BrushModel extends BaseModel {
+  /** @type {Plane[]} */
+  planes = [];
+
+  /** @type {Face[]} */
+  faces = [];
+
+  /** @type {Vector[]} */
+  vertexes = [];
+
+  /** @type {number[][]} */
+  edges = [];
+
+  /** @type {number[]} */
+  surfedges = [];
+};
 
 Mod.type = {brush: 0, sprite: 1, alias: 2};
 
@@ -546,6 +591,13 @@ Mod.LoadSubmodels = function(loadmodel, buf) {
     out.numfaces = view.getUint32(fileofs + 60, true);
     loadmodel.submodels[i - 1] = out;
     fileofs += 64;
+
+    for (let i = 0; i < out.numfaces; i++) {
+      /** @type {Face} */
+      const face = out.faces[out.firstface + i];
+
+      face.submodel = true;
+    }
   }
 };
 
@@ -604,19 +656,17 @@ Mod.LoadFaces = function(loadmodel, buf) {
   loadmodel.firstface = 0;
   loadmodel.numfaces = count;
   loadmodel.faces = [];
-  let i; let styles; let out;
-  let mins; let maxs; let j; let e; let tex; let v; let val;
-  for (i = 0; i < count; i++) {
-    styles = new Uint8Array(buf, fileofs + 12, 4);
-    out =
-    {
+  for (let i = 0; i < count; i++) {
+    let mins; let maxs; let j; let e; let tex; let v; let val;
+    const styles = new Uint8Array(buf, fileofs + 12, 4);
+    const out = Object.assign(new Face(), {
       plane: loadmodel.planes[view.getUint16(fileofs, true)],
       firstedge: view.getUint16(fileofs + 4, true),
       numedges: view.getUint16(fileofs + 8, true),
       texinfo: view.getUint16(fileofs + 10, true),
       styles: [],
       lightofs: view.getInt32(fileofs + 16, true),
-    };
+    });
     if (styles[0] !== 255) {
       out.styles[0] = styles[0];
     }
@@ -630,8 +680,8 @@ Mod.LoadFaces = function(loadmodel, buf) {
       out.styles[3] = styles[3];
     }
 
-    mins = [999999, 999999];
-    maxs = [-99999, -99999];
+    mins = [Infinity, Infinity];
+    maxs = [-Infinity, -Infinity];
     tex = loadmodel.texinfo[out.texinfo];
     out.texture = tex.texture;
     for (j = 0; j < out.numedges; j++) {
@@ -841,22 +891,21 @@ Mod.LoadPlanes = function(loadmodel, buf) {
   }
   const count = filelen / 20;
   loadmodel.planes = [];
-  let i; let out;
-  for (i = 0; i < count; i++) {
-    out = {
+  for (let i = 0; i < count; i++) {
+    const out = Object.assign(new Plane(), {
       normal: new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true)),
       dist: view.getFloat32(fileofs + 12, true),
       type: view.getUint32(fileofs + 16, true),
       signbits: 0,
-    };
+    });
     if (out.normal[0] < 0) {
-      ++out.signbits;
+      out.signbits |= 1;
     }
     if (out.normal[1] < 0) {
-      out.signbits += 2;
+      out.signbits |= 2;
     }
     if (out.normal[2] < 0) {
-      out.signbits += 4;
+      out.signbits |= 4;
     }
     loadmodel.planes[i] = out;
     fileofs += 20;

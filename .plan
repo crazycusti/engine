@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-29
+
+* started working on a navigation mesh
+
 ### 2025-08-25
 
 * reducing loadtimes by parallelizing load models/sounds

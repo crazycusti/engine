@@ -1413,6 +1413,10 @@ R.Init = async function() {
 };
 
 R.NewMap = function() {
+  if (R.particles) {
+    R.particles.length = 0;
+  }
+
   for (let i = 0; i < 64; i++) {
     R.lightstylevalue_a[i] = 12;
     R.lightstylevalue_b[i] = 12;
@@ -1467,7 +1471,7 @@ R.InitParticles = async function() {
   //     R.numparticles = 512;
   //   }
   // } else {
-    R.numparticles = 2048;
+    R.numparticles = 32786;
   // }
 
   R.avelocities = [];
@@ -1578,7 +1582,7 @@ R.ReadPointFile_f = function() {
       break;
     }
     R.particles[p[0]] = {
-      die: 99999.0,
+      die: Infinity,
       color: -c & 15,
       type: R.ptype.tracer,
       vel: new Vector(),
@@ -2333,7 +2337,7 @@ R.AllocBlock = function(surf) {
 // Based on Quake 2 polygon generation algorithm by Toji - http://blog.tojicode.com/2010/06/quake-2-bsp-quite-possibly-worst-format.html
 R.BuildSurfaceDisplayList = function(fa) {
   fa.verts = [];
-  if (fa.numedges <= 2) {
+  if (fa.numedges < 3) {
     return;
   }
   let i; let index; let vec; let vert; let s; let t;
