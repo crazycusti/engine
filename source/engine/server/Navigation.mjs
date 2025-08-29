@@ -289,10 +289,10 @@ export class Navigation {
       };
 
       // margin inside polygon to avoid sampling near edges (in world units projected to local 2D)
-      const innerMargin = 0;
+      const innerMargin = 8;
 
       // sampling resolution (units between samples on the face)
-      const step = 16;
+      const step = 8;
 
       // grid-sample the bounding box and test inclusion
       for (let sx = Math.floor(minX); sx <= Math.ceil(maxX); sx += step) {
@@ -458,14 +458,254 @@ export class Navigation {
     }
   }
 
-  #optimizeWalkpoints() {
-    // TODO: merge nearby waypoints, create links etc.
+  #buildNavigationGraph() {
+    // Build a simple navgraph from the extracted waypoints.
+    // Steps:
+    // 1) collect all waypoints
+    // 2) merge nearby waypoints into graph nodes
+    // 3) connect nodes with unobstructed links (trace check)
 
+    const mergeRadius = 24; // units to merge nearby waypoints
+    const linkRadius = 128; // max distance to attempt a link
+
+    // helper: perform a quick trace between two points, return fraction (1.0 = clear)
+    const quickTraceSegment = (startpos, endpos) => {
+      const trace = {
+        fraction: 1.0,
+        allsolid: true,
+        startsolid: false,
+        endpos,
+        plane: { normal: new Vector(), dist: 0.0 },
+        ent: null,
+      };
+
+      SV.RecursiveHullCheck(
+        SV.server.worldmodel.hulls[0],
+        SV.server.worldmodel.hulls[0].firstclipnode,
+        0.0, 1.0,
+        startpos.copy(),
+        endpos.copy(),
+        trace,
+      );
+
+      endpos.set(trace.endpos);
+
+      return trace.fraction;
+    };
+
+    // 1) collect all waypoints into flat list
+    const allWaypoints = [];
     for (const surface of this.geometry.walkableSurfaces) {
       for (const wp of surface.waypoints) {
-
+        allWaypoints.push({ wp, surface });
       }
     }
+
+    // 2) merge nearby waypoints into nodes
+    const nodes = [];
+
+    const distance = (a, b) => a.distanceTo(b);
+
+    for (const { wp, surface } of allWaypoints) {
+      let merged = false;
+
+      for (const node of nodes) {
+        // use horizontal + vertical distance together
+        const d = distance(node.origin, wp.origin);
+        if (d <= mergeRadius && (node.origin[2] - wp.origin[2]) === 0) { // FIXME: consider slopes
+          // merge: average positions and combine flags conservatively
+          node.origin.add(wp.origin).multiply(0.5);
+          node.availableHeight = Math.min(node.availableHeight, wp.availableHeight);
+          node.nearLedge = node.nearLedge || wp.nearLedge;
+          node.isClipping = node.isClipping || wp.isClipping;
+          node.isFloating = node.isFloating || wp.isFloating;
+          node.surfaces.add(surface);
+          merged = true;
+          break;
+        }
+      }
+
+      if (!merged) {
+        const id = nodes.length;
+        const node = {
+          id,
+          origin: wp.origin.copy(),
+          availableHeight: wp.availableHeight,
+          nearLedge: wp.nearLedge,
+          isClipping: wp.isClipping,
+          isFloating: wp.isFloating,
+          surfaces: new Set([surface]),
+          neighbors: [], // will be filled with {id, cost}
+        };
+        nodes.push(node);
+      }
+    }
+
+    // 3) connect nodes: attempt links between node pairs if close and unobstructed
+    const edges = [];
+
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dist = b.origin.distanceTo(a.origin);
+
+        if (dist > linkRadius) {
+          continue;
+        }
+
+        // perform a trace between the two node origins to ensure unobstructed path
+        const viewOffset = new Vector(0, 0, 22); // trace at roughly head height (FIXME: viewofs)
+        const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps
+        const start = a.origin.copy().add(viewOffset);
+        const end = b.origin.copy().add(viewOffset);
+        const startStepped = start.copy().add(stepOffset);
+
+        const frac = quickTraceSegment(start.copy(), end.copy());
+        const fracStep = quickTraceSegment(startStepped, end.copy());
+
+        if (frac < 1.0 && fracStep < 1.0) {
+          // blocked or partially blocked
+          continue;
+        }
+
+        let costBasis = dist; // simple cost metric: distance
+        let costA = 0, costB = 0;
+
+        if (b.origin[2] - a.origin[2] > 16) {
+          costA += 100; // climbing penalty
+        }
+
+        if (a.origin[2] - b.origin[2] > 16) {
+          costB += 100; // climbing penalty
+        }
+
+        a.neighbors.push({ id: b.id, cost: costBasis + costA });
+        b.neighbors.push({ id: a.id, cost: costBasis + costB });
+        edges.push({ a: a.id, b: b.id, cost: costBasis + costA + costB } );
+      }
+    }
+
+    this.graph = {
+      nodes,
+      edges,
+      createdAt: Date.now(),
+    };
+  }
+
+  /**
+   * Find nearest graph node to a world position.
+   * @param {Vector} position
+   * @param {number} maxDist
+   * @returns {object|null} node
+   */
+  #findNearestNode(position, maxDist = 512) {
+    if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
+      return null;
+    }
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const node of this.graph.nodes) {
+      const d = node.origin.copy().subtract(position).len();
+      if (d < bestDist && d <= maxDist) {
+        bestDist = d;
+        best = node;
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Find path between two world positions using A* over the navgraph.
+   * Returns an array of Vector positions (node origins) or null if no path.
+   * @param {Vector} startPos
+   * @param {Vector} goalPos
+   * @returns {Vector[]|null} path
+   */
+  findPath(startPos, goalPos) {
+    if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
+      return null;
+    }
+
+    const startNode = this.#findNearestNode(startPos, 512);
+    const goalNode = this.#findNearestNode(goalPos, 512);
+
+    if (!startNode || !goalNode) {
+      console.log('Navigation: no start or goal node found', startPos, goalPos);
+      return null;
+    }
+
+    if (startNode.id === goalNode.id) {
+      return [ startPos.copy(), goalPos.copy() ];
+    }
+
+    // A* structures
+    const openSet = new Set([startNode.id]);
+    const cameFrom = {}; // id -> id
+    const gScore = {}; // id -> cost
+    const fScore = {}; // id -> estimated total
+
+    const heuristic = (a, b) => a.copy().subtract(b).len();
+
+    for (const n of this.graph.nodes) {
+      gScore[n.id] = Infinity;
+      fScore[n.id] = Infinity;
+    }
+
+    gScore[startNode.id] = 0;
+    fScore[startNode.id] = heuristic(startNode.origin, goalNode.origin);
+
+    while (openSet.size > 0) {
+      // pick node in openSet with lowest fScore
+      let currentId = null;
+      let currentF = Infinity;
+      for (const id of openSet) {
+        if (fScore[id] < currentF) {
+          currentF = fScore[id];
+          currentId = id;
+        }
+      }
+
+      if (currentId === goalNode.id) {
+        // reconstruct path
+        const path = [];
+        let cur = currentId;
+        while (cur !== undefined) {
+          const node = this.graph.nodes[cur];
+          path.push(node.origin.copy());
+          cur = cameFrom[cur];
+        }
+        path.reverse();
+        // prepend exact start and append exact goal for precision
+        path[0] = startPos.copy();
+        path.push(goalPos.copy());
+        return path;
+      }
+
+      openSet.delete(currentId);
+
+      const currentNode = this.graph.nodes[currentId];
+
+      for (const nb of currentNode.neighbors) {
+        const tentativeG = gScore[currentId] + nb.cost;
+        if (tentativeG < gScore[nb.id]) {
+          cameFrom[nb.id] = currentId;
+          gScore[nb.id] = tentativeG;
+          fScore[nb.id] = tentativeG + heuristic(this.graph.nodes[nb.id].origin, goalNode.origin);
+          if (!openSet.has(nb.id)) {
+            openSet.add(nb.id);
+          }
+        }
+      }
+    }
+
+    console.log('Navigation: path not found from', startPos, 'to', goalPos, openSet, gScore, fScore);
+
+    // no path found
+    return null;
   }
 
   #emitDot(position, color = 15) {
@@ -479,11 +719,67 @@ export class Navigation {
     const p = R.particles[pn[0]];
     p.die = Infinity;
     p.color = color;
-    p.vel = new Vector();
+    if (p.vel) p.vel.clear(); else p.vel = new Vector(0, 0, 0);
     p.org = position.copy();
   }
 
   #debugNavigation() {
+    for (const node of this.graph.nodes) {
+      let color = 15;
+
+      if (node.nearLedge) {
+        color = 47;
+      }
+
+      this.#emitDot(node.origin, color);
+    }
+
+    console.log('nodes:', this.graph.nodes.length, 'edges:', this.graph.edges.length);
+
+    // E1M2 going on the catwalk
+    // const start = new Vector(912.6165544238987, -879.6764461636693, 440.0294031164332);
+    const start = new Vector(1111.4295919874462, -418.8668693423086, 312.03125);
+    const stop = new Vector(1404.9883258600796, 157.98704237046152, 320.03125);
+
+    // E1M2 a bit random through the map
+    // const start = new Vector(1463.5156153064931, -387.4401579058118, 312.0007825395648);
+    // const stop = new Vector(-271.0783923844472, 159.2369756459818, 320.01322570216666);
+
+    // E1M1 stairs
+    // const start = new Vector(825.4179307768227, 2615.8352072561884, -71.96875);
+    // const stop = new Vector(1308.7850555358525, 1116.9281102070906, -255.96875);
+
+    const path = registry.SV.server.navigation.findPath(start, stop);
+
+    if (path) {
+      this.showPath(path);
+    }
+  }
+
+  /** @param {Vector[]} vectors waypoints */
+  showPath(vectors) {
+    if (!vectors || vectors.length === 0) {
+      return;
+    }
+
+    const viewOffset = new Vector(0, 0, 22);
+
+    for (let i = 0; i < vectors.length - 1; i++) {
+      const start = vectors[i].copy().add(viewOffset);
+      const end = vectors[i + 1].copy().add(viewOffset);
+      const diff = end.copy().subtract(start);
+      const totalDistance = diff.len();
+      const stepLength = 4;
+      diff.normalize();
+      // Sample along the segment every 5 units
+      for (let dist = 0; dist <= totalDistance; dist += stepLength) {
+        const samplePoint = start.copy().add(diff.copy().multiply(dist));
+        this.#emitDot(samplePoint, 251);
+      }
+    }
+  }
+
+  #debugWaypoints() {
     /** @type {{origin: Vector, color: number, surface: WalkableSurface}[]} */
     const debugPoints = [];
     let waypoints = 0;
@@ -517,7 +813,7 @@ export class Navigation {
     console.log('Navigation: building navigation graph...', this.worldmodel);
 
     this.#extractWalkableSurfaces();
-    this.#optimizeWalkpoints();
+    this.#buildNavigationGraph();
 
     if (R) {
       setTimeout(() => this.#debugNavigation(), 1000); // wait a bit for renderer to initialize
