@@ -330,7 +330,13 @@ class MainMenu extends BaseMenu {
 
 ### 2025-08-29
 
-* started working on a navigation mesh
+* started working on a navigation mesh, next steps:
+  * desperately need to clean up the code
+  * save the generated mesh to disk (also regenerate when map has changed)
+  * wire it up to the NPC AI
+  * missing dynamic links such as teleporters, also no handling of doors and switches
+* ChatGPT is pretty damn good in explaining all of these things and produces somewhat usable code
+* learned about Newell’s method regarding n-gons
 
 ### 2025-08-25
 
