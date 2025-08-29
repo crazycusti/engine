@@ -1,3 +1,4 @@
+import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
 import { MissingResourceError } from '../common/Errors.mjs';
 import { BrushModel, Face } from '../common/Mod.mjs';
@@ -46,6 +47,31 @@ class WalkableSurface {
   }
 };
 
+/**
+ * Navigation graph node
+ */
+class Node {
+  id = -1;
+  origin = new Vector();
+  availableHeight = 0; // average available height from all waypoints
+  nearLedge = false;
+  isClipping = false;
+  isFloating = false;
+  /** @type {Set<WalkableSurface>} */
+  surfaces = new Set();
+  /** @type {{id: number, cost: number}[]} */
+  neighbors = [];
+
+  /**
+   * @param {number} id node ID
+   * @param {Vector} origin node position
+   */
+  constructor(id, origin) {
+    this.id = id;
+    this.origin.set(origin);
+  }
+};
+
 export class Navigation {
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
@@ -58,12 +84,21 @@ export class Navigation {
 
     /** @type {BrushModel} */
     this.worldmodel = worldmodel;
-    this.graph = null;
+    this.graph = {
+      /** @type {Node[]} */
+      nodes: [],
+      edges: [],
+      /** @type {?Octree<Node>} */
+      octree: null,
+    };
 
     this.geometry = {
       /** @type {WalkableSurface[]} */
       walkableSurfaces: [],
     };
+
+    // developer toggle for runtime debug visualization
+    this.debugNav = false;
   }
 
   init() {
@@ -590,16 +625,12 @@ export class Navigation {
         centroid.set(projectOntoSurface(centroid, surface));
       }
 
-      const node = {
-        id,
-        origin: centroid,
-        availableHeight: avgAvailableHeight,
-        nearLedge,
-        isClipping,
-        isFloating,
-        surfaces,
-        neighbors: [], // will be filled with {id, cost}
-      };
+      const node = new Node(id, centroid);
+      node.availableHeight = avgAvailableHeight;
+      node.nearLedge = nearLedge;
+      node.isClipping = isClipping;
+      node.isFloating = isFloating;
+      node.surfaces = surfaces;
 
       nodes.push(node);
     }
@@ -660,19 +691,63 @@ export class Navigation {
     this.graph = {
       nodes,
       edges,
+      octree: null, // built later
     };
+
+    // build spatial index for fast nearest-node lookups
+    this.#buildOctree();
+  }
+
+  #buildOctree() {
+    // compute bounding box of node origins
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+    for (const n of this.graph.nodes) {
+      const o = n.origin;
+      if (o[0] < minX) { minX = o[0]; }
+      if (o[1] < minY) { minY = o[1]; }
+      if (o[2] < minZ) { minZ = o[2]; }
+      if (o[0] > maxX) { maxX = o[0]; }
+      if (o[1] > maxY) { maxY = o[1]; }
+      if (o[2] > maxZ) { maxZ = o[2]; }
+    }
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const extentX = maxX - minX;
+    const extentY = maxY - minY;
+    const extentZ = maxZ - minZ;
+    const halfSize = Math.max(extentX, extentY, extentZ) / 2 + 1;
+
+    const center = new Vector(cx, cy, cz);
+    this.graph.octree = /** @type {Octree<Node>} */(new Octree(center, halfSize, 12, 8));
+
+    for (const n of this.graph.nodes) {
+      this.graph.octree.insert(n);
+    }
   }
 
   /**
    * Find nearest graph node to a world position.
-   * @param {Vector} position
-   * @param {number} maxDist
+   * @param {Vector} position world-space position to query
+   * @param {number} maxDist maximum search distance in world units
    * @returns {object|null} node
    */
   #findNearestNode(position, maxDist = 512) {
     if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
       return null;
     }
+
+    const n = this.graph.octree.nearest(position, maxDist);
+
+    if (n) {
+      return n;
+    }
+
+    // fallthrough to full scan if nothing found within maxDist in octree
+    console.warn('Navigation: nearest node not found in octree, falling back to linear scan', position, maxDist);
 
     let best = null;
     let bestDist = Infinity;
@@ -691,8 +766,8 @@ export class Navigation {
   /**
    * Find path between two world positions using A* over the navgraph.
    * Returns an array of Vector positions (node origins) or null if no path.
-   * @param {Vector} startPos
-   * @param {Vector} goalPos
+  * @param {Vector} startPos
+  * @param {Vector} goalPos
    * @returns {Vector[]|null} path
    */
   findPath(startPos, goalPos) {
@@ -888,8 +963,10 @@ export class Navigation {
 
     if (R) {
       setTimeout(() => {
-        // this.#debugWaypoints();
-        // this.#debugNavigation();
+        if (this.debugNav) {
+          this.#debugWaypoints();
+          this.#debugNavigation();
+        }
       }, 1000); // wait a bit for renderer to initialize
     }
   }
