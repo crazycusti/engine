@@ -339,6 +339,8 @@ class MainMenu extends BaseMenu {
 * learned about Newell’s method regarding n-gons
 * should add a feature switch for the new pathfinding
 * path lookups are now done through an Octree, could use it later for other stuff too
+* BaseEntity is getting too big, needs proper cleanup at some point, too much logic that could be handled by the engine, too much server code overlap
+* also I need to reconsider WeakRef’ing to entities, I’m not happy with dangling objects that are already kicked out of the game but refered by other entities
 
 ### 2025-08-25
 

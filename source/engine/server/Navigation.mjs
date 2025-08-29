@@ -59,7 +59,7 @@ class Node {
   isFloating = false;
   /** @type {Set<WalkableSurface>} */
   surfaces = new Set();
-  /** @type {{id: number, cost: number}[]} */
+  /** @type {number[][]} list of [id, cost] */
   neighbors = [];
 
   /**
@@ -123,6 +123,14 @@ export class Navigation {
     if (!data) {
       throw new MissingResourceError(filename);
     }
+
+    // TODO
+  }
+
+  async save() {
+    const filename = `maps/${SV.server.mapname}.nav`;
+
+    // TODO
   }
 
   #extractWalkableSurfaces() {
@@ -537,6 +545,7 @@ export class Navigation {
     }
 
     // 2) merge nearby waypoints into nodes using surface-aware clustering
+    /** @type {Node[]} */
     const nodes = [];
 
     const distance = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
@@ -636,6 +645,7 @@ export class Navigation {
     }
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
+    /** @type {number[][]} */
     const edges = [];
 
     for (let i = 0; i < nodes.length; i++) {
@@ -682,9 +692,9 @@ export class Navigation {
           costB += 200; // penalty for being near a ledge
         }
 
-        a.neighbors.push({ id: b.id, cost: costBasis + costA });
-        b.neighbors.push({ id: a.id, cost: costBasis + costB });
-        edges.push({ a: a.id, b: b.id, cost: costBasis + costA + costB } );
+        a.neighbors.push([ b.id, costBasis + costA ]);
+        b.neighbors.push([ a.id, costBasis + costB ]);
+        edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
 
@@ -733,7 +743,7 @@ export class Navigation {
    * Find nearest graph node to a world position.
    * @param {Vector} position world-space position to query
    * @param {number} maxDist maximum search distance in world units
-   * @returns {object|null} node
+   * @returns {Node|null} node if found, null if none within maxDist or graph is empty
    */
   #findNearestNode(position, maxDist = 512) {
     if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
@@ -753,7 +763,7 @@ export class Navigation {
     let bestDist = Infinity;
 
     for (const node of this.graph.nodes) {
-      const d = node.origin.copy().subtract(position).len();
+      const d = position.distanceTo(node.origin);
       if (d < bestDist && d <= maxDist) {
         bestDist = d;
         best = node;
@@ -766,9 +776,9 @@ export class Navigation {
   /**
    * Find path between two world positions using A* over the navgraph.
    * Returns an array of Vector positions (node origins) or null if no path.
-  * @param {Vector} startPos
-  * @param {Vector} goalPos
-   * @returns {Vector[]|null} path
+   * @param {Vector} startPos
+   * @param {Vector} goalPos
+   * @returns {Vector[]|null} path made out of waypoints, or null if no path found
    */
   findPath(startPos, goalPos) {
     if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
@@ -793,7 +803,7 @@ export class Navigation {
     const gScore = {}; // id -> cost
     const fScore = {}; // id -> estimated total
 
-    const heuristic = (a, b) => a.copy().subtract(b).len();
+    const heuristic = (a, b) => a.distanceTo(b);
 
     for (const n of this.graph.nodes) {
       gScore[n.id] = Infinity;
@@ -835,19 +845,18 @@ export class Navigation {
       const currentNode = this.graph.nodes[currentId];
 
       for (const nb of currentNode.neighbors) {
-        const tentativeG = gScore[currentId] + nb.cost;
-        if (tentativeG < gScore[nb.id]) {
-          cameFrom[nb.id] = currentId;
-          gScore[nb.id] = tentativeG;
-          fScore[nb.id] = tentativeG + heuristic(this.graph.nodes[nb.id].origin, goalNode.origin);
-          if (!openSet.has(nb.id)) {
-            openSet.add(nb.id);
+        const tentativeG = gScore[currentId] + nb[1];
+        const nbId = nb[0];
+        if (tentativeG < gScore[nbId]) {
+          cameFrom[nbId] = currentId;
+          gScore[nbId] = tentativeG;
+          fScore[nbId] = tentativeG + heuristic(this.graph.nodes[nbId].origin, goalNode.origin);
+          if (!openSet.has(nbId)) {
+            openSet.add(nbId);
           }
         }
       }
     }
-
-    // console.log('Navigation: path not found from', startPos, 'to', goalPos, openSet, gScore, fScore);
 
     // no path found
     return null;
@@ -958,6 +967,8 @@ export class Navigation {
 
     this.#extractWalkableSurfaces();
     this.#buildNavigationGraph();
+
+    this.save().then(() => Con.Print('Navigation: navigation graph saved!\n'));
 
     Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes and ' + this.graph.edges.length + ' edges.\n');
 
