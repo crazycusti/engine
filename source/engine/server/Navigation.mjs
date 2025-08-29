@@ -3,12 +3,12 @@ import { MissingResourceError } from '../common/Errors.mjs';
 import { BrushModel, Face } from '../common/Mod.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-let { COM, Con, Mod, R, SV } = registry;
+let { CL, COM, Con, R, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
   COM = registry.COM;
   Con = registry.Con;
-  Mod = registry.Mod;
   R = registry.R;
   SV = registry.SV;
 });
@@ -50,7 +50,8 @@ export class Navigation {
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
   /** units of headroom required above waypoint */
-  playerHeight = 56;
+  requiredHeight = 64; // hull 1
+  requiredRadius = 32; // hull 1
 
   constructor(worldmodel) {
     console.assert(worldmodel, 'Navigation: worldmodel is required');
@@ -69,12 +70,9 @@ export class Navigation {
     Con.Print('Navigation: initializing navigation graph...\n');
 
     this.load()
-      .then(() => Con.Print('Navigation: navigation graph loaded\n'))
+      .then(() => Con.Print('Navigation: navigation graph loaded!\n'))
       .catch((err) => {
         Con.PrintWarning('Navigation: ' + err + '\n');
-        if (registry.isDedicatedServer) { // TODO: remove later
-          return;
-        }
         setTimeout(() => this.build(), 1000); // wait a bit for the server to be ready
       });
   }
@@ -289,10 +287,10 @@ export class Navigation {
       };
 
       // margin inside polygon to avoid sampling near edges (in world units projected to local 2D)
-      const innerMargin = 8;
+      const innerMargin = 0;
 
       // sampling resolution (units between samples on the face)
-      const step = 8;
+      const step = 12;
 
       // grid-sample the bounding box and test inclusion
       for (let sx = Math.floor(minX); sx <= Math.ceil(maxX); sx += step) {
@@ -361,6 +359,8 @@ export class Navigation {
       return trace.fraction;
     };
 
+    const rr = this.requiredRadius;
+
     for (const surface of walkableSurfaces) {
       for (const wp of surface.waypoints) {
         const startpos = wp.origin.copy();
@@ -382,11 +382,11 @@ export class Navigation {
 
         // trace around, taking surface.normal into account to follow the slope
         for (const baseDir of [
-          new Vector(16, 0, 0),
-          new Vector(-16, 0, 0),
+          new Vector(rr, 0, 0),
+          new Vector(-rr, 0, 0),
           new Vector(0, 0 ,0),
-          new Vector(0, 16, 0),
-          new Vector(0, -16, 0),
+          new Vector(0, rr, 0),
+          new Vector(0, -rr, 0),
         ]) {
           // FIXME: this does not work correctly on the other direction (E1M1 stairs)
           // project baseDir onto the plane by removing the component along surface.normal
@@ -397,7 +397,7 @@ export class Navigation {
             continue;
           }
           dir.normalize();
-          dir.multiply(16);
+          dir.multiply(this.requiredRadius);
           const sideStart = wp.origin.copy();
           const sideEnd = sideStart.copy().add(dir);
           const frac = quicktrace(sideStart, sideEnd);
@@ -409,9 +409,9 @@ export class Navigation {
 
         // trace around downwards to detect ledges
         for (const dir of [
-          new Vector(-16, -16, -128), new Vector(  0, -16, -128), new Vector( 16, -16, -128),
-          new Vector(-16,   0, -128), new Vector(  0,   0, -128), new Vector( 16,   0, -128),
-          new Vector(-16,  16, -128), new Vector(  0,  16, -128), new Vector( 16,  16, -128),
+          new Vector(-rr, -rr, -128), new Vector(  0, -rr, -128), new Vector( rr, -rr, -128),
+          new Vector(-rr,   0, -128), new Vector(  0,   0, -128), new Vector( rr,   0, -128),
+          new Vector(-rr,  rr, -128), new Vector(  0,  rr, -128), new Vector( rr,  rr, -128),
         ]) {
           // TODO: apply normal vector to dir to follow slope
           const sideStart = wp.origin.copy().add(new Vector(dir[0], dir[1], 0));
@@ -465,8 +465,8 @@ export class Navigation {
     // 2) merge nearby waypoints into graph nodes
     // 3) connect nodes with unobstructed links (trace check)
 
-    const mergeRadius = 24; // units to merge nearby waypoints
-    const linkRadius = 128; // max distance to attempt a link
+    const mergeRadius = 32; // units to merge nearby waypoints
+    const linkRadius =  96; // max distance to attempt a link
 
     // helper: perform a quick trace between two points, return fraction (1.0 = clear)
     const quickTraceSegment = (startpos, endpos) => {
@@ -501,44 +501,107 @@ export class Navigation {
       }
     }
 
-    // 2) merge nearby waypoints into nodes
+    // 2) merge nearby waypoints into nodes using surface-aware clustering
     const nodes = [];
 
-    const distance = (a, b) => a.distanceTo(b);
+    const distance = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 
-    for (const { wp, surface } of allWaypoints) {
-      let merged = false;
+    // Helper function to project a point onto a surface plane
+    const projectOntoSurface = (point, surface) => {
+      const normal = surface.normal;
+      const face = surface.face;
 
-      for (const node of nodes) {
-        // use horizontal + vertical distance together
-        const d = distance(node.origin, wp.origin);
-        if (d <= mergeRadius && (node.origin[2] - wp.origin[2]) === 0) { // FIXME: consider slopes
-          // merge: average positions and combine flags conservatively
-          node.origin.add(wp.origin).multiply(0.5);
-          node.availableHeight = Math.min(node.availableHeight, wp.availableHeight);
-          node.nearLedge = node.nearLedge || wp.nearLedge;
-          node.isClipping = node.isClipping || wp.isClipping;
-          node.isFloating = node.isFloating || wp.isFloating;
-          node.surfaces.add(surface);
-          merged = true;
-          break;
+      // Get a point on the surface plane (use first vertex of the face)
+      let surfacePoint = null;
+      const surfedge = this.worldmodel.surfedges[face.firstedge];
+      if (surfedge > 0) {
+        surfacePoint = new Vector().set(this.worldmodel.vertexes[this.worldmodel.edges[surfedge][0]]);
+      } else {
+        surfacePoint = new Vector().set(this.worldmodel.vertexes[this.worldmodel.edges[-surfedge][1]]);
+      }
+
+      // Project point onto the plane: p' = p - ((p - surfacePoint) · n) * n
+      const pointToSurface = point.copy().subtract(surfacePoint);
+      const distanceToPlane = pointToSurface.dot(normal);
+      return point.copy().subtract(normal.copy().multiply(distanceToPlane));
+    };
+
+    // Group waypoints that should be merged together
+    const waypointGroups = [];
+    const processed = new Set();
+
+    for (let i = 0; i < allWaypoints.length; i++) {
+      if (processed.has(i)) {
+        continue;
+      }
+
+      const { wp: seedWp, surface: seedSurface } = allWaypoints[i];
+      const group = [{ wp: seedWp, surface: seedSurface, index: i }];
+      processed.add(i);
+
+      // Find all nearby waypoints that should merge with this one
+      for (let j = i + 1; j < allWaypoints.length; j++) {
+        if (processed.has(j)) {
+          continue;
+        }
+
+        const { wp: otherWp, surface: otherSurface } = allWaypoints[j];
+
+        // Check if waypoints are close enough and on compatible surfaces
+        const d = distance(seedWp.origin, otherWp.origin);
+        const heightDiff = Math.abs(seedWp.origin[2] - otherWp.origin[2]);
+
+        if (d <= mergeRadius && heightDiff <= 8) { // allow small height differences for slopes
+          group.push({ wp: otherWp, surface: otherSurface, index: j });
+          processed.add(j);
         }
       }
 
-      if (!merged) {
-        const id = nodes.length;
-        const node = {
-          id,
-          origin: wp.origin.copy(),
-          availableHeight: wp.availableHeight,
-          nearLedge: wp.nearLedge,
-          isClipping: wp.isClipping,
-          isFloating: wp.isFloating,
-          surfaces: new Set([surface]),
-          neighbors: [], // will be filled with {id, cost}
-        };
-        nodes.push(node);
+      waypointGroups.push(group);
+    }
+
+    // Create nodes from waypoint groups
+    for (const group of waypointGroups) {
+      const id = nodes.length;
+
+      // Compute centroid of all waypoints in the group
+      const centroid = new Vector();
+      let totalAvailableHeight = 0;
+      let nearLedge = false;
+      let isClipping = false;
+      let isFloating = false;
+      const surfaces = new Set();
+
+      for (const { wp, surface } of group) {
+        centroid.add(wp.origin);
+        totalAvailableHeight += wp.availableHeight;
+        nearLedge = nearLedge || wp.nearLedge;
+        isClipping = isClipping || wp.isClipping;
+        isFloating = isFloating || wp.isFloating;
+        surfaces.add(surface);
       }
+
+      centroid.multiply(1.0 / group.length);
+      const avgAvailableHeight = totalAvailableHeight / group.length;
+
+      // If all waypoints are on the same surface, project centroid onto that surface
+      if (surfaces.size === 1) {
+        const surface = surfaces.values().next().value;
+        centroid.set(projectOntoSurface(centroid, surface));
+      }
+
+      const node = {
+        id,
+        origin: centroid,
+        availableHeight: avgAvailableHeight,
+        nearLedge,
+        isClipping,
+        isFloating,
+        surfaces,
+        neighbors: [], // will be filled with {id, cost}
+      };
+
+      nodes.push(node);
     }
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
@@ -580,6 +643,14 @@ export class Navigation {
           costB += 100; // climbing penalty
         }
 
+        if (a.nearLedge) {
+          costA += 200; // penalty for being near a ledge
+        }
+
+        if (b.nearLedge) {
+          costB += 200; // penalty for being near a ledge
+        }
+
         a.neighbors.push({ id: b.id, cost: costBasis + costA });
         b.neighbors.push({ id: a.id, cost: costBasis + costB });
         edges.push({ a: a.id, b: b.id, cost: costBasis + costA + costB } );
@@ -589,7 +660,6 @@ export class Navigation {
     this.graph = {
       nodes,
       edges,
-      createdAt: Date.now(),
     };
   }
 
@@ -702,13 +772,13 @@ export class Navigation {
       }
     }
 
-    console.log('Navigation: path not found from', startPos, 'to', goalPos, openSet, gScore, fScore);
+    // console.log('Navigation: path not found from', startPos, 'to', goalPos, openSet, gScore, fScore);
 
     // no path found
     return null;
   }
 
-  #emitDot(position, color = 15) {
+  #emitDot(position, color = 15, ttl = Infinity) {
     const pn = R.AllocParticles(1);
 
     if (pn.length !== 1) {
@@ -717,29 +787,28 @@ export class Navigation {
     }
 
     const p = R.particles[pn[0]];
-    p.die = Infinity;
+    p.die = CL.state.time + ttl;
     p.color = color;
-    if (p.vel) p.vel.clear(); else p.vel = new Vector(0, 0, 0);
+    p.vel = new Vector(0, 0, 0);
     p.org = position.copy();
+    p.type = R.ptype.tracer;
   }
 
   #debugNavigation() {
     for (const node of this.graph.nodes) {
-      let color = 15;
+      let color = 144;
 
       if (node.nearLedge) {
-        color = 47;
+        color = 251;
       }
 
-      this.#emitDot(node.origin, color);
+      this.#emitDot(node.origin.copy().add(new Vector(0, 0, 16)), color);
     }
-
-    console.log('nodes:', this.graph.nodes.length, 'edges:', this.graph.edges.length);
 
     // E1M2 going on the catwalk
     // const start = new Vector(912.6165544238987, -879.6764461636693, 440.0294031164332);
-    const start = new Vector(1111.4295919874462, -418.8668693423086, 312.03125);
-    const stop = new Vector(1404.9883258600796, 157.98704237046152, 320.03125);
+    // const start = new Vector(1111.4295919874462, -418.8668693423086, 312.03125);
+    // const stop = new Vector(1404.9883258600796, 157.98704237046152, 320.03125);
 
     // E1M2 a bit random through the map
     // const start = new Vector(1463.5156153064931, -387.4401579058118, 312.0007825395648);
@@ -749,11 +818,11 @@ export class Navigation {
     // const start = new Vector(825.4179307768227, 2615.8352072561884, -71.96875);
     // const stop = new Vector(1308.7850555358525, 1116.9281102070906, -255.96875);
 
-    const path = registry.SV.server.navigation.findPath(start, stop);
+    // const path = registry.SV.server.navigation.findPath(start, stop);
 
-    if (path) {
-      this.showPath(path);
-    }
+    // if (path) {
+    //   this.showPath(path);
+    // }
   }
 
   /** @param {Vector[]} vectors waypoints */
@@ -774,7 +843,7 @@ export class Navigation {
       // Sample along the segment every 5 units
       for (let dist = 0; dist <= totalDistance; dist += stepLength) {
         const samplePoint = start.copy().add(diff.copy().multiply(dist));
-        this.#emitDot(samplePoint, 251);
+        this.#emitDot(samplePoint, 251, 10);
       }
     }
   }
@@ -810,13 +879,18 @@ export class Navigation {
   }
 
   build() {
-    console.log('Navigation: building navigation graph...', this.worldmodel);
+    Con.Print('Navigation: node graph out of date, rebuilding...\n');
 
     this.#extractWalkableSurfaces();
     this.#buildNavigationGraph();
 
+    Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes and ' + this.graph.edges.length + ' edges.\n');
+
     if (R) {
-      setTimeout(() => this.#debugNavigation(), 1000); // wait a bit for renderer to initialize
+      setTimeout(() => {
+        // this.#debugWaypoints();
+        // this.#debugNavigation();
+      }, 1000); // wait a bit for renderer to initialize
     }
   }
 };

@@ -526,7 +526,7 @@ export class ServerEdict {
    * @param {number} dist distance to move
    * @returns {boolean} true, when successful
    */
-  moveToGoal(dist) {
+  moveToGoal(dist, target = null) {
     if ((this.entity.flags & (SV.fl.onground + SV.fl.fly + SV.fl.swim)) === 0) {
       return false;
     }
@@ -537,12 +537,16 @@ export class ServerEdict {
 
     console.assert(goal !== null, 'must have goal for moveToGoal');
 
+    if (target === null) {
+      target = goal.entity.origin;
+    }
+
     if (enemy !== null && !enemy.isWorld() && SV.CloseEnough(this, goal, dist)) {
       return false;
     }
 
     if (Math.random() >= 0.75 || !SV.StepDirection(this, this.entity.ideal_yaw, dist)) {
-      SV.NewChaseDir(this, goal, dist);
+      SV.NewChaseDir(this, target, dist);
 
       return true;
     }

@@ -1763,11 +1763,11 @@ SV.StepDirection = function(ent, yaw, dist) {
   return false;
 };
 
-SV.NewChaseDir = function(actor, enemy, dist) {
+SV.NewChaseDir = function(actor, endpos, dist) {
   const olddir = Vector.anglemod(((actor.entity.ideal_yaw / 45.0) >> 0) * 45.0);
   const turnaround = Vector.anglemod(olddir - 180.0);
-  const deltax = enemy.entity.origin[0] - actor.entity.origin[0];
-  const deltay = enemy.entity.origin[1] - actor.entity.origin[1];
+  const deltax = endpos[0] - actor.entity.origin[0];
+  const deltay = endpos[1] - actor.entity.origin[1];
   let dx; let dy;
   if (deltax > 10.0) {
     dx = 0.0;

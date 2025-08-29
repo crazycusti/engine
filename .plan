@@ -337,6 +337,7 @@ class MainMenu extends BaseMenu {
   * missing dynamic links such as teleporters, also no handling of doors and switches
 * ChatGPT is pretty damn good in explaining all of these things and produces somewhat usable code
 * learned about Newell’s method regarding n-gons
+* should add a feature switch for the new pathfinding
 
 ### 2025-08-25
 
