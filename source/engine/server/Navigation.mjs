@@ -1,6 +1,8 @@
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
-import { MissingResourceError } from '../common/Errors.mjs';
+import Cvar from '../common/Cvar.mjs';
+import { CorruptedResourceError, MissingResourceError, NotImplementedError } from '../common/Errors.mjs';
+import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { BrushModel, Face } from '../common/Mod.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
@@ -41,9 +43,20 @@ class WalkableSurface {
   /** @type {Waypoint[]} */
   waypoints = [];
 
-  /** @param {Face} face face */
+  /**
+   * @param {Face} face face
+   */
   constructor(face) {
     this.face = face;
+  }
+
+  serialize() {
+    return [
+      this.stability,
+      [...this.normal],
+      null, // TODO
+      null, // TODO
+    ];
   }
 };
 
@@ -70,7 +83,35 @@ class Node {
     this.id = id;
     this.origin.set(origin);
   }
+
+  serialize() {
+    return [
+      this.id,
+      [...this.origin],
+      this.availableHeight,
+      this.nearLedge,
+      this.isClipping,
+      this.isFloating,
+      Array.from(this.surfaces).map((s) => s.serialize()),
+      this.neighbors.slice(),
+    ];
+  }
+
+  static deserialize(data, navigation) {
+    const node = new Node(data[0], new Vector(...data[1]));
+
+    node.availableHeight = data[2];
+    node.nearLedge = data[3];
+    node.isClipping = data[4];
+    node.isFloating = data[5];
+    node.surfaces = new Set(data[6].map((id) => null)); // TODO
+    node.neighbors = data[7].slice();
+
+    return node;
+  }
 };
+
+const NAV_FILE_VERSION = 1;
 
 export class Navigation {
   /** maximum slope that is passable */
@@ -96,9 +137,10 @@ export class Navigation {
       /** @type {WalkableSurface[]} */
       walkableSurfaces: [],
     };
+  }
 
-    // developer toggle for runtime debug visualization
-    this.debugNav = false;
+  get debugNav() {
+    return Cvar.FindVar('developer').value !== 0;
   }
 
   init() {
@@ -117,20 +159,30 @@ export class Navigation {
   }
 
   async load() {
-    const filename = `maps/${SV.server.mapname}.nav`;
-    const data = await COM.LoadFileAsync(filename);
+    // const filename = `maps/${SV.server.mapname}.nav`;
+    // const data = await COM.LoadFileAsync(filename);
 
-    if (!data) {
-      throw new MissingResourceError(filename);
-    }
+    // if (!data) {
+    //   throw new MissingResourceError(filename);
+    // }
 
-    // TODO
+    // TODO: implement loading
+    throw new NotImplementedError('Navigation.load');
   }
 
   async save() {
-    const filename = `maps/${SV.server.mapname}.nav`;
+    // const filename = `maps/${SV.server.mapname}.nav`;
 
-    // TODO
+    // const struct = {
+    //   version: NAV_FILE_VERSION,
+    //   mapname: SV.server.mapname,
+    //   checksum: this.worldmodel.checksum,
+    //   edges: this.graph.edges,
+
+    // }
+
+    // TODO: implement saving
+    throw new NotImplementedError('Navigation.save');
   }
 
   #extractWalkableSurfaces() {
@@ -472,7 +524,7 @@ export class Navigation {
             wp.isFloating = true;
           }
 
-          if (sideStart[2] - sideEnd[2] > 64) {
+          if (sideStart[2] - sideEnd[2] > 32) {
             wp.nearLedge = true;
             break;
           }
@@ -508,8 +560,8 @@ export class Navigation {
     // 2) merge nearby waypoints into graph nodes
     // 3) connect nodes with unobstructed links (trace check)
 
-    const mergeRadius = 32; // units to merge nearby waypoints
-    const linkRadius =  96; // max distance to attempt a link
+    const mergeRadius = 24; // units to merge nearby waypoints
+    const linkRadius =  64; // max distance to attempt a link
 
     // helper: perform a quick trace between two points, return fraction (1.0 = clear)
     const quickTraceSegment = (startpos, endpos) => {
@@ -546,7 +598,8 @@ export class Navigation {
 
     // 2) merge nearby waypoints into nodes using surface-aware clustering
     /** @type {Node[]} */
-    const nodes = [];
+    const nodes = this.graph.nodes;
+    nodes.length = 0;
 
     const distance = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 
@@ -646,7 +699,8 @@ export class Navigation {
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
     /** @type {number[][]} */
-    const edges = [];
+    const edges = this.graph.edges;
+    edges.length = 0;
 
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
@@ -677,19 +731,19 @@ export class Navigation {
         let costA = 0, costB = 0;
 
         if (b.origin[2] - a.origin[2] > 16) {
-          costA += 100; // climbing penalty
+          costA += 10; // climbing penalty
         }
 
         if (a.origin[2] - b.origin[2] > 16) {
-          costB += 100; // climbing penalty
+          costB += 10; // climbing penalty
         }
 
         if (a.nearLedge) {
-          costA += 200; // penalty for being near a ledge
+          costA += 10; // penalty for being near a ledge
         }
 
         if (b.nearLedge) {
-          costB += 200; // penalty for being near a ledge
+          costB += 10; // penalty for being near a ledge
         }
 
         a.neighbors.push([ b.id, costBasis + costA ]);
@@ -697,15 +751,42 @@ export class Navigation {
         edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
+  }
 
-    this.graph = {
-      nodes,
-      edges,
-      octree: null, // built later
-    };
+  #buildSpecialConnections() {
+    // looking for teleporters
+    for (const teleporterEdict of ServerEngineAPI.FindAllByFieldAndValue('classname', 'trigger_teleport')) {
+      const source = teleporterEdict.entity;
+      if (!source.target) {
+        continue;
+      }
 
-    // build spatial index for fast nearest-node lookups
-    this.#buildOctree();
+      const destination = ServerEngineAPI.FindByFieldAndValue('targetname', source.target)?.entity;
+
+      if (!destination) {
+        console.warn('Navigation: teleporter without a valid target', source);
+        continue;
+      }
+
+      const sp = source.centerPoint.copy(), dp = destination.centerPoint.copy();
+
+      // fixing back the z-axis to 0
+      sp[2] -= (source.absmax[2] - source.absmin[2]) / 2;
+      dp[2] -= (destination.absmax[2] - destination.absmin[2]) / 2;
+
+      console.log('Navigation: found teleporter', sp, '-->', dp);
+
+      const destNode = this.#findNearestNode(dp, 96); // Just grab one in proximity of the destination
+
+      if (destNode) {
+        for (const sourceNode of this.#findNearestNodes(sp, 64)) { // but link all nearby nodes at the source
+          console.log('Navigation: linking teleporter nodes', sourceNode.id, '-->', destNode.id);
+          const cost = -50; // strong incentive to use teleporters
+          sourceNode.neighbors.push([ destNode.id, cost ]);
+          this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
+        }
+      }
+    }
   }
 
   #buildOctree() {
@@ -746,14 +827,17 @@ export class Navigation {
    * @returns {Node|null} node if found, null if none within maxDist or graph is empty
    */
   #findNearestNode(position, maxDist = 512) {
-    if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
+    if (this.graph.nodes.length === 0) {
       return null;
     }
 
-    const n = this.graph.octree.nearest(position, maxDist);
+    // first try octree lookup, if available (linking specials won’t have access to the Octree yet)
+    if (this.graph.octree) {
+      const n = this.graph.octree.nearest(position, maxDist);
 
-    if (n) {
-      return n;
+      if (n) {
+        return n;
+      }
     }
 
     // fallthrough to full scan if nothing found within maxDist in octree
@@ -774,11 +858,26 @@ export class Navigation {
   }
 
   /**
+   * Find nearest graph node to a world position. Not using the Octree.
+   * @param {Vector} position world-space position to query
+   * @param {number} maxDist maximum search distance in world units
+   * @yields {Node} node if found, null if none within maxDist or graph is empty
+   */
+  *#findNearestNodes(position, maxDist = 512) {
+    for (const node of this.graph.nodes) {
+      const d = position.distanceTo(node.origin);
+      if (d <= maxDist) {
+        yield node;
+      }
+    }
+  }
+
+  /**
    * Find path between two world positions using A* over the navgraph.
    * Returns an array of Vector positions (node origins) or null if no path.
-   * @param {Vector} startPos
-   * @param {Vector} goalPos
-   * @returns {Vector[]|null} path made out of waypoints, or null if no path found
+   * @param {Vector} startPos start position
+   * @param {Vector} goalPos goal position
+   * @returns {Vector[]|null} path made out of waypoints, or null if no path found, it will include start and end positions
    */
   findPath(startPos, goalPos) {
     if (!this.graph || !this.graph.nodes || this.graph.nodes.length === 0) {
@@ -813,6 +912,8 @@ export class Navigation {
     gScore[startNode.id] = 0;
     fScore[startNode.id] = heuristic(startNode.origin, goalNode.origin);
 
+    // TODO: limit the size, since the graph can be huge and things are moving around anyway all the time
+    //       the AI code already knows to refresh the path after some time or distance traveled, so this is fine
     while (openSet.size > 0) {
       // pick node in openSet with lowest fScore
       let currentId = null;
@@ -888,25 +989,6 @@ export class Navigation {
 
       this.#emitDot(node.origin.copy().add(new Vector(0, 0, 16)), color);
     }
-
-    // E1M2 going on the catwalk
-    // const start = new Vector(912.6165544238987, -879.6764461636693, 440.0294031164332);
-    // const start = new Vector(1111.4295919874462, -418.8668693423086, 312.03125);
-    // const stop = new Vector(1404.9883258600796, 157.98704237046152, 320.03125);
-
-    // E1M2 a bit random through the map
-    // const start = new Vector(1463.5156153064931, -387.4401579058118, 312.0007825395648);
-    // const stop = new Vector(-271.0783923844472, 159.2369756459818, 320.01322570216666);
-
-    // E1M1 stairs
-    // const start = new Vector(825.4179307768227, 2615.8352072561884, -71.96875);
-    // const stop = new Vector(1308.7850555358525, 1116.9281102070906, -255.96875);
-
-    // const path = registry.SV.server.navigation.findPath(start, stop);
-
-    // if (path) {
-    //   this.showPath(path);
-    // }
   }
 
   /** @param {Vector[]} vectors waypoints */
@@ -967,15 +1049,19 @@ export class Navigation {
 
     this.#extractWalkableSurfaces();
     this.#buildNavigationGraph();
-
-    this.save().then(() => Con.Print('Navigation: navigation graph saved!\n'));
+    this.#buildSpecialConnections();
+    this.#buildOctree();
 
     Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes and ' + this.graph.edges.length + ' edges.\n');
+
+    this.save()
+      .then(() => Con.Print('Navigation: navigation graph saved!\n'))
+      .catch((err) => Con.PrintError('Navigation: failed to save navigation graph: ' + err + '\n'));
 
     if (R) {
       setTimeout(() => {
         if (this.debugNav) {
-          this.#debugWaypoints();
+          // this.#debugWaypoints();
           this.#debugNavigation();
         }
       }, 1000); // wait a bit for renderer to initialize

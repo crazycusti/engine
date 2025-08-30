@@ -4,6 +4,7 @@ import { eventBus, registry } from '../registry.mjs';
 import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
 import Q from '../../shared/Q.mjs';
 import W, { translateIndexToRGBA, WadFileInterface } from './W.mjs';
+import { CRC16CCITT } from './CRC.mjs';
 
 const Mod = {};
 
@@ -62,6 +63,11 @@ export class BaseModel {
     this._scale_origin = new Vector();
     this._random = false; // FIXME: read but unused
 
+    // public variables
+    /** whether the file still needs loading */
+    this.needload = true;
+    /** simple CRC checksum to check if things are still the same */
+    this.checksum = 0;
 
     // public variables
     this.mins = []; // required by PF, R, CL, SV (on worldmodel)
@@ -276,6 +282,7 @@ Mod.LoadModel = function(mod, crash) { // private method
   }
   const loadmodel = mod; // TODO: refactor into this
   mod.needload = false;
+  mod.checksum = CRC16CCITT.Block(new Uint8Array(buf));
   switch ((new DataView(buf)).getUint32(0, true)) {
     case 0x4f504449:
       Mod.LoadAliasModel(loadmodel, buf);
@@ -289,6 +296,11 @@ Mod.LoadModel = function(mod, crash) { // private method
   return mod;
 };
 
+/**
+ * @param {BaseModel} mod model to load into
+ * @param {boolean} crash whether to throw an error if the model is not found
+ * @returns {Promise<BaseModel|null>} the loaded model or null if not found
+ */
 Mod.LoadModelAsync = async function(mod, crash) { // private method
   if (mod.needload !== true) {
     return mod;
@@ -302,6 +314,7 @@ Mod.LoadModelAsync = async function(mod, crash) { // private method
   }
   const loadmodel = mod; // TODO: refactor into this
   mod.needload = false;
+  mod.checksum = CRC16CCITT.Block(new Uint8Array(buf));
   switch ((new DataView(buf)).getUint32(0, true)) {
     case 0x4f504449:
       Mod.LoadAliasModel(loadmodel, buf);
@@ -319,6 +332,7 @@ Mod.LoadModelAsync = async function(mod, crash) { // private method
  * @param {string} name filename
  * @param {boolean} crash whether to throw an error if the model is not found
  * @returns {BaseModel|null} the loaded model or null if not found
+ * @deprecated use Mod.LoadModelAsync instead
  */
 Mod.ForName = function(name, crash = false) { // public method
   return Mod.LoadModel(Mod.FindName(name), crash);
@@ -912,6 +926,11 @@ Mod.LoadPlanes = function(loadmodel, buf) {
   }
 };
 
+/**
+ *
+ * @param {BrushModel} loadmodel
+ * @param {*} buffer
+ */
 Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
   const version = (new DataView(buffer)).getUint32(0, true);

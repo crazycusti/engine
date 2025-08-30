@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-30
+
+* working more on navigation
+
 ### 2025-08-29
 
 * started working on a navigation mesh, next steps:

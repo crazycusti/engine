@@ -38,6 +38,11 @@ export class CRC16CCITT {
     0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
   ];
 
+  /**
+   * Calculates the CRC-16-CCITT checksum for the given data block.
+   * @param {Uint8Array} start - The input data block.
+   * @returns {number} The calculated CRC-16-CCITT checksum.
+   */
   static Block(start) {
     let crcvalue = 0xffff;
     for (let i = 0; i < start.length; i++) {
