@@ -3306,6 +3306,7 @@ SV.ClipMoveToEntity = function(ent, start, mins, maxs, end) {
   const trace = {
     fraction: 1.0,
     allsolid: true,
+    startsolid: false,
     endpos: end.copy(),
     plane: {normal: new Vector(), dist: 0.0},
     ent: null,
@@ -3352,6 +3353,9 @@ SV.ClipToLinks = function(node, clip) {
         continue;
       }
     }
+    if (clip.ignoreedicts && clip.ignoreedicts.includes(touch.num)) {
+      continue;
+    }
     let trace;
     if ((touch.entity.flags & SV.fl.monster) !== 0) {
       trace = SV.ClipMoveToEntity(touch, clip.start, clip.mins2, clip.maxs2, clip.end);
@@ -3384,9 +3388,10 @@ SV.ClipToLinks = function(node, clip) {
  * @param {Vector} end end vector
  * @param {number} type move type, one of SV.move.*
  * @param {ServerEdict} passedict what edict to pass
+ * @param {(ServerEdict | number)[]} ignoreedicts list of edicts to ignore
  * @returns {Trace} trace result
  */
-SV.Move = function(start, mins, maxs, end, type, passedict) {
+SV.Move = function(start, mins, maxs, end, type, passedict, ignoreedicts = []) {
   const clip = {
     trace: SV.ClipMoveToEntity(SV.server.edicts[0], start, mins, maxs, end),
     start: start,
@@ -3396,7 +3401,8 @@ SV.Move = function(start, mins, maxs, end, type, passedict) {
     maxs: maxs,
     maxs2: type === SV.move.missile ? new Vector(15.0, 15.0, 15.0) : maxs,
     type: type,
-    passedict: passedict,
+    passedict,
+    ignoreedicts,
     boxmins: new Vector(),
     boxmaxs: new Vector(),
   };

@@ -33,6 +33,25 @@ class Waypoint {
   constructor(origin) {
     this.origin.set(origin);
   }
+
+  serialize() {
+    return [
+      [...this.origin],
+      this.availableHeight,
+      this.nearLedge,
+      this.isClipping,
+      this.isFloating,
+    ];
+  }
+
+  static deserialize(data) {
+    const wp = new Waypoint(new Vector(...data[0]));
+    wp.availableHeight = data[1];
+    wp.nearLedge = data[2];
+    wp.isClipping = data[3];
+    wp.isFloating = data[4];
+    return wp;
+  }
 }
 
 class WalkableSurface {
@@ -47,18 +66,30 @@ class WalkableSurface {
 
   /**
    * @param {Face} face face
+   * @param {number} index face index in the worldmodel
    */
-  constructor(face) {
+  constructor(face, index) {
     this.face = face;
+    this.faceIndex = index;
   }
 
   serialize() {
     return [
       this.stability,
       [...this.normal],
-      null, // TODO
-      null, // TODO
+      this.faceIndex,
+      this.waypoints.map((wp) => wp.serialize()),
     ];
+  }
+
+  static deserialize(data, navigation) {
+    const faceIndex = data[2];
+    const face = navigation.worldmodel.faces[faceIndex];
+    const surface = new WalkableSurface(face, faceIndex);
+    surface.stability = data[0];
+    surface.normal = new Vector(...data[1]);
+    surface.waypoints = data[3].map((wpData) => Waypoint.deserialize(wpData));
+    return surface;
   }
 };
 
@@ -99,6 +130,10 @@ class Node {
     ];
   }
 
+  /**
+   * @param {any[]} data serialized data
+   * @param {Navigation} navigation
+   */
   static deserialize(data, navigation) {
     const node = new Node(data[0], new Vector(...data[1]));
 
@@ -106,7 +141,7 @@ class Node {
     node.nearLedge = data[3];
     node.isClipping = data[4];
     node.isFloating = data[5];
-    node.surfaces = new Set(data[6].map((id) => null)); // TODO
+    node.surfaces = new Set(data[6].map((id) => WalkableSurface.deserialize(id, navigation)));
     node.neighbors = data[7].slice();
 
     return node;
@@ -130,8 +165,6 @@ export class Navigation {
     this.graph = {
       /** @type {Node[]} */
       nodes: [],
-      /** @type {number[][]} @deprecated unused */
-      edges: [],
       /** @type {?Octree<Node>} */
       octree: null,
     };
@@ -164,30 +197,63 @@ export class Navigation {
   }
 
   async load() {
-    // const filename = `maps/${SV.server.mapname}.nav`;
-    // const data = await COM.LoadFileAsync(filename);
+    const filename = `maps/${SV.server.mapname}.nav`;
+    const data = await COM.LoadTextFileAsync(filename);
 
-    // if (!data) {
-    //   throw new MissingResourceError(filename);
-    // }
+    if (!data) {
+      throw new MissingResourceError(filename);
+    }
 
-    // TODO: implement loading
-    throw new NotImplementedError('Navigation.load');
+    const struct = JSON.parse(data);
+
+    if (struct.id !== 'QS navmesh' || struct.version !== NAV_FILE_VERSION) {
+      throw new CorruptedResourceError(filename, 'invalid header or version');
+    }
+
+    if (struct.config.requiredHeight !== this.requiredHeight ||
+        struct.config.requiredRadius !== this.requiredRadius
+    ) {
+      throw new CorruptedResourceError(filename, 'configuration mismatch');
+    }
+
+    if (struct.worldmodel.name !== SV.server.mapname ||
+        struct.worldmodel.checksum !== this.worldmodel.checksum
+    ) {
+      throw new CorruptedResourceError(filename, 'wrong or outdated map');
+    }
+
+    const { nodes, relinkSkiplist } = struct.graph;
+
+    this.relinkSkiplist.push(...relinkSkiplist);
+
+    for (const dnode of nodes) {
+      this.graph.nodes.push(Node.deserialize(dnode, this));
+    }
+
+    this.#buildOctree();
   }
 
   async save() {
-    // const filename = `maps/${SV.server.mapname}.nav`;
+    const filename = `maps/${SV.server.mapname}.nav`;
 
-    // const struct = {
-    //   version: NAV_FILE_VERSION,
-    //   mapname: SV.server.mapname,
-    //   checksum: this.worldmodel.checksum,
-    //   edges: this.graph.edges,
+    const struct = {
+      id: 'QS navmesh',
+      version: NAV_FILE_VERSION,
+      worldmodel: {
+        name: SV.server.mapname,
+        checksum: this.worldmodel.checksum,
+      },
+      config: {
+        requiredHeight: this.requiredHeight,
+        requiredRadius: this.requiredRadius,
+      },
+      graph: {
+        relinkSkiplist: this.relinkSkiplist,
+        nodes: this.graph.nodes.map((n) => n.serialize()),
+      },
+    };
 
-    // }
-
-    // TODO: implement saving
-    throw new NotImplementedError('Navigation.save');
+    COM.WriteTextFile(filename, JSON.stringify(struct));
   }
 
   /**
@@ -220,15 +286,7 @@ export class Navigation {
   }
 
   #testTraceDynamic(startpos, endpos, mins = Vector.origin, maxs = Vector.origin) {
-    const trace = SV.Move(startpos.copy(), mins, maxs, endpos.copy(), SV.move.nomonsters, null);
-
-    if (trace.ent && this.debugNav) {
-      console.debug('Navigation: trace hit entity', startpos.toString(), 'to', endpos.toString(), 'at', trace.endpos.toString(), trace.ent.entity);
-      this.showPath([startpos, endpos], 244);
-      this.#emitDot(trace.endpos, 244, 3);
-    }
-
-    return trace;
+    return SV.Move(startpos.copy(), mins, maxs, endpos.copy(), SV.move.normal, null, this.relinkSkiplist);
   }
 
   #extractWalkableSurfaces() {
@@ -236,12 +294,14 @@ export class Navigation {
     const downwards = new Vector(0, 0, -1);
 
     // Pass 1: collect all potentially walkable surfaces
-    for (const face of this.worldmodel.faces) {
+    for (let i = 0; i < this.worldmodel.faces.length; i++) {
+      const face = this.worldmodel.faces[i];
+
       if (face.numedges < 3) {
         continue;
       }
 
-      const walkableSurface = new WalkableSurface(face);
+      const walkableSurface = new WalkableSurface(face, i);
 
       // Stored normal face is not reliable, recompute it
       const faceNormal = (() => {
@@ -693,8 +753,8 @@ export class Navigation {
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
     /** @type {number[][]} @deprecated unused */
-    const edges = this.graph.edges;
-    edges.length = 0;
+    // const edges = this.graph.edges;
+    // edges.length = 0;
 
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
@@ -738,7 +798,7 @@ export class Navigation {
 
         a.neighbors.push([ b.id, costBasis + costA, 0 ]);
         b.neighbors.push([ a.id, costBasis + costB, 0 ]);
-        edges.push([a.id, b.id, costBasis + costA + costB]);
+        // edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
   }
@@ -785,57 +845,7 @@ export class Navigation {
       return;
     }
 
-    const entity = edict.entity;
-
-    const centerPoint = entity.mins.copy().add(entity.maxs).multiply(0.5);
-
-    console.debug('Navigation: relinkEdict', centerPoint, entity);
-
-    for (const node of this.#findNearestNodes(centerPoint, 256)) { // TODO: tune radius
-      if (!node) {
-        console.warn('Navigation: relinkEdict: no nearby navnode found for', centerPoint, entity);
-        continue;
-      }
-
-      const a = node.origin.copy();
-      a[2] += 18.0; // STEPSIZE
-
-      for (const nb of node.neighbors) {
-        if (nb[1] === 0) { // teleporter link, skip
-          continue;
-        }
-
-        const neighborNode = this.graph.nodes[nb[0]];
-
-        console.assert(neighborNode);
-
-        let penalty = nb[2];
-
-        const b = neighborNode.origin.copy();
-
-        b[2] += 18.0; // STEPSIZE
-
-        // check if the link is blocked or unblocked
-        const { fraction } = this.#testTraceDynamic(a, b);
-        if (fraction < 1.0) {
-          // link is blocked, disable it
-          penalty = Infinity;
-        } else {
-          // link is back open, remove penalty
-          penalty = 0;
-        }
-
-        nb[2] = penalty;
-
-        // also update the reverse link
-        for (const rnb of neighborNode.neighbors) {
-          if (rnb[0] === node.id) {
-            rnb[2] = penalty;
-            break;
-          }
-        }
-      }
-    }
+    // TODO:
   }
 
   #relinkAll() {
@@ -894,13 +904,13 @@ export class Navigation {
       for (const sourceNodeNeighbor of this.#findNearestNodes(sp, 64)) {
         console.debug('Navigation: linking teleporter nodes', sourceNodeNeighbor.id, '-->', sourceNode.id);
         sourceNodeNeighbor.neighbors.push([ sourceNode.id, cost, 0 ]); // one-way link
-        this.graph.edges.push([ sourceNodeNeighbor.id, sourceNode.id, cost ]);
+        // this.graph.edges.push([ sourceNodeNeighbor.id, sourceNode.id, cost ]);
       }
 
       // link the new node to the destination node
       console.debug('Navigation: linking teleporter nodes', sourceNode.id, '-->', destNode.id);
       sourceNode.neighbors.push([ destNode.id, cost, 0 ]); // one-way link
-      this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
+      // this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
     }
   }
 
@@ -1032,6 +1042,19 @@ export class Navigation {
 
     const heuristic = (a, b) => a.distanceTo(b);
 
+    // const isBlocked = (a, b) => {
+    //   const aa = a.copy(); aa[2] += 18.0; // STEPSIZE
+    //   const ab = b.copy(); ab[2] += 18.0; // STEPSIZE
+
+    //   const { fraction } = this.#testTraceDynamic(aa, ab);
+
+    //   // if (fraction < 1.0) {
+    //   //   this.showPath([aa, ab], 192);
+    //   // }
+
+    //   return fraction < 1.0;
+    // };
+
     for (const n of this.graph.nodes) {
       gScore[n.id] = Infinity;
       fScore[n.id] = Infinity;
@@ -1074,6 +1097,12 @@ export class Navigation {
 
       for (const nb of this.graph.nodes[currentId].neighbors) {
         const tentativeG = gScore[currentId] + nb[1] + nb[2];
+
+        // // perform a quick trace check to see if the link is still valid (nb[1] == 0 means teleporter, always valid)
+        // if (startNode.id !== currentId && isBlocked(this.graph.nodes[currentId].origin, this.graph.nodes[nb[0]].origin) && nb[1] > 0) {
+        //   continue;
+        // }
+
         const nbId = nb[0];
         if (tentativeG < gScore[nbId]) {
           cameFrom[nbId] = currentId;
@@ -1091,6 +1120,10 @@ export class Navigation {
   }
 
   #emitDot(position, color = 15, ttl = Infinity) {
+    if (!R) {
+      return;
+    }
+
     const pn = R.AllocParticles(1);
 
     if (pn.length !== 1) {
@@ -1136,7 +1169,7 @@ export class Navigation {
       // Sample along the segment every 5 units
       for (let dist = 0; dist <= totalDistance; dist += stepLength) {
         const samplePoint = start.copy().add(diff.copy().multiply(dist));
-        this.#emitDot(samplePoint, 251, 10);
+        this.#emitDot(samplePoint, color, 1);
       }
     }
   }
@@ -1179,7 +1212,7 @@ export class Navigation {
     this.#buildSpecialConnections();
     this.#buildOctree();
 
-    Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes and ' + this.graph.edges.length + ' edges.\n');
+    Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes.\n');
 
     this.save()
       .then(() => Con.Print('Navigation: navigation graph saved!\n'))

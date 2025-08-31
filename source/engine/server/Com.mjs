@@ -1,6 +1,6 @@
 /* global Buffer */
 
-import { promises as fsPromises, openSync, readSync, closeSync, existsSync, readFileSync, constants } from 'fs';
+import { promises as fsPromises, openSync, readSync, closeSync, existsSync, readFileSync, writeFileSync, constants } from 'fs';
 
 import Q from '../../shared/Q.mjs';
 import { CRC16CCITT as CRC } from '../common/CRC.mjs';
@@ -203,5 +203,18 @@ export default class NodeCOM extends COM {
     } finally {
       closeSync(fd);
     }
+  }
+
+  static WriteTextFile(filename, data) {
+    const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
+
+    try {
+      writeFileSync(filepath, data);
+    } catch (e) {
+      Sys.Print('COM.WriteTextFile: failed on ' + filename + ', ' + e.message + '\n');
+      return false;
+    }
+    Sys.Print('COM.WriteTextFile: ' + filename + '\n');
+    return true;
   }
 };
