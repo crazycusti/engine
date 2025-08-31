@@ -1,3 +1,4 @@
+import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Cvar from '../common/Cvar.mjs';
@@ -5,6 +6,7 @@ import { CorruptedResourceError, MissingResourceError, NotImplementedError } fro
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { BrushModel, Face } from '../common/Mod.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { ServerEdict } from './Edict.mjs';
 
 let { CL, COM, Con, R, SV } = registry;
 
@@ -72,7 +74,7 @@ class Node {
   isFloating = false;
   /** @type {Set<WalkableSurface>} */
   surfaces = new Set();
-  /** @type {number[][]} list of [id, cost] */
+  /** @type {number[][]} list of [id, cost, temporary cost adjustment] */
   neighbors = [];
 
   /**
@@ -117,8 +119,8 @@ export class Navigation {
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
   /** units of headroom required above waypoint */
-  requiredHeight = 64; // hull 1
-  requiredRadius = 32; // hull 1
+  requiredHeight = -Def.hull[0][0][2] + Def.hull[0][1][2]; // hull 1
+  requiredRadius = (-Def.hull[0][0][0] + Def.hull[0][1][0]) / 2; // hull 1 (radius, not diameter)
 
   constructor(worldmodel) {
     console.assert(worldmodel, 'Navigation: worldmodel is required');
@@ -128,6 +130,7 @@ export class Navigation {
     this.graph = {
       /** @type {Node[]} */
       nodes: [],
+      /** @type {number[][]} @deprecated unused */
       edges: [],
       /** @type {?Octree<Node>} */
       octree: null,
@@ -155,7 +158,9 @@ export class Navigation {
   }
 
   shutdown() {
-
+    for (const timeout of Object.values(this.relinkEdictCooldown)) {
+      clearTimeout(timeout);
+    }
   }
 
   async load() {
@@ -183,6 +188,47 @@ export class Navigation {
 
     // TODO: implement saving
     throw new NotImplementedError('Navigation.save');
+  }
+
+  /**
+   * @param {Vector} startpos start position (waypoint)
+   * @param {Vector} endpos end position (waypoint), will overwrite!
+   * @returns {number} fraction of unobstructed trace, 0 = completely blocked, 1 = fully clear
+   */
+  #testTraceStatic(startpos, endpos) {
+    const trace = {
+      fraction: 1.0,
+      allsolid: true,
+      startsolid: false,
+      endpos,
+      plane: {normal: new Vector(), dist: 0.0},
+      ent: null,
+    };
+    SV.RecursiveHullCheck(
+      SV.server.worldmodel.hulls[0],
+      SV.server.worldmodel.hulls[0].firstclipnode,
+      0.0, 1.0,
+      startpos.copy(),
+      endpos.copy(),
+      trace,
+    );
+    endpos.set(trace.endpos);
+    if (trace.allsolid) {
+      return -1;
+    }
+    return trace.fraction;
+  }
+
+  #testTraceDynamic(startpos, endpos, mins = Vector.origin, maxs = Vector.origin) {
+    const trace = SV.Move(startpos.copy(), mins, maxs, endpos.copy(), SV.move.nomonsters, null);
+
+    if (trace.ent && this.debugNav) {
+      console.debug('Navigation: trace hit entity', startpos.toString(), 'to', endpos.toString(), 'at', trace.endpos.toString(), trace.ent.entity);
+      this.showPath([startpos, endpos], 244);
+      this.#emitDot(trace.endpos, 244, 3);
+    }
+
+    return trace;
   }
 
   #extractWalkableSurfaces() {
@@ -424,52 +470,23 @@ export class Navigation {
 
     // Pass 3: prune waypoints that do not have enough headroom
     // - for each waypoint, trace upwards to see how much free space is above it
-
-    /**
-     * @param {Vector} startpos start position (waypoint)
-     * @param {Vector} endpos end position (waypoint), will overwrite!
-     * @returns {number} fraction of unobstructed trace, 0 = completely blocked, 1 = fully clear
-     */
-    const quicktrace = (startpos, endpos) => {
-      const trace = {
-        fraction: 1.0,
-        allsolid: true,
-        startsolid: false,
-        endpos,
-        plane: {normal: new Vector(), dist: 0.0},
-        ent: null,
-      };
-      SV.RecursiveHullCheck(
-        SV.server.worldmodel.hulls[0],
-        SV.server.worldmodel.hulls[0].firstclipnode,
-        0.0, 1.0,
-        startpos.copy(),
-        endpos.copy(),
-        trace,
-      );
-      endpos.set(trace.endpos);
-      if (trace.allsolid) {
-        return -1;
-      }
-      return trace.fraction;
-    };
-
     const rr = this.requiredRadius;
+    const hull2Height = new Vector(0, 0, -Def.hull[1][0][2] + Def.hull[1][1][2]);
 
     for (const surface of walkableSurfaces) {
       for (const wp of surface.waypoints) {
         const startpos = wp.origin.copy();
         const endpos = startpos.copy();
 
-        // trace up 56 units (player eye height)
-        const fractionTop = quicktrace(startpos, endpos.add(new Vector(0, 0, 56)));
-
-        if (fractionTop <= 0.9) {
-          wp.availableHeight = 0; // immediately disqualify
-          continue;
-        }
+        // trace up hull2 height, will modify endpos to the actual endpoint
+        this.#testTraceStatic(startpos, endpos.add(hull2Height));
 
         wp.availableHeight = endpos[2] - startpos[2];
+
+        if (wp.availableHeight <= 24.0) { // immediately disqualify
+          wp.availableHeight = 0;
+          continue;
+        }
 
         if (surface.stability < 1) {
           continue; // skip special checks for sloped surfaces for the time being
@@ -495,23 +512,25 @@ export class Navigation {
           dir.multiply(this.requiredRadius);
           const sideStart = wp.origin.copy();
           const sideEnd = sideStart.copy().add(dir);
-          const frac = quicktrace(sideStart, sideEnd);
+          const frac = this.#testTraceStatic(sideStart, sideEnd);
           if (frac < 1) {
             wp.isClipping = true;
             break;
           }
         }
 
+        const ledgeCheckHeight = 18.0 * 2; // 2 step sizes
+
         // trace around downwards to detect ledges
         for (const dir of [
-          new Vector(-rr, -rr, -128), new Vector(  0, -rr, -128), new Vector( rr, -rr, -128),
-          new Vector(-rr,   0, -128), new Vector(  0,   0, -128), new Vector( rr,   0, -128),
-          new Vector(-rr,  rr, -128), new Vector(  0,  rr, -128), new Vector( rr,  rr, -128),
+          new Vector(-rr * 1.4, -rr, -ledgeCheckHeight),  new Vector(  0, -rr, -ledgeCheckHeight), new Vector( rr * 1.4, -rr, -ledgeCheckHeight),
+          new Vector(-rr,        0,  -ledgeCheckHeight),  new Vector(  0,   0, -ledgeCheckHeight), new Vector( rr,         0, -ledgeCheckHeight),
+          new Vector(-rr * 1.4,  rr, -ledgeCheckHeight),  new Vector(  0,  rr, -ledgeCheckHeight), new Vector( rr * 1.4,  rr, -ledgeCheckHeight),
         ]) {
           // TODO: apply normal vector to dir to follow slope
           const sideStart = wp.origin.copy().add(new Vector(dir[0], dir[1], 0));
           const sideEnd = sideStart.copy().add(new Vector(0, 0, dir[2]));
-          const frac = quicktrace(sideStart, sideEnd);
+          const frac = this.#testTraceStatic(sideStart, sideEnd);
           if (frac === -1 && sideEnd[2] === sideStart[2]) { // still on solid ground
             if (sideEnd[0] !== sideStart[0] || sideEnd[1] !== sideStart[1]) { // found a wall
               // TODO: but what if it’s a small protrusion, e.g. stairs?
@@ -524,7 +543,7 @@ export class Navigation {
             wp.isFloating = true;
           }
 
-          if (sideStart[2] - sideEnd[2] > 32) {
+          if (sideStart[2] - sideEnd[2] >= ledgeCheckHeight) {
             wp.nearLedge = true;
             break;
           }
@@ -562,31 +581,6 @@ export class Navigation {
 
     const mergeRadius = 24; // units to merge nearby waypoints
     const linkRadius =  64; // max distance to attempt a link
-
-    // helper: perform a quick trace between two points, return fraction (1.0 = clear)
-    const quickTraceSegment = (startpos, endpos) => {
-      const trace = {
-        fraction: 1.0,
-        allsolid: true,
-        startsolid: false,
-        endpos,
-        plane: { normal: new Vector(), dist: 0.0 },
-        ent: null,
-      };
-
-      SV.RecursiveHullCheck(
-        SV.server.worldmodel.hulls[0],
-        SV.server.worldmodel.hulls[0].firstclipnode,
-        0.0, 1.0,
-        startpos.copy(),
-        endpos.copy(),
-        trace,
-      );
-
-      endpos.set(trace.endpos);
-
-      return trace.fraction;
-    };
 
     // 1) collect all waypoints into flat list
     const allWaypoints = [];
@@ -663,15 +657,16 @@ export class Navigation {
 
       // Compute centroid of all waypoints in the group
       const centroid = new Vector();
-      let totalAvailableHeight = 0;
+      let availableHeight = 0;
       let nearLedge = false;
       let isClipping = false;
       let isFloating = false;
+      /** @type {Set<WalkableSurface>} */
       const surfaces = new Set();
 
       for (const { wp, surface } of group) {
         centroid.add(wp.origin);
-        totalAvailableHeight += wp.availableHeight;
+        availableHeight = Math.min(availableHeight, wp.availableHeight);
         nearLedge = nearLedge || wp.nearLedge;
         isClipping = isClipping || wp.isClipping;
         isFloating = isFloating || wp.isFloating;
@@ -679,7 +674,6 @@ export class Navigation {
       }
 
       centroid.multiply(1.0 / group.length);
-      const avgAvailableHeight = totalAvailableHeight / group.length;
 
       // If all waypoints are on the same surface, project centroid onto that surface
       if (surfaces.size === 1) {
@@ -688,7 +682,7 @@ export class Navigation {
       }
 
       const node = new Node(id, centroid);
-      node.availableHeight = avgAvailableHeight;
+      node.availableHeight = availableHeight;
       node.nearLedge = nearLedge;
       node.isClipping = isClipping;
       node.isFloating = isFloating;
@@ -698,7 +692,7 @@ export class Navigation {
     }
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
-    /** @type {number[][]} */
+    /** @type {number[][]} @deprecated unused */
     const edges = this.graph.edges;
     edges.length = 0;
 
@@ -714,13 +708,13 @@ export class Navigation {
 
         // perform a trace between the two node origins to ensure unobstructed path
         const viewOffset = new Vector(0, 0, 22); // trace at roughly head height (FIXME: viewofs)
-        const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps
+        const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps (FIXME: STEPSIZE)
         const start = a.origin.copy().add(viewOffset);
         const end = b.origin.copy().add(viewOffset);
         const startStepped = start.copy().add(stepOffset);
 
-        const frac = quickTraceSegment(start.copy(), end.copy());
-        const fracStep = quickTraceSegment(startStepped, end.copy());
+        const frac = this.#testTraceStatic(start.copy(), end.copy());
+        const fracStep = this.#testTraceStatic(startStepped, end.copy());
 
         if (frac < 1.0 && fracStep < 1.0) {
           // blocked or partially blocked
@@ -730,30 +724,139 @@ export class Navigation {
         let costBasis = dist; // simple cost metric: distance
         let costA = 0, costB = 0;
 
-        if (b.origin[2] - a.origin[2] > 16) {
-          costA += 10; // climbing penalty
-        }
-
-        if (a.origin[2] - b.origin[2] > 16) {
-          costB += 10; // climbing penalty
-        }
+        // add penalties for being near a ledge, twice the sum of two merge radii
 
         if (a.nearLedge) {
-          costA += 10; // penalty for being near a ledge
+          costA += 96;
         }
 
         if (b.nearLedge) {
-          costB += 10; // penalty for being near a ledge
+          costB += 96;
         }
 
-        a.neighbors.push([ b.id, costBasis + costA ]);
-        b.neighbors.push([ a.id, costBasis + costB ]);
+        costBasis += Math.max(0, end[2] - start[2]); // prefer lower paths
+
+        a.neighbors.push([ b.id, costBasis + costA, 0 ]);
+        b.neighbors.push([ a.id, costBasis + costB, 0 ]);
         edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
   }
 
+  /** @type {Record<number,NodeJS.Timeout>} edict number to timeout, we cool down incoming updates here */
+  relinkEdictCooldown = {};
+
+  /** @type {Record<number,Node>} */
+  relinkEdictLinks = {};
+
+  /** @type {number[]} list of edict numbers that we are not interested in, since it’s dynamic, e.g. func_door */
+  relinkSkiplist = [];
+
+  /**
+   * updates navigation links based on entity position
+   * @param {ServerEdict} edict
+   */
+  relinkEdict(edict) {
+    const entity = edict.entity;
+
+    // only care about world and large static brushes for now
+    if (entity.solid !== Def.solid.SOLID_BSP) {
+      return;
+    }
+
+    // this edict got flagged as not interesting earlier
+    if (this.relinkSkiplist.includes(edict.num)) {
+      return;
+    }
+
+    if (this.relinkEdictCooldown[edict.num]) {
+      clearTimeout(this.relinkEdictCooldown[edict.num]);
+    }
+
+    this.relinkEdictCooldown[edict.num] = setTimeout(() => {
+      delete this.relinkEdictCooldown[edict.num];
+      this.#relinkEdict(edict);
+    }, 1000);
+  }
+
+  /** @param {ServerEdict} edict */
+  #relinkEdict(edict) {
+    if (edict.isFree()) {
+      return;
+    }
+
+    const entity = edict.entity;
+
+    const centerPoint = entity.mins.copy().add(entity.maxs).multiply(0.5);
+
+    console.debug('Navigation: relinkEdict', centerPoint, entity);
+
+    for (const node of this.#findNearestNodes(centerPoint, 256)) { // TODO: tune radius
+      if (!node) {
+        console.warn('Navigation: relinkEdict: no nearby navnode found for', centerPoint, entity);
+        continue;
+      }
+
+      const a = node.origin.copy();
+      a[2] += 18.0; // STEPSIZE
+
+      for (const nb of node.neighbors) {
+        if (nb[1] === 0) { // teleporter link, skip
+          continue;
+        }
+
+        const neighborNode = this.graph.nodes[nb[0]];
+
+        console.assert(neighborNode);
+
+        let penalty = nb[2];
+
+        const b = neighborNode.origin.copy();
+
+        b[2] += 18.0; // STEPSIZE
+
+        // check if the link is blocked or unblocked
+        const { fraction } = this.#testTraceDynamic(a, b);
+        if (fraction < 1.0) {
+          // link is blocked, disable it
+          penalty = Infinity;
+        } else {
+          // link is back open, remove penalty
+          penalty = 0;
+        }
+
+        nb[2] = penalty;
+
+        // also update the reverse link
+        for (const rnb of neighborNode.neighbors) {
+          if (rnb[0] === node.id) {
+            rnb[2] = penalty;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  #relinkAll() {
+    for (let i = 0; i < SV.server.num_edicts; i++) {
+      const edict = SV.server.edicts[i];
+
+      if (edict.isFree()) {
+        continue;
+      }
+
+      this.#relinkEdict(edict);
+    }
+  }
+
   #buildSpecialConnections() {
+    this.#buildTeleporterLinks();
+    this.#buildDoorLinks();
+    this.#relinkAll();
+  }
+
+  #buildTeleporterLinks() {
     // looking for teleporters
     for (const teleporterEdict of ServerEngineAPI.FindAllByFieldAndValue('classname', 'trigger_teleport')) {
       const source = teleporterEdict.entity;
@@ -770,22 +873,47 @@ export class Navigation {
 
       const sp = source.centerPoint.copy(), dp = destination.centerPoint.copy();
 
-      // fixing back the z-axis to 0
-      sp[2] -= (source.absmax[2] - source.absmin[2]) / 2;
-      dp[2] -= (destination.absmax[2] - destination.absmin[2]) / 2;
-
-      console.log('Navigation: found teleporter', sp, '-->', dp);
+      console.debug('Navigation: found teleporter', sp, '-->', dp);
 
       const destNode = this.#findNearestNode(dp, 96); // Just grab one in proximity of the destination
 
-      if (destNode) {
-        for (const sourceNode of this.#findNearestNodes(sp, 64)) { // but link all nearby nodes at the source
-          console.log('Navigation: linking teleporter nodes', sourceNode.id, '-->', destNode.id);
-          const cost = -50; // strong incentive to use teleporters
-          sourceNode.neighbors.push([ destNode.id, cost ]);
-          this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
-        }
+      if (!destNode) {
+        console.warn('Navigation: teleporter destination has no nearby navnode', destination);
+        continue;
       }
+
+      const cost = 0; // no cost for teleporters, since traveling is instant
+
+      // insert a new node here to smooth out the path to the teleporter trigger
+      const sourceNode = new Node(this.graph.nodes.length, sp);
+      sourceNode.availableHeight = source.maxs[2] - source.mins[2];
+      this.graph.nodes.push(sourceNode);
+      console.debug('Navigation: adding teleporter source node', sourceNode);
+
+      // link the new node to its neighbors
+      for (const sourceNodeNeighbor of this.#findNearestNodes(sp, 64)) {
+        console.debug('Navigation: linking teleporter nodes', sourceNodeNeighbor.id, '-->', sourceNode.id);
+        sourceNodeNeighbor.neighbors.push([ sourceNode.id, cost, 0 ]); // one-way link
+        this.graph.edges.push([ sourceNodeNeighbor.id, sourceNode.id, cost ]);
+      }
+
+      // link the new node to the destination node
+      console.debug('Navigation: linking teleporter nodes', sourceNode.id, '-->', destNode.id);
+      sourceNode.neighbors.push([ destNode.id, cost, 0 ]); // one-way link
+      this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
+    }
+  }
+
+  #buildDoorLinks() {
+    // looking for simple doors
+    for (const doorEdict of ServerEngineAPI.FindAllByFieldAndValue('classname', 'func_door')) {
+      const door = doorEdict.entity;
+
+      if (door.targetname) { // remote controlled door, skip for now
+        continue;
+      }
+
+      this.relinkSkiplist.push(doorEdict.num);
     }
   }
 
@@ -914,6 +1042,7 @@ export class Navigation {
 
     // TODO: limit the size, since the graph can be huge and things are moving around anyway all the time
     //       the AI code already knows to refresh the path after some time or distance traveled, so this is fine
+
     while (openSet.size > 0) {
       // pick node in openSet with lowest fScore
       let currentId = null;
@@ -943,10 +1072,8 @@ export class Navigation {
 
       openSet.delete(currentId);
 
-      const currentNode = this.graph.nodes[currentId];
-
-      for (const nb of currentNode.neighbors) {
-        const tentativeG = gScore[currentId] + nb[1];
+      for (const nb of this.graph.nodes[currentId].neighbors) {
+        const tentativeG = gScore[currentId] + nb[1] + nb[2];
         const nbId = nb[0];
         if (tentativeG < gScore[nbId]) {
           cameFrom[nbId] = currentId;
@@ -992,7 +1119,7 @@ export class Navigation {
   }
 
   /** @param {Vector[]} vectors waypoints */
-  showPath(vectors) {
+  showPath(vectors, color = 251) {
     if (!vectors || vectors.length === 0) {
       return;
     }

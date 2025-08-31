@@ -524,6 +524,7 @@ export class ServerEdict {
   /**
    * Move this entity toward its goal. Used for monsters.
    * @param {number} dist distance to move
+   * @param {Vector | null} target optional target position, otherwise .goalentity is used
    * @returns {boolean} true, when successful
    */
   moveToGoal(dist, target = null) {
@@ -544,6 +545,24 @@ export class ServerEdict {
     if (enemy !== null && !enemy.isWorld() && SV.CloseEnough(this, goal, dist)) {
       return false;
     }
+
+    // if (target !== null) { // trying to avoid this weird glitchiness when there is a goal, but NewChaseDir makes them pingpong
+    //   SV.NewChaseDir(this, target, dist);
+    //   const oldorg = this.entity.origin.copy();
+    //   const dir = target.copy().subtract(this.entity.origin);
+    //   const res = SV.movestep(this, dir.copy(), false);
+    //   this.entity.origin.set(oldorg);
+    //   if (!res) { // try to slide along wall
+    //     const { right } = dir.angleVectors();
+    //     const res = SV.movestep(this, oldorg.add(right.multiply((Math.random() > .5 ? 1 : -1) * 2.0)), false);
+    //     if (!res) { // okay, new chase dir it is
+    //       SV.NewChaseDir(this, target, dist);
+    //       return true;
+    //     }
+    //     return true;
+    //   }
+    //   return res;
+    // }
 
     if (Math.random() >= 0.75 || !SV.StepDirection(this, this.entity.ideal_yaw, dist)) {
       SV.NewChaseDir(this, target, dist);

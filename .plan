@@ -328,9 +328,15 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-08-31
+
+* working more on navigation
+  * tried adding dynamic updates, super janky
+
 ### 2025-08-30
 
 * working more on navigation
+  * added teleporter links
 
 ### 2025-08-29
 

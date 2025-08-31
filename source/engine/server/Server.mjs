@@ -1646,6 +1646,7 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
       const trace = SV.Move(ent.entity.origin, mins, maxs, neworg, SV.move.normal, ent);
       if (trace.fraction === 1.0) {
         if (((ent.entity.flags & SV.fl.swim) !== 0) && (SV.PointContents(trace.endpos) === Mod.contents.empty)) {
+          // console.log('not here 1');
           return false; // swim monster left water
         }
         ent.entity.origin = trace.endpos.copy();
@@ -1655,9 +1656,11 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
         return true;
       }
       if (!enemy) {
+        // console.log('not here 2');
         return false;
       }
     }
+    // console.log('not here 3');
     return false;
   }
   // push down from a step height above the wished position
@@ -1669,12 +1672,15 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
   end[2] -= STEPSIZE * 2.0;
   const trace = SV.Move(neworg, mins, maxs, end, SV.move.normal, ent);
   if (trace.allsolid === true) {
+    // console.log('all solid', neworg.toString(), mins, maxs, end);
     return false;
   }
   if (trace.startsolid === true) {
     neworg[2] -= STEPSIZE;
     const trace = SV.Move(neworg, mins, maxs, end, SV.move.normal, ent);
     if ((trace.allsolid === true) || (trace.startsolid === true)) {
+      // console.log('start solid', neworg.toString());
+
       return false;
     }
   }
@@ -1692,6 +1698,7 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
       ent.entity.flags &= (~SV.fl.onground);
       return true;
     }
+    // console.log('edge', move.toString());
 
     return false; // walked off an edge
   }
@@ -1704,6 +1711,7 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
       return true;
     }
     ent.entity.origin = ent.entity.origin.set(oldorg);
+    // console.log('no step here', move.toString());
     return false;
   }
   ent.entity.flags &= (~SV.fl.partialground >>> 0);
@@ -3101,6 +3109,8 @@ SV.LinkEdict = function(ent, touch_triggers = false) {
   if (ent.equals(SV.server.edicts[0]) || ent.isFree()) {
     return;
   }
+
+  SV.server.navigation.relinkEdict(ent);
 
   SV.UnlinkEdict(ent);
 
