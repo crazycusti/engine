@@ -2999,7 +2999,7 @@ SV.HullForEntity = function(ent, mins, maxs, out_offset) {
     out_offset.set(origin);
     return SV.box_hull;
   }
-  console.assert(ent.entity.movetype !== SV.movetype.none, 'requires SOLID_BSP with MOVETYPE_NONE');
+  console.assert(ent.entity.movetype !== SV.movetype.none, 'requires SOLID_BSP with MOVETYPE_NONE, use MOVETYPE_PUSH instead');
   const model = SV.server.models[ent.entity.modelindex];
   console.assert(model && model.type === Mod.type.brush, 'model is null or not a brush');
   const size = maxs[0] - mins[0];

@@ -495,6 +495,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return path;
   }
 
+  static get maxplayers() {
+    return SV.svs.maxclients;
+  }
+
   static get eventBus() {
     return SV.server.eventBus;
   }

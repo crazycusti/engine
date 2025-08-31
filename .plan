@@ -332,6 +332,8 @@ class MainMenu extends BaseMenu {
 
 * working more on navigation
   * tried adding dynamic updates, super janky
+  * added load/save generated navigation, loading binary is much faster than JSON
+* a few tweeks here and there
 
 ### 2025-08-30
 
