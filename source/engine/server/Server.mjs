@@ -281,7 +281,7 @@ SV.Init = function() {
   Cmd.AddCommand('nav', class extends ConsoleCommand {
     run() {
       if (!SV.server.navigation) {
-        Con.Print('navigation not initialized\n');
+        Con.Print('navigation not initialized, you have to spawn a server first\n');
         return;
       }
 

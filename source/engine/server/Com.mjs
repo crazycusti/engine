@@ -205,6 +205,19 @@ export default class NodeCOM extends COM {
     }
   }
 
+  static WriteFile(filename, data, len) {
+    const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
+
+    try {
+      writeFileSync(filepath, data);
+    } catch (e) {
+      Sys.Print('COM.WriteFile: failed on ' + filename + ', ' + e.message + '\n');
+      return false;
+    }
+    Sys.Print('COM.WriteFile: ' + filename + '\n');
+    return true;
+  }
+
   static WriteTextFile(filename, data) {
     const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
 

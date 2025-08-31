@@ -2,7 +2,7 @@ import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Cvar from '../common/Cvar.mjs';
-import { CorruptedResourceError, MissingResourceError, NotImplementedError } from '../common/Errors.mjs';
+import { CorruptedResourceError, MissingResourceError } from '../common/Errors.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { BrushModel, Face } from '../common/Mod.mjs';
 import { eventBus, registry } from '../registry.mjs';
@@ -148,7 +148,9 @@ class Node {
   }
 };
 
-const NAV_FILE_VERSION = 1;
+class NavMeshOutOfDateException extends CorruptedResourceError {};
+
+const NAV_FILE_VERSION = 2; // 1 = JSON, 2 = compact binary
 
 export class Navigation {
   /** maximum slope that is passable */
@@ -183,10 +185,11 @@ export class Navigation {
     Con.Print('Navigation: initializing navigation graph...\n');
 
     this.load()
-      .then(() => Con.Print('Navigation: navigation graph loaded!\n'))
+      .then(() => Con.PrintSuccess('Navigation: navigation graph loaded!\n'))
       .catch((err) => {
         Con.PrintWarning('Navigation: ' + err + '\n');
-        setTimeout(() => this.build(), 1000); // wait a bit for the server to be ready
+        Con.Print('Use nav command to build the navigation graph.\n');
+        // setTimeout(() => this.build(), 1000); // wait a bit for the server to be ready
       });
   }
 
@@ -198,36 +201,110 @@ export class Navigation {
 
   async load() {
     const filename = `maps/${SV.server.mapname}.nav`;
-    const data = await COM.LoadTextFileAsync(filename);
 
-    if (!data) {
+    // Try to load binary file first (ArrayBuffer). Fallback to text JSON for older files.
+    const buf = await COM.LoadFileAsync(filename);
+
+    if (!buf) {
       throw new MissingResourceError(filename);
     }
 
-    const struct = JSON.parse(data);
+    const dv = new DataView(buf);
+    let off = 0;
 
-    if (struct.id !== 'QS navmesh' || struct.version !== NAV_FILE_VERSION) {
-      throw new CorruptedResourceError(filename, 'invalid header or version');
+    const readBytes = (/** @type {number} */ n) => {
+      const out = new Uint8Array(buf, off, n);
+      off += n;
+      return out;
+    };
+
+    const readUint8 = () => dv.getUint8(off++);
+    const readUint32 = () => { const v = dv.getUint32(off, true); off += 4; return v; };
+    const readInt32 = () => { const v = dv.getInt32(off, true); off += 4; return v; };
+    const readFloat32 = () => { const v = dv.getFloat32(off, true); off += 4; return v; };
+
+    // magic: 4 bytes
+    const magic = String.fromCharCode(...readBytes(4));
+    if (magic !== 'QSNM') {
+      throw new CorruptedResourceError(filename, 'invalid binary magic');
     }
 
-    if (struct.config.requiredHeight !== this.requiredHeight ||
-        struct.config.requiredRadius !== this.requiredRadius
-    ) {
-      throw new CorruptedResourceError(filename, 'configuration mismatch');
+    const version = readUint32();
+    if (version !== NAV_FILE_VERSION) {
+      throw new CorruptedResourceError(filename, 'invalid binary version');
     }
 
-    if (struct.worldmodel.name !== SV.server.mapname ||
-        struct.worldmodel.checksum !== this.worldmodel.checksum
-    ) {
-      throw new CorruptedResourceError(filename, 'wrong or outdated map');
+    // worldmodel name (uint16 length + utf8 bytes)
+    const nameLen = dv.getUint16(off, true); off += 2;
+    const nameBytes = readBytes(nameLen);
+    const worldName = new TextDecoder().decode(nameBytes);
+
+    const checksum = readUint32();
+    const requiredHeight = readFloat32();
+    const requiredRadius = readFloat32();
+
+    if (worldName !== SV.server.mapname) {
+      throw new CorruptedResourceError(filename, 'wrong map');
     }
 
-    const { nodes, relinkSkiplist } = struct.graph;
+    if (checksum !== this.worldmodel.checksum) {
+      throw new NavMeshOutOfDateException(filename, 'outdated map');
+    }
 
-    this.relinkSkiplist.push(...relinkSkiplist);
+    if (requiredHeight !== this.requiredHeight || requiredRadius !== this.requiredRadius) {
+      throw new NavMeshOutOfDateException(filename, 'configuration changed');
+    }
 
-    for (const dnode of nodes) {
-      this.graph.nodes.push(Node.deserialize(dnode, this));
+    // relink skiplist
+    const relinkCount = readUint32();
+    for (let i = 0; i < relinkCount; i++) {
+      this.relinkSkiplist.push(readUint32());
+    }
+
+    // nodes
+    const nodeCount = readUint32();
+    for (let ni = 0; ni < nodeCount; ni++) {
+      const id = readInt32();
+      const ox = readFloat32(); const oy = readFloat32(); const oz = readFloat32();
+      const node = new Node(id, new Vector(ox, oy, oz));
+      node.availableHeight = readFloat32();
+      node.nearLedge = !!readUint8();
+      node.isClipping = !!readUint8();
+      node.isFloating = !!readUint8();
+
+      // surfaces
+      const surfCount = readUint32();
+      const surfData = [];
+      for (let si = 0; si < surfCount; si++) {
+        const stability = readFloat32();
+        const nx = readFloat32(); const ny = readFloat32(); const nz = readFloat32();
+        const faceIndex = readUint32();
+        const wpCount = readUint32();
+        const wps = [];
+        for (let wi = 0; wi < wpCount; wi++) {
+          const wx = readFloat32(); const wy = readFloat32(); const wz = readFloat32();
+          const avail = readFloat32();
+          const near = !!readUint8();
+          const clip = !!readUint8();
+          const floating = !!readUint8();
+          wps.push([[wx, wy, wz], avail, near, clip, floating]);
+        }
+        surfData.push([stability, [nx, ny, nz], faceIndex, wps]);
+      }
+      node.surfaces = new Set(surfData.map((sd) => WalkableSurface.deserialize(sd, this)));
+
+      // neighbors
+      const nbCount = readUint32();
+      const nbs = [];
+      for (let k = 0; k < nbCount; k++) {
+        const nid = readInt32();
+        const cost = readFloat32();
+        const adj = readFloat32();
+        nbs.push([nid, cost, adj]);
+      }
+      node.neighbors = nbs;
+
+      this.graph.nodes.push(node);
     }
 
     this.#buildOctree();
@@ -236,24 +313,79 @@ export class Navigation {
   async save() {
     const filename = `maps/${SV.server.mapname}.nav`;
 
-    const struct = {
-      id: 'QS navmesh',
-      version: NAV_FILE_VERSION,
-      worldmodel: {
-        name: SV.server.mapname,
-        checksum: this.worldmodel.checksum,
-      },
-      config: {
-        requiredHeight: this.requiredHeight,
-        requiredRadius: this.requiredRadius,
-      },
-      graph: {
-        relinkSkiplist: this.relinkSkiplist,
-        nodes: this.graph.nodes.map((n) => n.serialize()),
-      },
-    };
+    const bytes = [];
+    const tmp = new ArrayBuffer(8);
+    const tdv = new DataView(tmp);
 
-    COM.WriteTextFile(filename, JSON.stringify(struct));
+    const pushUint8 = (v) => { bytes.push(v & 0xff); };
+    const pushUint16 = (v) => { bytes.push(v & 0xff); bytes.push((v >>> 8) & 0xff); };
+    const pushUint32 = (v) => {
+      bytes.push(v & 0xff);
+      bytes.push((v >>> 8) & 0xff);
+      bytes.push((v >>> 16) & 0xff);
+      bytes.push((v >>> 24) & 0xff);
+    };
+    const pushInt32 = (v) => pushUint32(v >>> 0);
+    const pushFloat32 = (f) => { tdv.setFloat32(0, f, true); const bv = new Uint8Array(tmp, 0, 4); bytes.push(bv[0], bv[1], bv[2], bv[3]); };
+    const pushBytes = (arr) => { for (let i = 0; i < arr.length; i++) { bytes.push(arr[i]); } };
+
+    // header magic
+    pushBytes(new TextEncoder().encode('QSNM'));
+    pushUint32(NAV_FILE_VERSION);
+
+    // world name
+    const nameBytes = new TextEncoder().encode(SV.server.mapname);
+    pushUint16(nameBytes.length);
+    pushBytes(nameBytes);
+
+    pushUint32(this.worldmodel.checksum);
+    pushFloat32(this.requiredHeight);
+    pushFloat32(this.requiredRadius);
+
+    // relink skiplist
+    pushUint32(this.relinkSkiplist.length);
+    for (const v of this.relinkSkiplist) {
+      pushUint32(v);
+    }
+
+    // nodes
+    pushUint32(this.graph.nodes.length);
+    for (const n of this.graph.nodes) {
+      pushInt32(n.id);
+      pushFloat32(n.origin[0]); pushFloat32(n.origin[1]); pushFloat32(n.origin[2]);
+      pushFloat32(n.availableHeight);
+      pushUint8(n.nearLedge ? 1 : 0);
+      pushUint8(n.isClipping ? 1 : 0);
+      pushUint8(n.isFloating ? 1 : 0);
+
+      // surfaces
+      const surfaces = Array.from(n.surfaces);
+      pushUint32(surfaces.length);
+      for (const s of surfaces) {
+        pushFloat32(s.stability);
+        pushFloat32(s.normal[0]); pushFloat32(s.normal[1]); pushFloat32(s.normal[2]);
+        pushUint32(s.faceIndex);
+        pushUint32(s.waypoints.length);
+        for (const wp of s.waypoints) {
+          pushFloat32(wp.origin[0]); pushFloat32(wp.origin[1]); pushFloat32(wp.origin[2]);
+          pushFloat32(wp.availableHeight);
+          pushUint8(wp.nearLedge ? 1 : 0);
+          pushUint8(wp.isClipping ? 1 : 0);
+          pushUint8(wp.isFloating ? 1 : 0);
+        }
+      }
+
+      // neighbors
+      pushUint32(n.neighbors.length);
+      for (const nb of n.neighbors) {
+        pushInt32(nb[0]);
+        pushFloat32(nb[1]);
+        pushFloat32(nb[2]);
+      }
+    }
+
+    const out = new Uint8Array(bytes);
+    COM.WriteFile(filename, out, out.length);
   }
 
   /**
@@ -267,7 +399,7 @@ export class Navigation {
       allsolid: true,
       startsolid: false,
       endpos,
-      plane: {normal: new Vector(), dist: 0.0},
+      plane: { normal: new Vector(), dist: 0.0 },
       ent: null,
     };
     SV.RecursiveHullCheck(
@@ -411,7 +543,7 @@ export class Navigation {
       // project verts to 2D coordinates in [u, v] basis
       const verts2 = verts3.map((p3) => {
         const rel = p3.copy().subtract(origin);
-        return [ rel.dot(u), rel.dot(v) ];
+        return [rel.dot(u), rel.dot(v)];
       });
 
       // compute bounding box in 2D
@@ -496,7 +628,7 @@ export class Navigation {
       // grid-sample the bounding box and test inclusion
       for (let sx = Math.floor(minX); sx <= Math.ceil(maxX); sx += step) {
         for (let sy = Math.floor(minY); sy <= Math.ceil(maxY); sy += step) {
-          const pt2 = [ sx, sy ];
+          const pt2 = [sx, sy];
           if (!pointInPoly(pt2, verts2)) {
             continue;
           }
@@ -556,7 +688,7 @@ export class Navigation {
         for (const baseDir of [
           new Vector(rr, 0, 0),
           new Vector(-rr, 0, 0),
-          new Vector(0, 0 ,0),
+          new Vector(0, 0, 0),
           new Vector(0, rr, 0),
           new Vector(0, -rr, 0),
         ]) {
@@ -583,9 +715,9 @@ export class Navigation {
 
         // trace around downwards to detect ledges
         for (const dir of [
-          new Vector(-rr * 1.4, -rr, -ledgeCheckHeight),  new Vector(  0, -rr, -ledgeCheckHeight), new Vector( rr * 1.4, -rr, -ledgeCheckHeight),
-          new Vector(-rr,        0,  -ledgeCheckHeight),  new Vector(  0,   0, -ledgeCheckHeight), new Vector( rr,         0, -ledgeCheckHeight),
-          new Vector(-rr * 1.4,  rr, -ledgeCheckHeight),  new Vector(  0,  rr, -ledgeCheckHeight), new Vector( rr * 1.4,  rr, -ledgeCheckHeight),
+          new Vector(-rr * 1.4, -rr, -ledgeCheckHeight), new Vector(0, -rr, -ledgeCheckHeight), new Vector(rr * 1.4, -rr, -ledgeCheckHeight),
+          new Vector(-rr, 0, -ledgeCheckHeight), new Vector(0, 0, -ledgeCheckHeight), new Vector(rr, 0, -ledgeCheckHeight),
+          new Vector(-rr * 1.4, rr, -ledgeCheckHeight), new Vector(0, rr, -ledgeCheckHeight), new Vector(rr * 1.4, rr, -ledgeCheckHeight),
         ]) {
           // TODO: apply normal vector to dir to follow slope
           const sideStart = wp.origin.copy().add(new Vector(dir[0], dir[1], 0));
@@ -640,7 +772,7 @@ export class Navigation {
     // 3) connect nodes with unobstructed links (trace check)
 
     const mergeRadius = 24; // units to merge nearby waypoints
-    const linkRadius =  64; // max distance to attempt a link
+    const linkRadius = 64; // max distance to attempt a link
 
     // 1) collect all waypoints into flat list
     const allWaypoints = [];
@@ -796,8 +928,8 @@ export class Navigation {
 
         costBasis += Math.max(0, end[2] - start[2]); // prefer lower paths
 
-        a.neighbors.push([ b.id, costBasis + costA, 0 ]);
-        b.neighbors.push([ a.id, costBasis + costB, 0 ]);
+        a.neighbors.push([b.id, costBasis + costA, 0]);
+        b.neighbors.push([a.id, costBasis + costB, 0]);
         // edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
@@ -903,13 +1035,13 @@ export class Navigation {
       // link the new node to its neighbors
       for (const sourceNodeNeighbor of this.#findNearestNodes(sp, 64)) {
         console.debug('Navigation: linking teleporter nodes', sourceNodeNeighbor.id, '-->', sourceNode.id);
-        sourceNodeNeighbor.neighbors.push([ sourceNode.id, cost, 0 ]); // one-way link
+        sourceNodeNeighbor.neighbors.push([sourceNode.id, cost, 0]); // one-way link
         // this.graph.edges.push([ sourceNodeNeighbor.id, sourceNode.id, cost ]);
       }
 
       // link the new node to the destination node
       console.debug('Navigation: linking teleporter nodes', sourceNode.id, '-->', destNode.id);
-      sourceNode.neighbors.push([ destNode.id, cost, 0 ]); // one-way link
+      sourceNode.neighbors.push([destNode.id, cost, 0]); // one-way link
       // this.graph.edges.push([ sourceNode.id, destNode.id, cost ]);
     }
   }
@@ -1031,7 +1163,7 @@ export class Navigation {
     }
 
     if (startNode.id === goalNode.id) {
-      return [ startPos.copy(), goalPos.copy() ];
+      return [startPos.copy(), goalPos.copy()];
     }
 
     // A* structures
@@ -1205,6 +1337,9 @@ export class Navigation {
   }
 
   build() {
+    this.graph.octree = null;
+    this.graph.nodes.length = 0;
+
     Con.Print('Navigation: node graph out of date, rebuilding...\n');
 
     this.#extractWalkableSurfaces();
@@ -1215,7 +1350,7 @@ export class Navigation {
     Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes.\n');
 
     this.save()
-      .then(() => Con.Print('Navigation: navigation graph saved!\n'))
+      .then(() => Con.PrintSuccess('Navigation: navigation graph saved!\n'))
       .catch((err) => Con.PrintError('Navigation: failed to save navigation graph: ' + err + '\n'));
 
     if (R) {
