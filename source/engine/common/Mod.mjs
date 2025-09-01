@@ -502,6 +502,18 @@ Mod.LoadTextures = function(loadmodel, buf) {
 };
 
 Mod.LoadLighting = function(loadmodel, buf) {
+  loadmodel.lightdata_rgb = null;
+  loadmodel.lightdata = null;
+
+  const litfile = COM.LoadFile(loadmodel.name.replace('.bsp', '.lit'));
+
+  if (litfile) {
+    Con.Print(`Mod.LoadLighting: using external .lit file for ${loadmodel.name}\n`);
+
+    loadmodel.lightdata_rgb = new Uint8Array(litfile.slice(8)); // skip header
+    // return;
+  }
+
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.lighting << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.lighting << 3) + 8, true);

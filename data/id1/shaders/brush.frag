@@ -35,12 +35,35 @@ void main(void) {
     uAlpha
   );
 
-  float d = dot(texture2D(tLightmap, vTexCoord.zw), lightstyle * 43.828125);
+  // float d = dot(texture2D(tLightmap, vTexCoord.zw), lightstyle * 43.828125);
+  vec3 d;
+
+  d.r = dot(
+    texture2D(
+      tLightmap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0)
+    ),
+    lightstyle * 43.828125
+  );
+  d.g = dot(
+    texture2D(
+      tLightmap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)
+    ),
+    lightstyle * 43.828125
+  );
+  d.b = dot(
+    texture2D(
+      tLightmap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.5)
+    ),
+    lightstyle * 43.828125
+  );
 
   gl_FragColor = vec4(
-    texture.r * mix(1.0, d + texture2D(tDlight, vTexCoord.zw).r, texture.a),
-    texture.g * mix(1.0, d + texture2D(tDlight, vTexCoord.zw).g, texture.a),
-    texture.b * mix(1.0, d + texture2D(tDlight, vTexCoord.zw).b, texture.a),
+    texture.r * mix(1.0, d.r + texture2D(tDlight, vTexCoord.zw).r, texture.a),
+    texture.g * mix(1.0, d.g + texture2D(tDlight, vTexCoord.zw).g, texture.a),
+    texture.b * mix(1.0, d.b + texture2D(tDlight, vTexCoord.zw).b, texture.a),
     1.0
   );
 

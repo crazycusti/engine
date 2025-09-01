@@ -203,7 +203,7 @@ R.PushDlights = function() {
   }
 
   GL.Bind(0, R.dlightmap_rgba_texture);
-  for (let i = 0; i <= 1023; i++) {
+  for (let i = 0; i < 1024; i++) {
     if (R.lightmap_modified[i] !== true) {
       continue;
     }
@@ -281,7 +281,7 @@ R.RecursiveLightPoint = function(node, start, end) {
     if (lightmap === 0) {
       return 0;
     }
-
+    // TODO: consider RGB lightmap
     lightmap += dt * ((surf.extents[0] >> 4) + 1) + ds;
     r = 0;
     size = ((surf.extents[0] >> 4) + 1) * ((surf.extents[1] >> 4) + 1);
@@ -1274,11 +1274,6 @@ R.InitTextures = function() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-  R.dlightmap_texture = gl.createTexture();
-  GL.Bind(0, R.dlightmap_texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
   R.dlightmap_rgba_texture = gl.createTexture();
   GL.Bind(0, R.dlightmap_rgba_texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -1344,7 +1339,11 @@ R.Init = async function() {
       ['tTexture']),
   GL.CreateProgram('brush',
       ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uAlpha'],
-      [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 4], ['aLightStyle', gl.FLOAT, 4]],
+      [
+        ['aPosition', gl.FLOAT, 3],
+        ['aTexCoord', gl.FLOAT, 4],
+        ['aLightStyle', gl.FLOAT, 4],
+      ],
       ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB']),
   GL.CreateProgram('dlight',
       ['uOrigin', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uRadius', 'uGamma'],
@@ -1923,7 +1922,8 @@ R.AllocParticles = function(count) {
 
 R.lightmap_modified = [];
 R.lightmaps = new Uint8Array(new ArrayBuffer(4194304));
-R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(1048576 * 4));
+R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(4194304 * 4));
+R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(1048576 * 4)); // TODO: doesn’t need to be 32 bits I guess
 
 R.AddDynamicLights = function(surf) {
   const smax = (surf.extents[0] >> 4) + 1;
@@ -2016,7 +2016,7 @@ R.RemoveDynamicLights = function(surf) {
   }
 };
 
-R.BuildLightMap = function(surf) {
+R.BuildLightMapOld = function(surf) {
   let dest;
   const smax = (surf.extents[0] >> 4) + 1;
   const tmax = (surf.extents[1] >> 4) + 1;
@@ -2040,6 +2040,70 @@ R.BuildLightMap = function(surf) {
         R.lightmaps[dest + (j << 2)] = 0;
       }
       dest += 4096;
+    }
+  }
+};
+
+R.BuildLightMap = function(surf) {
+  const smax = (surf.extents[0] >> 4) + 1;
+  const tmax = (surf.extents[1] >> 4) + 1;
+
+  for (let k = 0; k < 3; k++) {
+    const offset = 4194304 * k;
+    let lightmap = surf.lightofs;
+    let maps;
+
+    for (maps = 0; maps < surf.styles.length; maps++) {
+      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      for (let i = 0; i < tmax; i++) {
+        for (let j = 0; j < smax; j++) {
+          R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata[lightmap + j];
+        }
+        lightmap += smax;
+        dest += 4096;
+      }
+    }
+
+    for (; maps < 4; maps++) {
+      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      for (let i = 0; i < tmax; i++) {
+        for (let j = 0; j < smax; j++) {
+          R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
+        }
+        dest += 4096;
+      }
+    }
+  }
+};
+
+R.BuildLightMapRGB = function(surf) {
+  const smax = (surf.extents[0] >> 4) + 1;
+  const tmax = (surf.extents[1] >> 4) + 1;
+
+  for (let k = 0; k < 3; k++) {
+    const offset = 4194304 * k;
+    let lightmap = surf.lightofs * 3;
+    let maps;
+
+    for (maps = 0; maps < surf.styles.length; maps++) {
+      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      for (let i = 0; i < tmax; i++) {
+        for (let j = 0; j < smax; j++) {
+          R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata_rgb[(lightmap + j * 3) + k];
+        }
+        lightmap += smax * 3;
+        dest += 4096;
+      }
+    }
+
+    for (; maps < 4; maps++) {
+      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      for (let i = 0; i < tmax; i++) {
+        for (let j = 0; j < smax; j++) {
+          R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
+        }
+        dest += 4096;
+      }
     }
   }
 };
@@ -2388,7 +2452,9 @@ R.BuildLightmaps = function() {
         surf = R.currentmodel.faces[j];
         if ((surf.sky !== true) && (surf.turbulent !== true)) {
           R.AllocBlock(surf);
-          if (R.currentmodel.lightdata != null) {
+          if (R.currentmodel.lightdata_rgb !== null) {
+            R.BuildLightMapRGB(surf);
+          } else if (R.currentmodel.lightdata !== null) {
             R.BuildLightMap(surf);
           }
         }
@@ -2403,7 +2469,7 @@ R.BuildLightmaps = function() {
   }
 
   GL.Bind(0, R.lightmap_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 4096, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
 };
 
 // scan

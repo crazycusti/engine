@@ -328,6 +328,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-01
+
+* added RGB lightmap support (using .lit files)
+  * missing lighting the entities correctly (RecursiveLightPoint)
+
 ### 2025-08-31
 
 * working more on navigation
