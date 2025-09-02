@@ -222,7 +222,7 @@ R.PushDlights = function() {
 
 R.RecursiveLightPoint = function(node, start, end) {
   if (node.contents < 0) {
-    return -1;
+    return null;
   }
 
   const normal = node.plane.normal;
@@ -231,7 +231,7 @@ R.RecursiveLightPoint = function(node, start, end) {
   const side = front < 0;
 
   if ((back < 0) === side) {
-    return R.RecursiveLightPoint(node.children[side === true ? 1 : 0], start, end);
+    return R.RecursiveLightPoint(node.children[side ? 1 : 0], start, end);
   }
 
   const frac = front / (front - back);
@@ -241,70 +241,80 @@ R.RecursiveLightPoint = function(node, start, end) {
     start[2] + (end[2] - start[2]) * frac,
   );
 
-  let r = R.RecursiveLightPoint(node.children[side === true ? 1 : 0], start, mid);
-  if (r >= 0) {
+  const  r = R.RecursiveLightPoint(node.children[side ? 1 : 0], start, mid);
+
+  if (r !== null) {
     return r;
   }
 
   if ((back < 0) === side) {
-    return -1;
+    return null;
   }
 
-  let i; let surf; let tex; let s; let t; let ds; let dt; let lightmap; let size; let maps;
-  for (i = 0; i < node.numfaces; i++) {
-    surf = CL.state.worldmodel.faces[node.firstface + i];
+  for (let i = 0; i < node.numfaces; i++) {
+    const surf = CL.state.worldmodel.faces[node.firstface + i];
     if ((surf.sky === true) || (surf.turbulent === true)) {
       continue;
     }
 
-    tex = CL.state.worldmodel.texinfo[surf.texinfo];
-    s = mid.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3];
-    t = mid.dot(new Vector(...tex.vecs[1])) + tex.vecs[1][3];
+    const tex = CL.state.worldmodel.texinfo[surf.texinfo];
+    const s = mid.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3];
+    const t = mid.dot(new Vector(...tex.vecs[1])) + tex.vecs[1][3];
     if ((s < surf.texturemins[0]) || (t < surf.texturemins[1])) {
       continue;
     }
 
-    ds = s - surf.texturemins[0];
-    dt = t - surf.texturemins[1];
+    let ds = s - surf.texturemins[0];
+    let dt = t - surf.texturemins[1];
     if ((ds > surf.extents[0]) || (dt > surf.extents[1])) {
       continue;
     }
 
     if (surf.lightofs === 0) {
-      return 0;
+      return new Vector();
     }
 
     ds >>= 4;
     dt >>= 4;
 
-    lightmap = surf.lightofs;
-    if (lightmap === 0) {
-      return 0;
+    const r3 = new Vector();
+    const haveRGB = CL.state.worldmodel.lightdata_rgb !== null;
+    const lightdata = haveRGB ? CL.state.worldmodel.lightdata_rgb : CL.state.worldmodel.lightdata;
+    const channels = haveRGB ? 3 : 1;
+    for (let i = 0; i < channels; i++) {
+      let lightmap = surf.lightofs + dt * ((surf.extents[0] >> 4) + 1) + ds;
+      let r = 0;
+      const size = ((surf.extents[0] >> 4) + 1) * ((surf.extents[1] >> 4) + 1);
+      const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+      for (let maps = 0; maps < surf.styles.length; maps++) {
+        r += lightdata[lightmap * channels + i] * (
+          R.lightstylevalue_a[surf.styles[maps]] * (1 - uAlpha) +
+          R.lightstylevalue_b[surf.styles[maps]] * uAlpha
+        ) * 22;
+        lightmap += size;
+      }
+      r3[i] = r >> 8;
     }
-    // TODO: consider RGB lightmap
-    lightmap += dt * ((surf.extents[0] >> 4) + 1) + ds;
-    r = 0;
-    size = ((surf.extents[0] >> 4) + 1) * ((surf.extents[1] >> 4) + 1);
-    const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
-    for (maps = 0; maps < surf.styles.length; ++maps) {
-      r += CL.state.worldmodel.lightdata[lightmap] * (
-        R.lightstylevalue_a[surf.styles[maps]] * (1 - uAlpha) +
-        R.lightstylevalue_b[surf.styles[maps]] * uAlpha
-      ) * 22;
-      lightmap += size;
+
+    if (!haveRGB) {
+      // replicate for green and blue
+      r3[1] = r3[0];
+      r3[2] = r3[0];
     }
-    return r >> 8;
+
+    return r3;
   }
-  return R.RecursiveLightPoint(node.children[side !== true ? 1 : 0], mid, end);
+
+  return R.RecursiveLightPoint(node.children[!side ? 1 : 0], mid, end);
 };
 
 R.LightPoint = function(p) {
-  if (CL.state.worldmodel.lightdata == null) {
-    return 255;
+  if (CL.state.worldmodel.lightdata === null) {
+    return new Vector(255, 255, 255);
   }
   const r = R.RecursiveLightPoint(CL.state.worldmodel.nodes[0], p, new Vector(p[0], p[1], p[2] - 2048.0));
-  if (r === -1) {
-    return 0;
+  if (r === null) {
+    return new Vector();
   }
   return r;
 };
@@ -622,43 +632,66 @@ R.DrawAliasModel = function(e) {
   gl.uniform3fv(program.uOrigin, e.lerp.origin);
   gl.uniformMatrix3fv(program.uAngles, false, e.lerp.angles.toRotationMatrix());
 
-  let ambientlight = R.LightPoint(e.lerp.origin);
-  let shadelight = ambientlight;
-  if ((e === CL.state.viewent) && (ambientlight < 24.0)) {
-    ambientlight = shadelight = 24.0;
-  }
-  let i; let add;
+  const ambientlight = R.LightPoint(e.lerp.origin);
+  const shadelight = ambientlight.copy();
 
+  // never have a pitch black view model
+  if ((e === CL.state.viewent) && (ambientlight.len() < 24.0)) {
+    ambientlight.normalize();
+    ambientlight.multiply(24.0);
+    shadelight.set(ambientlight);
+  }
+
+  let i;
+
+  // add dynamic lights
   for (let i = 0; i < Def.limits.dlights; i++) {
     const dl = CL.state.clientEntities.dlights[i];
 
     if (dl.isFree()) {
       continue;
     }
-    // add = dl.radius - (new Vector(e.origin[0] - dl.origin[0], e.origin[1] - dl.origin[1], e.origin[1] - dl.origin[1])).len(); // [x, y, y]
-    add = dl.radius - e.lerp.origin.distanceTo(dl.origin);
+
+    const add = dl.radius - e.lerp.origin.distanceTo(dl.origin);
+
     if (add > 0.0) {
-      ambientlight += add;
-      shadelight += add;
+      const color = dl.color.copy();
+      color.normalize();
+      const vadd = color.multiply(add);
+      ambientlight.add(vadd);
+      shadelight.add(vadd);
     }
   }
-  if (ambientlight > 128.0) {
-    ambientlight = 128.0;
-  }
-  if ((ambientlight + shadelight) > 192.0) {
-    shadelight = 192.0 - ambientlight;
-  }
-  if ((e.num >= 1) && (e.num <= CL.state.maxclients) && (ambientlight < 8.0)) {
-    ambientlight = shadelight = 8.0;
+
+  // do not overbright
+  if (ambientlight.len() > 128.0) {
+    ambientlight.normalize();
+    ambientlight.multiply(128.0);
   }
 
-  if (e.effects & effect.EF_FULLBRIGHT) {
-    ambientlight = 255.0;
-    shadelight = 255.0;
+  if ((ambientlight.copy().add(shadelight)).len() > 192.0) {
+    ambientlight.normalize();
+    ambientlight.multiply(192.0/* - shadelight.len()*/);
+    shadelight.set(ambientlight);
   }
 
-  gl.uniform1f(program.uAmbientLight, ambientlight * 0.0078125);
-  gl.uniform1f(program.uShadeLight, shadelight * 0.0078125);
+  // never let players go totally dark either
+  if ((e.num >= 1) && (e.num <= CL.state.maxclients) && (ambientlight.len() < 8.0)) {
+    ambientlight.normalize();
+    ambientlight.multiply(8.0);
+    shadelight.set(ambientlight);
+  }
+
+  if (e.effects & effect.EF_FULLBRIGHT) { // TODO: move this up before we do all the math
+    ambientlight.setTo(255.0, 255.0, 255.0);
+    shadelight.set(ambientlight);
+  }
+
+  ambientlight.multiply(0.0078125); // / 128.0
+  shadelight.multiply(0.0078125); // / 128.0
+
+  gl.uniform3fv(program.uAmbientLight, ambientlight);
+  gl.uniform3fv(program.uShadeLight, shadelight);
 
   const {forward, right, up} = e.angles.angleVectors();
   const v = new Vector(-1.0, 0.0, 0.0);

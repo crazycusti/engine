@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-02
+
+* quickly added RGB to RecursiveLightPoint while having breakfast coffee
+
 ### 2025-09-01
 
 * added RGB lightmap support (using .lit files)
