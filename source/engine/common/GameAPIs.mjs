@@ -482,17 +482,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @returns {Vector[]} array of waypoints from start to end, including start and end
    */
   static Navigate(start, end) {
-    const path = SV.server.navigation.findPath(start, end);
-
-    if (!path) {
-      return null;
-    }
-
-    if (!registry.isDedicatedServer && Cvar.FindVar('developer')?.value) {
-      SV.server.navigation.showPath(path);
-    }
-
-    return path;
+    return SV.server.navigation.findPath(start, end);
   }
 
   static get maxplayers() {

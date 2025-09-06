@@ -7,10 +7,10 @@ import * as Def from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Chase from './Chase.mjs';
 import MSG from '../network/MSG.mjs';
-import W, { translateIndexToRGBA } from '../common/W.mjs';
+import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
-import { effect, gameCapabilities } from '../../shared/Defs.mjs';
+import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
 import { ClientEdict } from './ClientEntities.mjs';
 
 let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
@@ -20,7 +20,7 @@ let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
     name: string;
     width: number;
     height: number;
-    glt: import('./GL.mjs').GLTexture;
+    glt: GLTexture;
     sky: boolean;
     turbulent: boolean;
 }} BrushModelTexture
@@ -56,7 +56,7 @@ export default R;
 // efrag
 
 R.SplitEntityOnNode = function(node) {
-  if (node.contents === Mod.contents.solid) {
+  if (node.contents === content.CONTENT_SOLID) {
     return;
   }
   if (node.contents < 0) {
@@ -869,9 +869,8 @@ R.SetFrustum = function() {
   R.frustum[1].normal = R.vup.rotatePointAroundVector(R.vpn, 90.0 - R.refdef.fov_x * 0.5);
   R.frustum[2].normal = R.vright.rotatePointAroundVector(R.vpn, 90.0 - R.refdef.fov_y * 0.5);
   R.frustum[3].normal = R.vright.rotatePointAroundVector(R.vpn, -(90.0 - R.refdef.fov_y * 0.5));
-  let i; let out;
-  for (i = 0; i <= 3; i++) {
-    out = R.frustum[i];
+  for (let i = 0; i < 4; i++) {
+    const out = R.frustum[i];
     out.type = 5;
     out.dist = R.refdef.vieworg.dot(out.normal);
     out.signbits = 0;
@@ -1041,7 +1040,7 @@ R.RenderScene = function() {
   R.viewleaf = Mod.PointInLeaf(R.refdef.vieworg, CL.state.worldmodel);
   V.SetContentsColor(R.viewleaf.contents);
   V.CalcBlend();
-  R.dowarp = (R.waterwarp.value !== 0) && (R.viewleaf.contents <= Mod.contents.water);
+  R.dowarp = (R.waterwarp.value !== 0) && (R.viewleaf.contents <= content.CONTENT_WATER);
 
   R.SetFrustum();
   R.SetupGL();
@@ -1279,24 +1278,37 @@ const solidskytexture = new GLTexture('r_solidsky', 128, 128);
 const alphaskytexture = new GLTexture('r_alphasky', 128, 128);
 
 R.InitTextures = function() {
-  R.notexture_mip = {name: 'notexture', width: 16, height: 16, texturenum: null};
-
   if (Host.dedicated.value) {
     return;
   }
 
-  const data = new Uint8Array(new ArrayBuffer(256));
-
+  // make a default texture (a red and black checkerboard)
+  const data = new Uint8Array(new ArrayBuffer(256 * 4));
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
-      data[(i << 4) + j] = data[136 + (i << 4) + j] = 255;
-      data[8 + (i << 4) + j] = data[128 + (i << 4) + j] = 0;
+      data[((i << 4) + j) * 4 + 0] = 255;
+      data[((i << 4) + j) * 4 + 1] = 0;
+      data[((i << 4) + j) * 4 + 2] = 0;
+      data[((i << 4) + j) * 4 + 3] = 0;
+
+      data[(136 + (i << 4) + j) * 4 + 0] = 255;
+      data[(136 + (i << 4) + j) * 4 + 1] = 0;
+      data[(136 + (i << 4) + j) * 4 + 2] = 0;
+      data[(136 + (i << 4) + j) * 4 + 3] = 0;
+
+      data[(8 + (i << 4) + j) * 4 + 0] = 0;
+      data[(8 + (i << 4) + j) * 4 + 1] = 0;
+      data[(8 + (i << 4) + j) * 4 + 2] = 0;
+      data[(8 + (i << 4) + j) * 4 + 3] = 0;
+
+      data[(128 + (i << 4) + j) * 4 + 0] = 0;
+      data[(128 + (i << 4) + j) * 4 + 1] = 0;
+      data[(128 + (i << 4) + j) * 4 + 2] = 0;
+      data[(128 + (i << 4) + j) * 4 + 3] = 0;
     }
   }
 
-  const notexture = GLTexture.Allocate('r_notexture', 16, 16, translateIndexToRGBA(data, 16, 16));
-
-  R.notexture_mip.texturenum = notexture.texnum;
+  R.notexture = GLTexture.Allocate('r_notexture', 16, 16, data);
 
   // CR: this combination of texture modes make the sky look more crisp
   alphaskytexture.lockTextureMode('GL_NEAREST');
@@ -1593,7 +1605,7 @@ R.ReadPointFile_f = function() {
   if (SV.server.active !== true) {
     return;
   }
-  const name = 'maps/' + SV.server.gameAPI.mapname + '.pts';
+  const name = 'maps/' + SV.server.mapname + '.pts';
   let f = COM.LoadTextFile(name);
   if (f == null) {
     Con.Print('couldn\'t open ' + name + '\n');
@@ -2250,7 +2262,7 @@ R.DrawBrushModel = function(e) {
 };
 
 R.RecursiveWorldNode = function(node) {
-  if (node.contents === Mod.contents.solid) {
+  if (node.contents === content.CONTENT_SOLID) {
     return;
   }
   if (node.contents < 0) {
@@ -2304,8 +2316,16 @@ R.DrawWorld = function() {
       R.c_brush_verts += cmds[2];
       const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
       gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % .2) / .2 : 0);
-      textureA.glt.bind(program.tTextureA);
-      textureB.glt.bind(program.tTextureB);
+      if (textureA.glt) {
+        textureA.glt.bind(program.tTextureA);
+      } else {
+        R.notexture.bind(program.tTextureA);
+      }
+      if (textureB.glt) {
+        textureB.glt.bind(program.tTextureB);
+      } else {
+        R.notexture.bind(program.tTextureB);
+      }
       gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
     }
   }
@@ -2370,14 +2390,14 @@ R.MarkLeaves = function() {
     }
     // const p = [R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2]];
     let leaf;
-    if (R.viewleaf.contents <= Mod.contents.water) {
+    if (R.viewleaf.contents <= content.CONTENT_WATER) {
       leaf = Mod.PointInLeaf([R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2] + 16.0], CL.state.worldmodel);
-      if (leaf.contents <= Mod.contents.water) {
+      if (leaf.contents <= content.CONTENT_WATER) {
         break;
       }
     } else {
       leaf = Mod.PointInLeaf([R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2] - 16.0], CL.state.worldmodel);
-      if (leaf.contents > Mod.contents.water) {
+      if (leaf.contents > content.CONTENT_WATER) {
         break;
       }
     }

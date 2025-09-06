@@ -157,12 +157,25 @@ export const hull = [
  * point content values
  */
 export const content = Object.freeze({
+  // for game play:
   CONTENT_EMPTY: -1,
   CONTENT_SOLID: -2,
   CONTENT_WATER: -3,
   CONTENT_SLIME: -4,
   CONTENT_LAVA: -5,
   CONTENT_SKY: -6,
+
+  // for engine shenanigans:
+  CONTENT_ORIGIN: -7,
+  CONTENT_CLIP: -8,
+
+  // currents:
+  CONTENT_CURRENT_0: -9,
+  CONTENT_CURRENT_90: -10,
+  CONTENT_CURRENT_180: -11,
+  CONTENT_CURRENT_270: -12,
+  CONTENT_CURRENT_UP: -13,
+  CONTENT_CURRENT_DOWN: -14,
 });
 
 /**

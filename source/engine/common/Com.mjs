@@ -244,7 +244,7 @@ export default class COM {
   static Shutdown() {
     Sys.Print('COM.Shutdown: signaling outstanding promises to abort\n');
 
-    this.abortController.abort('this.Shutdown');
+    this.abortController.abort('COM.Shutdown');
   }
 
   static Path_f() {

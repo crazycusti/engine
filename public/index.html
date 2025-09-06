@@ -63,10 +63,6 @@
 		<script>
 			import('./source/engine/main-browser.mjs').then((module) => {
 				return module.default.Launch();
-			}).catch((error) => {
-				console.error(error);
-				document.getElementById('progress').style.display = 'none';
-				document.getElementById('error').textContent = error.name + ': ' + error.message;
 			});
 		</script>
 	</body>

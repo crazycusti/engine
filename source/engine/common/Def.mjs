@@ -7,10 +7,15 @@ export const productName = 'The Quake Shack';
 /**
  * Version string. It will be modified during the build process.
  */
-export const productVersion = '1.1.1+dev';
+export const productVersion = '1.1.2+dev';
 
+/**
+ * Engine limitations.
+ * @enum {number}
+ * @readonly
+ */
 export const limits = Object.freeze({
-  edicts: 600,
+  edicts: 64,
   clients: 32,
   dlights: 32,
   lightstyles: 64,
@@ -19,10 +24,11 @@ export const limits = Object.freeze({
 });
 
 /**
+ * CL.state.state keys
  * @enum {number}
  * @readonly
  */
-export const stat = Object.freeze({
+export const stat = Object.freeze({ // TODO: move to CL or PR, it’s legacy code
   health: 0,
   frags: 1,
   weapon: 2,

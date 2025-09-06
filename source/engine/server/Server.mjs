@@ -87,6 +87,8 @@ SV.fl = {
           dist: number;
       };
       ent: any;
+      inopen?: boolean;
+      inwater?: boolean;
   }} Trace
  */
 
@@ -277,6 +279,8 @@ SV.Init = function() {
   SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
   SV.waterfriction = new Cvar('sv_waterfriction', '4');
   SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
+
+  Navigation.Init();
 
   Cmd.AddCommand('nav', class extends ConsoleCommand {
     run() {
@@ -546,7 +550,7 @@ SV.AddToFatPVS = function(org, node) {
   let pvs; let i; let normal; let d;
   for (;;) {
     if (node.contents < 0) {
-      if (node.contents !== Mod.contents.solid) {
+      if (node.contents !== Defs.content.CONTENT_SOLID) {
         pvs = Mod.LeafPVS(node, SV.server.worldmodel);
         for (i = 0; i < SV.fatbytes; i++) {
           SV.fatpvs[i] |= pvs[i];
@@ -1573,16 +1577,16 @@ SV.CheckBottom = function(ent) {
   const maxs = ent.entity.origin.copy().add(ent.entity.maxs);
   // eslint-disable-next-line no-unreachable-loop
   while (true) {
-    if (SV.PointContents(new Vector(mins[0], mins[1], mins[2] - 1.0)) !== Mod.contents.solid) {
+    if (SV.PointContents(new Vector(mins[0], mins[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
       break;
     }
-    if (SV.PointContents(new Vector(mins[0], maxs[1], mins[2] - 1.0)) !== Mod.contents.solid) {
+    if (SV.PointContents(new Vector(mins[0], maxs[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
       break;
     }
-    if (SV.PointContents(new Vector(maxs[0], mins[1], mins[2] - 1.0)) !== Mod.contents.solid) {
+    if (SV.PointContents(new Vector(maxs[0], mins[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
       break;
     }
-    if (SV.PointContents(new Vector(maxs[0], maxs[1], mins[2] - 1.0)) !== Mod.contents.solid) {
+    if (SV.PointContents(new Vector(maxs[0], maxs[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
       break;
     }
     return true;
@@ -1645,7 +1649,7 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
       }
       const trace = SV.Move(ent.entity.origin, mins, maxs, neworg, SV.move.normal, ent);
       if (trace.fraction === 1.0) {
-        if (((ent.entity.flags & SV.fl.swim) !== 0) && (SV.PointContents(trace.endpos) === Mod.contents.empty)) {
+        if (((ent.entity.flags & SV.fl.swim) !== 0) && (SV.PointContents(trace.endpos) === Defs.content.CONTENT_EMPTY)) {
           // console.log('not here 1');
           return false; // swim monster left water
         }
@@ -2227,9 +2231,9 @@ SV.CheckStuck = function(ent) {
 SV.CheckWater = function(ent) {
   const point = ent.entity.origin.copy().add(new Vector(0.0, 0.0, ent.entity.mins[2] + 1.0));
   ent.entity.waterlevel = 0.0;
-  ent.entity.watertype = Mod.contents.empty;
+  ent.entity.watertype = Defs.content.CONTENT_EMPTY;
   let cont = SV.PointContents(point);
-  if (cont > Mod.contents.water) {
+  if (cont > Defs.content.CONTENT_WATER) {
     return false;
   }
   ent.entity.watertype = cont;
@@ -2237,11 +2241,11 @@ SV.CheckWater = function(ent) {
   const origin = ent.entity.origin;
   point[2] = origin[2] + (ent.entity.mins[2] + ent.entity.maxs[2]) * 0.5;
   cont = SV.PointContents(point);
-  if (cont <= Mod.contents.water) {
+  if (cont <= Defs.content.CONTENT_WATER) {
     ent.entity.waterlevel = 2.0;
-    point[2] = origin[2] + ent.entity.view_ofs[2];
+    point[2] = origin[2] + ent.entity.view_ofs[2]; // FIXME: not guaranteed to be available
     cont = SV.PointContents(point);
-    if (cont <= Mod.contents.water) {
+    if (cont <= Defs.content.CONTENT_WATER) {
       ent.entity.waterlevel = 3.0;
     }
   }
@@ -2427,18 +2431,18 @@ SV.CheckWaterTransition = function(ent) {
     return;
   }
 
-  if (cont <= Mod.contents.water) {
-    if (ent.entity.watertype === Mod.contents.empty) {
+  if (cont <= Defs.content.CONTENT_WATER) {
+    if (ent.entity.watertype === Defs.content.CONTENT_EMPTY) {
       SV.StartSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0); // TODO: move to game logic
     }
     ent.entity.watertype = cont;
     ent.entity.waterlevel = 1.0;
     return;
   }
-  if (ent.entity.watertype !== Mod.contents.empty) {
+  if (ent.entity.watertype !== Defs.content.CONTENT_EMPTY) {
     SV.StartSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0); // TODO: move to game logic
   }
-  ent.entity.watertype = Mod.contents.empty;
+  ent.entity.watertype = Defs.content.CONTENT_EMPTY;
   ent.entity.waterlevel = cont;
 };
 
@@ -2971,11 +2975,11 @@ SV.InitBoxHull = function() {
     SV.box_clipnodes[i] = node;
     node.planenum = i;
     node.children = [];
-    node.children[i & 1] = Mod.contents.empty;
+    node.children[i & 1] = Defs.content.CONTENT_EMPTY;
     if (i !== 5) {
       node.children[1 - (i & 1)] = i + 1;
     } else {
-      node.children[1 - (i & 1)] = Mod.contents.solid;
+      node.children[1 - (i & 1)] = Defs.content.CONTENT_SOLID;
     }
     const plane = {};
     SV.box_planes[i] = plane;
@@ -3083,7 +3087,7 @@ SV.TouchLinks = function(ent, node) {
 };
 
 SV.FindTouchedLeafs = function(ent, node) {
-  if (node.contents === Mod.contents.solid) {
+  if (node.contents === Defs.content.CONTENT_SOLID) {
     return;
   }
 
@@ -3187,8 +3191,8 @@ SV.HullPointContents = function(hull, num, p) {
 
 SV.PointContents = function(p) {
   const cont = SV.HullPointContents(SV.server.worldmodel.hulls[0], 0, p);
-  if ((cont <= Mod.contents.current_0) && (cont >= Mod.contents.current_down)) {
-    return Mod.contents.water;
+  if ((cont <= Defs.content.CONTENT_CURRENT_0) && (cont >= Defs.content.CONTENT_CURRENT_DOWN)) {
+    return Defs.content.CONTENT_WATER;
   }
   return cont;
 };
@@ -3211,9 +3215,9 @@ SV.TestEntityPosition = function(ent) {
 SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: rewrite to iterative check, also move to client/server shared
   // check for empty
   if (num < 0) {
-    if (num !== Mod.contents.solid) {
+    if (num !== Defs.content.CONTENT_SOLID) {
       trace.allsolid = false;
-      if (num === Mod.contents.empty) {
+      if (num === Defs.content.CONTENT_EMPTY) {
         trace.inopen = true;
       } else {
         trace.inwater = true;
@@ -3254,7 +3258,7 @@ SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: 
   }
 
   // go past the node
-  if (SV.HullPointContents(hull, node.children[1 - side], mid) !== Mod.contents.solid) {
+  if (SV.HullPointContents(hull, node.children[1 - side], mid) !== Defs.content.CONTENT_SOLID) {
     return SV.RecursiveHullCheck(hull, node.children[1 - side], midf, p2f, mid, p2, trace);
   }
 
@@ -3272,7 +3276,7 @@ SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: 
     trace.plane.dist = -plane.dist;
   }
 
-  while (SV.HullPointContents(hull, hull.firstclipnode, mid) === Mod.contents.solid) {
+  while (SV.HullPointContents(hull, hull.firstclipnode, mid) === Defs.content.CONTENT_SOLID) {
     // shouldn't really happen, but does occasionally
     frac -= 0.1;
     if (frac < 0.0) {

@@ -1,4 +1,5 @@
 import Vector from '../../shared/Vector.mjs';
+import { content, gameCapabilities } from '../../shared/Defs.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import * as Def from '../common/Def.mjs';
@@ -6,19 +7,17 @@ import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import MSG from '../network/MSG.mjs';
 import Chase from './Chase.mjs';
-import { gameCapabilities } from '../../shared/Defs.mjs';
 
 const V = {};
 
 export default V;
 
-let { CL, Con, Host, Mod, R, SCR } = registry;
+let { CL, Con, Host, R, SCR } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   Con = registry.Con;
   Host = registry.Host;
-  Mod = registry.Mod;
   R = registry.R;
   SCR = registry.SCR;
 });
@@ -191,20 +190,24 @@ V.ContentShift = function (slot, color, alpha) {
   cshift[3] = alpha * 255.0;
 };
 
+/**
+ * @param {content} contents content classification
+ */
 V.SetContentsColor = function (contents) {
   switch (contents) {
-    case Mod.contents.empty:
-    case Mod.contents.solid:
-      CL.state.cshifts[CL.cshift.contents] = V.cshift_empty;
+    case content.CONTENT_EMPTY:
+      CL.state.cshifts[Def.contentShift.contents] = V.cshift_empty;
       return;
-    case Mod.contents.lava:
-      CL.state.cshifts[CL.cshift.contents] = V.cshift_lava;
+    case content.CONTENT_LAVA:
+      CL.state.cshifts[Def.contentShift.contents] = V.cshift_lava;
       return;
-    case Mod.contents.slime:
-      CL.state.cshifts[CL.cshift.contents] = V.cshift_slime;
+    case content.CONTENT_SLIME:
+      CL.state.cshifts[Def.contentShift.contents] = V.cshift_slime;
+      return;
+    case content.CONTENT_WATER:
+      CL.state.cshifts[Def.contentShift.contents] = V.cshift_water;
       return;
   }
-  CL.state.cshifts[CL.cshift.contents] = V.cshift_water;
 };
 
 V.CalcBlend = function () {

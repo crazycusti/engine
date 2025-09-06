@@ -80,17 +80,18 @@ Grouped by sections and then sorted by priority (more or less).
   * [X] trigger_monsterjump
   * [X] trigger_push
 * [X] rename `edict.api` to `edict.entity`
-* [_] put some things behind feature gates, so that the game can tell the engine what things are needed/supported
+* [X] put some things behind feature gates, so that the game can tell the engine what things are needed/supported
 * [_] improve stack trace / error handling for QuakeC
 * [_] build something that will take a map from defs and makes sure that some properties must be within that range (for movetype, solid, flags)
-* [_] applyBackpack: currentammo not updated
-* [_] cvars: move game related cvars to PR and QuakeJS game
+* [X] applyBackpack: currentammo not updated
+* [X] cvars: move game related cvars to PR and QuakeJS game
 * [X] BaseEntity: make state definitions static
 
 ### Modern JavaScript
 
 * [_] `COM` we need to completely get rid of synchroneously loading files, it’s flagged as deprecated
 * [_] use more Exceptions and better Exception classes, also more console.asserts
+* [_] considering replacing Sys.Print and Con.Print with console.info, console.warn, etc.
 * [_] look into worker and multithreading
 * [_] look into bun.sh
 * [X] completely switch to JS modules at some point
@@ -127,7 +128,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 * [_] port QuakeWorld netcode
 * [_] flush messages more often, increase update rate
-* [_] only send message when actually needed, there’s too much idle chatter right now
+* [X] only send message when actually needed, there’s too much idle chatter right now
 * [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 * [X] introduce a required server/client version level and drop clients with wrong version
 * [X] automatically connect to /api/ instead of /
@@ -157,7 +158,6 @@ Grouped by sections and then sorted by priority (more or less).
 * [X] SV, CL: we can ramp up the resolution of things like angles etc.
 * [_] Mod: lazy load models
 * [_] SV: spawn server should wait for async resources to arrive
-* [_] SV: reimplement recursive hull check iteratively
 * [_] IN: proper virtual joystick and keyboard/UI
 * [X] Key: fix empty say spamming
 
@@ -327,6 +327,15 @@ class MainMenu extends BaseMenu {
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 
 ## Log
+
+### 2025-09-06
+
+* Navigation: made serialization of waypoints optional
+* Mod: started cleaning up that code base to make way to for map formats, adding BSP2 support next
+* index.html: removed error handler
+* Sys: cancel outstanding fetch requests when quitting
+* SV: allocate more edicts on the fly in chunks of 64
+* Def: bumped version to 1.1.2 reflecting the newly added features
 
 ### 2025-09-02
 

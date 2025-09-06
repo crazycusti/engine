@@ -1,10 +1,11 @@
 import Vector from '../../shared/Vector.mjs';
 import GL, { GLTexture, resampleTexture8 } from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
+import { CorruptedResourceError, MissingResourceError, NotImplementedError } from './Errors.mjs';
 import Q from '../../shared/Q.mjs';
 import W, { translateIndexToRGBA, WadFileInterface } from './W.mjs';
 import { CRC16CCITT } from './CRC.mjs';
+import { BaseModel, Face, Plane } from './model/BaseModel.mjs';
 
 const Mod = {};
 
@@ -38,46 +39,6 @@ const notexture_mip = {name: 'notexture', width: 16, height: 16, texturenum: nul
  * Mod.AliasModel
  */
 
-export class BaseModel {
-  static STATE = {
-    NOT_READY: 'not-ready',
-    LOADING: 'loading',
-    READY: 'ready',
-    FAILED: 'failed',
-  };
-
-  constructor(name) {
-    this.name = name;
-    this.type = null;
-    this.reset();
-  }
-
-  reset() {
-    // private variables
-    this._num_frames = 0;
-    this._num_skins = 0;
-    this._num_tris = 0; // R requires that
-    this._num_verts = 0;
-
-    this._scale = new Vector(1.0, 1.0, 1.0);
-    this._scale_origin = new Vector();
-    this._random = false; // FIXME: read but unused
-
-    // public variables
-    /** whether the file still needs loading */
-    this.needload = true;
-    /** simple CRC checksum to check if things are still the same */
-    this.checksum = 0;
-
-    // public variables
-    this.mins = []; // required by PF, R, CL, SV (on worldmodel)
-    this.maxs = []; // required by PF, R, CL, SV (on worldmodel)
-
-    // public variables just for rendering purposes (IDEA: refactor into ModelRenderer classes)
-    this.cmds = []; // required by R
-  }
-};
-
 export class AliasModel extends BaseModel {
   reset() {
     super.reset();
@@ -99,36 +60,10 @@ export class AliasModel extends BaseModel {
   }
 };
 
-export class Plane { // TODO: move to shared
-  type = 0;
-  signbits = 0;
-
-  constructor(normal, dist) {
-    /** @type {Vector} */
-    this.normal = normal;
-    /** @type {number} */
-    this.dist = dist;
-  }
-};
-
-export class Face {
-  submodel = false;
-  /** @type {Plane} */
-  plane = null;
-  firstedge = 0;
-  numedges = 0;
-  texinfo = 0;
-  /** @type {number[]} */
-  styles = [];
-  lightofs = 0;
-  texture = 0;
-  texturemins = [0, 0];
-  extents = [0, 0];
-  turbulent = false;
-  sky = false;
-};
-
 export class BrushModel extends BaseModel {
+  /** @type {29|844124994} */
+  version = null;
+
   /** @type {Plane[]} */
   planes = [];
 
@@ -143,6 +78,8 @@ export class BrushModel extends BaseModel {
 
   /** @type {number[]} */
   surfedges = [];
+
+  nodes = [];
 };
 
 Mod.type = {brush: 0, sprite: 1, alias: 2};
@@ -158,7 +95,7 @@ Mod.hull = {
   crouch: 3,
 };
 
-Mod.version = {brush: 29, sprite: 1, alias: 6};
+Mod.version = {brush: 29, sprite: 1, alias: 6, bsp2: 844124994};
 
 Mod.known = [];
 
@@ -268,6 +205,25 @@ Mod.FindName = function(name) { // private method (refactor into _RegisterModel)
   return null;
 };
 
+Mod.LoadModelFromBuffer = function (loadmodel, buffer) {
+  loadmodel.needload = false;
+  loadmodel.checksum = CRC16CCITT.Block(new Uint8Array(buffer));
+  const ident = (new DataView(buffer)).getUint32(0, true);
+  switch (ident) {
+    case 0x4f504449: // IDPO
+      return Mod.LoadAliasModel(loadmodel, buffer);
+    case 0x50534449: // IDSP
+      return Mod.LoadSpriteModel(loadmodel, buffer);
+    case Mod.version.brush:
+      return Mod.LoadBrushModel(loadmodel, buffer);
+    case Mod.version.bsp2:
+      throw new NotImplementedError('BSP2 loading not implemented yet');
+    default:
+      throw new NotImplementedError('Unknown model format ' + ident + ' for ' + loadmodel.name);
+  }
+  return null;
+};
+
 /** @deprecated use Mod.LoadModelAsync instead */
 Mod.LoadModel = function(mod, crash) { // private method
   if (mod.needload !== true) {
@@ -280,20 +236,7 @@ Mod.LoadModel = function(mod, crash) { // private method
     }
     return null;
   }
-  const loadmodel = mod; // TODO: refactor into this
-  mod.needload = false;
-  mod.checksum = CRC16CCITT.Block(new Uint8Array(buf));
-  switch ((new DataView(buf)).getUint32(0, true)) {
-    case 0x4f504449:
-      Mod.LoadAliasModel(loadmodel, buf);
-      break;
-    case 0x50534449:
-      Mod.LoadSpriteModel(loadmodel, buf);
-      break;
-    default:
-      Mod.LoadBrushModel(loadmodel, buf);
-  }
-  return mod;
+  return Mod.LoadModelFromBuffer(mod, buf);
 };
 
 /**
@@ -312,20 +255,7 @@ Mod.LoadModelAsync = async function(mod, crash) { // private method
     }
     return null;
   }
-  const loadmodel = mod; // TODO: refactor into this
-  mod.needload = false;
-  mod.checksum = CRC16CCITT.Block(new Uint8Array(buf));
-  switch ((new DataView(buf)).getUint32(0, true)) {
-    case 0x4f504449:
-      Mod.LoadAliasModel(loadmodel, buf);
-      break;
-    case 0x50534449:
-      Mod.LoadSpriteModel(loadmodel, buf);
-      break;
-    default:
-      Mod.LoadBrushModel(loadmodel, buf);
-  }
-  return mod;
+  return Mod.LoadModelFromBuffer(mod, buf);
 };
 
 /**
@@ -355,6 +285,7 @@ Mod.ForNameAsync = async function(name, crash = false) { // public method
 ===============================================================================
 */
 
+/** @deprecated */
 Mod.lump =
 {
   entities: 0,
@@ -372,23 +303,6 @@ Mod.lump =
   edges: 12,
   surfedges: 13,
   models: 14,
-};
-
-Mod.contents = {
-  empty: -1,
-  solid: -2,
-  water: -3,
-  slime: -4,
-  lava: -5,
-  sky: -6,
-  origin: -7,
-  clip: -8,
-  current_0: -9,
-  current_90: -10,
-  current_180: -11,
-  current_270: -12,
-  current_up: -13,
-  current_down: -14,
 };
 
 Mod.LoadTextures = function(loadmodel, buf) {
@@ -632,14 +546,28 @@ Mod.LoadEdges = function(loadmodel, buf) {
   let fileofs = view.getUint32((Mod.lump.edges << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.edges << 3) + 8, true);
   if ((filelen & 3) !== 0) {
-    throw new Error('Mod.LoadEdges: funny lump size in ' + loadmodel.name);
+    throw new CorruptedResourceError(loadmodel.name, 'funny lump size');
   }
   const count = filelen >> 2;
   loadmodel.edges = [];
-  let i;
-  for (i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++) {
     loadmodel.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
     fileofs += 4;
+  }
+};
+
+Mod.LoadEdgesBSP2 = function(loadmodel, buf) {
+  const view = new DataView(buf);
+  let fileofs = view.getUint32((Mod.lump.edges << 3) + 4, true);
+  const filelen = view.getUint32((Mod.lump.edges << 3) + 8, true);
+  if ((filelen & 3) !== 0) {
+    throw new CorruptedResourceError(loadmodel.name, 'funny lump size');
+  }
+  const count = filelen >> 2;
+  loadmodel.edges = [];
+  for (let i = 0; i < count; i++) {
+    loadmodel.edges[i] = [view.getUint32(fileofs, true), view.getUint32(fileofs + 4, true)];
+    fileofs += 8;
   }
 };
 
@@ -676,7 +604,7 @@ Mod.LoadFaces = function(loadmodel, buf) {
   let fileofs = view.getUint32((Mod.lump.faces << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.faces << 3) + 8, true);
   if ((filelen % 20) !== 0) {
-    throw new Error('Mod.LoadFaces: funny lump size in ' + loadmodel.name);
+    throw new CorruptedResourceError(loadmodel.name, 'Mod.LoadFaces: funny lump size');
   }
   const count = filelen / 20;
   loadmodel.firstface = 0;
@@ -945,17 +873,14 @@ Mod.LoadPlanes = function(loadmodel, buf) {
  */
 Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
-  const version = (new DataView(buffer)).getUint32(0, true);
-  if (version !== Mod.version.brush) {
-    throw new CorruptedResourceError(loadmodel.name, 'wrong version number (' + version + ' should be ' + Mod.version.brush + ')');
-  }
-  Mod.LoadVertexes(loadmodel, buffer);
+  loadmodel.version = /** @type {29|844124994} */ ((new DataView(buffer)).getUint32(0, true));
+  Mod.LoadVertexes(loadmodel, buffer); // OK
   Mod.LoadEdges(loadmodel, buffer);
-  Mod.LoadSurfedges(loadmodel, buffer);
-  Mod.LoadTextures(loadmodel, buffer);
-  Mod.LoadLighting(loadmodel, buffer);
-  Mod.LoadPlanes(loadmodel, buffer);
-  Mod.LoadTexinfo(loadmodel, buffer);
+  Mod.LoadSurfedges(loadmodel, buffer); // OK
+  Mod.LoadTextures(loadmodel, buffer); // OK
+  Mod.LoadLighting(loadmodel, buffer); // OK
+  Mod.LoadPlanes(loadmodel, buffer); // OK
+  Mod.LoadTexinfo(loadmodel, buffer); // OK
   Mod.LoadFaces(loadmodel, buffer);
   Mod.LoadMarksurfaces(loadmodel, buffer);
   Mod.LoadVisibility(loadmodel, buffer);
@@ -992,6 +917,7 @@ Mod.LoadBrushModel = function(loadmodel, buffer) {
     Math.abs(mins[1]) > Math.abs(maxs[1]) ? Math.abs(mins[1]) : Math.abs(maxs[1]),
     Math.abs(mins[2]) > Math.abs(maxs[2]) ? Math.abs(mins[2]) : Math.abs(maxs[2]),
   )).len();
+  return loadmodel;
 };
 
 /*
@@ -1243,7 +1169,7 @@ Mod.LoadAliasModel = function(loadmodel, buffer) {
 
   if (registry.isDedicatedServer) {
     // skip frontend-only data
-    return;
+    return loadmodel;
   }
 
   const cmds = [];
@@ -1321,6 +1247,8 @@ Mod.LoadAliasModel = function(loadmodel, buffer) {
   loadmodel.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, loadmodel.cmds);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
+
+  return loadmodel;
 };
 
 Mod.LoadSpriteFrame = function(identifier, buffer, inframe, frame) {
@@ -1390,6 +1318,8 @@ Mod.LoadSpriteModel = function(loadmodel, buffer) {
       }
     }
   }
+
+  return loadmodel;
 };
 
 Mod.Print = function() {

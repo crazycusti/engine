@@ -13,6 +13,7 @@ eventBus.subscribe('registry.frozen', () => {
 eventBus.subscribe('host.crash', (error) => {
   console.error(error);
   document.getElementById('error').textContent = error.name + ': ' + error.message;
+  COM.Shutdown(); // abort all pending IO operations
 });
 
 /**

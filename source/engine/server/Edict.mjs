@@ -43,15 +43,15 @@ export class ED {
         return e;
       }
     }
-    if (i === Def.limits.edicts) {
-      // TODO: soft limit, hard limit, also allocate directly 200 more in one go
-      Con.PrintWarning(`ED.Alloc triggered Def.limits.edicts (${Def.limits.edicts})\n`);
+    if ((i % Def.limits.edicts) === 0) {
+      // allocate another block
+      SV.server.edicts.length += Def.limits.edicts;
+      for (let j = i; j < SV.server.edicts.length; j++) {
+        SV.server.edicts[j] = new ServerEdict(j);
+      }
+      Con.DPrint(`ED.Alloc triggered Def.limits.edicts (${Def.limits.edicts})\n`);
     }
     e = SV.server.edicts[SV.server.num_edicts++];
-    if (!e) {
-      e = new SV.Edict(i);
-      SV.server.edicts.push(e);
-    }
     ED.ClearEdict(e);
     return e;
   }

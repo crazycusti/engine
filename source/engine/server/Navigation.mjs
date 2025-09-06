@@ -4,7 +4,8 @@ import Vector from '../../shared/Vector.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { CorruptedResourceError, MissingResourceError } from '../common/Errors.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
-import { BrushModel, Face } from '../common/Mod.mjs';
+import { BrushModel } from '../common/Mod.mjs';
+import { Face } from '../common/model/BaseModel.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
 
@@ -103,7 +104,7 @@ class Node {
   nearLedge = false;
   isClipping = false;
   isFloating = false;
-  /** @type {Set<WalkableSurface>} */
+  /** @type {?Set<WalkableSurface>} */
   surfaces = new Set();
   /** @type {number[][]} list of [id, cost, temporary cost adjustment] */
   neighbors = [];
@@ -141,7 +142,7 @@ class Node {
     node.nearLedge = data[3];
     node.isClipping = data[4];
     node.isFloating = data[5];
-    node.surfaces = new Set(data[6].map((id) => WalkableSurface.deserialize(id, navigation)));
+    // node.surfaces = new Set(data[6].map((id) => WalkableSurface.deserialize(id, navigation)));
     node.neighbors = data[7].slice();
 
     return node;
@@ -153,6 +154,15 @@ class NavMeshOutOfDateException extends CorruptedResourceError {};
 const NAV_FILE_VERSION = 2; // 1 = JSON, 2 = compact binary
 
 export class Navigation {
+  /** @type {Cvar} */
+  static nav_save_waypoints = null;
+  /** @type {Cvar} */
+  static nav_debug_waypoints = null;
+  /** @type {Cvar} */
+  static nav_debug_graph = null;
+  /** @type {Cvar} */
+  static nav_debug_path = null;
+
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
   /** units of headroom required above waypoint */
@@ -177,8 +187,11 @@ export class Navigation {
     };
   }
 
-  get debugNav() {
-    return Cvar.FindVar('developer').value !== 0;
+  static Init() {
+    this.nav_save_waypoints = new Cvar('nav_save_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will save all extracted waypoints to nav file');
+    this.nav_debug_graph = new Cvar('nav_debug_graph', '0', Cvar.FLAG.NONE, 'if set to 1, will render the navigation graph for debugging');
+    this.nav_debug_waypoints = new Cvar('nav_debug_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will render all waypoints for debugging');
+    this.nav_debug_path = new Cvar('nav_debug_path', '0', Cvar.FLAG.NONE | Cvar.FLAG.CHEAT, 'if set to 1, will render the last computed path for debugging');
   }
 
   init() {
@@ -272,26 +285,28 @@ export class Navigation {
       node.isClipping = !!readUint8();
       node.isFloating = !!readUint8();
 
-      // surfaces
+      // surfaces (optional)
       const surfCount = readUint32();
-      const surfData = [];
-      for (let si = 0; si < surfCount; si++) {
-        const stability = readFloat32();
-        const nx = readFloat32(); const ny = readFloat32(); const nz = readFloat32();
-        const faceIndex = readUint32();
-        const wpCount = readUint32();
-        const wps = [];
-        for (let wi = 0; wi < wpCount; wi++) {
-          const wx = readFloat32(); const wy = readFloat32(); const wz = readFloat32();
-          const avail = readFloat32();
-          const near = !!readUint8();
-          const clip = !!readUint8();
-          const floating = !!readUint8();
-          wps.push([[wx, wy, wz], avail, near, clip, floating]);
+      if (surfCount > 0) {
+        const surfData = [];
+        for (let si = 0; si < surfCount; si++) {
+          const stability = readFloat32();
+          const nx = readFloat32(); const ny = readFloat32(); const nz = readFloat32();
+          const faceIndex = readUint32();
+          const wpCount = readUint32();
+          const wps = [];
+          for (let wi = 0; wi < wpCount; wi++) {
+            const wx = readFloat32(); const wy = readFloat32(); const wz = readFloat32();
+            const avail = readFloat32();
+            const near = !!readUint8();
+            const clip = !!readUint8();
+            const floating = !!readUint8();
+            wps.push([[wx, wy, wz], avail, near, clip, floating]);
+          }
+          surfData.push([stability, [nx, ny, nz], faceIndex, wps]);
         }
-        surfData.push([stability, [nx, ny, nz], faceIndex, wps]);
+        node.surfaces = new Set(surfData.map((sd) => WalkableSurface.deserialize(sd, this)));
       }
-      node.surfaces = new Set(surfData.map((sd) => WalkableSurface.deserialize(sd, this)));
 
       // neighbors
       const nbCount = readUint32();
@@ -359,20 +374,25 @@ export class Navigation {
       pushUint8(n.isFloating ? 1 : 0);
 
       // surfaces
-      const surfaces = Array.from(n.surfaces);
-      pushUint32(surfaces.length);
-      for (const s of surfaces) {
-        pushFloat32(s.stability);
-        pushFloat32(s.normal[0]); pushFloat32(s.normal[1]); pushFloat32(s.normal[2]);
-        pushUint32(s.faceIndex);
-        pushUint32(s.waypoints.length);
-        for (const wp of s.waypoints) {
-          pushFloat32(wp.origin[0]); pushFloat32(wp.origin[1]); pushFloat32(wp.origin[2]);
-          pushFloat32(wp.availableHeight);
-          pushUint8(wp.nearLedge ? 1 : 0);
-          pushUint8(wp.isClipping ? 1 : 0);
-          pushUint8(wp.isFloating ? 1 : 0);
+      if (Navigation.nav_save_waypoints.value !== 0) {
+        const surfaces = Array.from(n.surfaces);
+        pushUint32(surfaces.length);
+        for (const s of surfaces) {
+          pushFloat32(s.stability);
+          pushFloat32(s.normal[0]); pushFloat32(s.normal[1]); pushFloat32(s.normal[2]);
+          pushUint32(s.faceIndex);
+          pushUint32(s.waypoints.length);
+          for (const wp of s.waypoints) {
+            pushFloat32(wp.origin[0]); pushFloat32(wp.origin[1]); pushFloat32(wp.origin[2]);
+            pushFloat32(wp.availableHeight);
+            pushUint8(wp.nearLedge ? 1 : 0);
+            pushUint8(wp.isClipping ? 1 : 0);
+            pushUint8(wp.isFloating ? 1 : 0);
+          }
         }
+      } else {
+        // simply write 0 here
+        pushUint32(0);
       }
 
       // neighbors
@@ -977,7 +997,7 @@ export class Navigation {
       return;
     }
 
-    // TODO:
+    // TODO: adjust the nav graph accordingly
   }
 
   #relinkAll() {
@@ -1163,7 +1183,9 @@ export class Navigation {
     }
 
     if (startNode.id === goalNode.id) {
-      return [startPos.copy(), goalPos.copy()];
+      const path = [startPos.copy(), goalPos.copy()];
+      this.#debugPath(path);
+      return path;
     }
 
     // A* structures
@@ -1181,7 +1203,7 @@ export class Navigation {
     //   const { fraction } = this.#testTraceDynamic(aa, ab);
 
     //   // if (fraction < 1.0) {
-    //   //   this.showPath([aa, ab], 192);
+    //   //   this.#debugPath([aa, ab], 192);
     //   // }
 
     //   return fraction < 1.0;
@@ -1222,6 +1244,7 @@ export class Navigation {
         // prepend exact start and append exact goal for precision
         path[0] = startPos.copy();
         path.push(goalPos.copy());
+        this.#debugPath(path);
         return path;
       }
 
@@ -1272,6 +1295,10 @@ export class Navigation {
   }
 
   #debugNavigation() {
+    if (!Navigation.nav_debug_graph.value) {
+      return;
+    }
+
     for (const node of this.graph.nodes) {
       let color = 144;
 
@@ -1283,8 +1310,15 @@ export class Navigation {
     }
   }
 
-  /** @param {Vector[]} vectors waypoints */
-  showPath(vectors, color = 251) {
+  /**
+   * @param {Vector[]} vectors waypoints
+   * @param {number} color indexed color
+   */
+  #debugPath(vectors, color = 251) {
+    if (!Navigation.nav_debug_path.value) {
+      return;
+    }
+
     if (!vectors || vectors.length === 0) {
       return;
     }
@@ -1307,6 +1341,10 @@ export class Navigation {
   }
 
   #debugWaypoints() {
+    if (!Navigation.nav_debug_waypoints.value) {
+      return;
+    }
+
     /** @type {{origin: Vector, color: number, surface: WalkableSurface}[]} */
     const debugPoints = [];
     let waypoints = 0;
@@ -1355,10 +1393,8 @@ export class Navigation {
 
     if (R) {
       setTimeout(() => {
-        if (this.debugNav) {
-          // this.#debugWaypoints();
-          this.#debugNavigation();
-        }
+        this.#debugWaypoints();
+        this.#debugNavigation();
       }, 1000); // wait a bit for renderer to initialize
     }
   }

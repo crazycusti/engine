@@ -16,7 +16,7 @@ import { HostError } from '../common/Errors.mjs';
 import ClientEntities, { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { ClientMessages, ClientPlayerState } from './ClientMessages.mjs';
 import VID from './VID.mjs';
-import { BaseModel } from '../common/Mod.mjs';
+import { BaseModel } from '../common/model/BaseModel.mjs';
 
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 

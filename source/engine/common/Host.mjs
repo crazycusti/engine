@@ -12,7 +12,7 @@ import Chase from '../client/Chase.mjs';
 import VID from '../client/VID.mjs';
 import { HostError } from './Errors.mjs';
 import CDAudio from '../client/CDAudio.mjs';
-import { gameCapabilities } from '../../shared/Defs.mjs';
+import { content, gameCapabilities } from '../../shared/Defs.mjs';
 
 const Host = {};
 
@@ -53,7 +53,6 @@ Host.EndGame = function(message) {
 };
 
 Host.Error = function(error) {
-  debugger;
   if (Host.inerror === true) {
     throw new Error('throw new HostError: recursively entered');
   }
@@ -366,7 +365,7 @@ Host._Frame = function() {
   }
 
   if (CL.cls.signon === 4) {
-    S.Update(R.refdef.vieworg, R.vpn, R.vright, R.vup, R.viewleaf ? R.viewleaf.contents <= Mod.contents.water : false);
+    S.Update(R.refdef.vieworg, R.vpn, R.vright, R.vup, R.viewleaf ? R.viewleaf.contents <= content.CONTENT_WATER : false);
   } else {
     S.Update(Vector.origin, Vector.origin, Vector.origin, Vector.origin, false);
   }
@@ -556,7 +555,7 @@ Host.Status_f = function() {
   }
   print('hostname: ' + NET.hostname.string + '\n');
   print('version : ' + Def.productVersion + ' (' + SV.server.gameVersion + ')\n');
-  print('map     : ' + SV.server.gameAPI.mapname + '\n');
+  print('map     : ' + SV.server.mapname + '\n');
   print('game    : ' + SV.server.gameName + '\n');
   print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' max\n');
   print('players : ' + NET.activeconnections + ' active (' + SV.svs.maxclients + ' max)\n\n');
@@ -770,8 +769,6 @@ Host.Changelevel_f = function(mapname) {
 
   if (!SV.HasMap(mapname)) {
     throw new HostError(`No such map: ${mapname}`);
-    // Con.Print(`No such map: ${mapname}\n`);
-    // return;
   }
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
@@ -794,7 +791,7 @@ Host.Changelevel_f = function(mapname) {
 
 Host.Restart_f = function() {
   if ((SV.server.active) && (registry.isDedicatedServer || !CL.cls.demoplayback && !this.client)) {
-    Cmd.ExecuteString(`map ${SV.server.gameAPI.mapname}`);
+    Cmd.ExecuteString(`map ${SV.server.mapname}`);
   }
 };
 
@@ -872,7 +869,7 @@ Host.Savegame_f = function(savename) {
     gameversion: SV.server.gameVersion,
     comment: CL.state.levelname, // TODO: ask the game for a comment
     spawn_parms: client.spawn_parms,
-    mapname: SV.server.gameAPI.mapname,
+    mapname: SV.server.mapname,
     time: SV.server.time,
     lightstyles: SV.server.lightstyles,
     globals: null,
@@ -1395,7 +1392,7 @@ Host.Kick_f = function() { // FIXME: Host.client
   Host.client = save;
 };
 
-Host.Give_f = class extends HostConsoleCommand {
+Host.Give_f = class extends HostConsoleCommand { // TODO: move to game
   run(classname) {
     // CR:  unsure if I want a “give item_shells” approach or
     //      if I want to push this piece of code into PR/PF and let
@@ -1435,7 +1432,7 @@ Host.Give_f = class extends HostConsoleCommand {
 
       const origin = trace.point.subtract(forward.multiply(16.0)).add(new Vector(0.0, 0.0, 16.0));
 
-      if (![Mod.contents.empty, Mod.contents.water].includes(ServerEngineAPI.DeterminePointContents(origin))) {
+      if (![content.CONTENT_EMPTY, content.CONTENT_WATER].includes(ServerEngineAPI.DeterminePointContents(origin))) {
         Host.ClientPrint('Item would spawn out of world!\n');
         return;
       }
@@ -1569,6 +1566,12 @@ Host.InitCommands = function() {
   Cmd.AddCommand('error', class extends ConsoleCommand {
     run(message) {
       throw new HostError(message);
+    }
+  });
+
+  Cmd.AddCommand('fatalerror', class extends ConsoleCommand {
+    run(message) {
+      throw new Error(message);
     }
   });
 };

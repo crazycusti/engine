@@ -90,7 +90,6 @@ export default class Vector extends Array {
    * @param {number} z Z
    */
   constructor(x = 0.0, y = 0.0, z = 0.0) {
-    // console.assert(typeof x === 'number' && typeof y === 'number' && typeof z === 'number', 'not a number');
     super(x, y, z);
   }
 
@@ -203,7 +202,7 @@ export default class Vector extends Array {
       return 3;
     }
     let dist1; let dist2;
-    // console.assert(p.signbits >= 0 && p.signbits < 8, 'signbits must be [0, 8)', p.signbits);
+    console.assert(p.signbits >= 0 && p.signbits < 8, 'signbits must be [0, 8)', p.signbits);
     switch (p.signbits) {
       case 0:
         dist1 = p.normal[0] * emaxs[0] + p.normal[1] * emaxs[1] + p.normal[2] * emaxs[2];
@@ -378,7 +377,7 @@ export default class Vector extends Array {
 
   /**
    * Add other to this vector (component-wise).
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {Vector} this
    */
   add(other) {
@@ -391,7 +390,7 @@ export default class Vector extends Array {
 
   /**
    * Subtract other from this vector (component-wise).
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {Vector} this
    */
   subtract(other) {
@@ -403,7 +402,7 @@ export default class Vector extends Array {
   }
 
   /**
-   * Multiply factor to this vector.
+   * Multiply factor into this vector.
    * @param {number} factor factor for multiplication
    * @returns {Vector} this
    */
@@ -417,7 +416,7 @@ export default class Vector extends Array {
 
   /**
    * Check if other equals this vector.
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {boolean} true, if all components are equal
    */
   equals(other) {
@@ -438,7 +437,7 @@ export default class Vector extends Array {
 
   /**
    * Check if this vector is greater than other.
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {boolean} true, if all components of this vector are greater than the other vector
    */
   gt(other) {
@@ -448,7 +447,7 @@ export default class Vector extends Array {
 
   /**
    * Check if this vector is greater than or equal to other.
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {boolean} true, if all components of this vector are greater than or equal to the other vector
    */
   gte(other) {
@@ -458,7 +457,7 @@ export default class Vector extends Array {
 
   /**
    * Check if this vector is less than other.
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {boolean} true, if all components of this vector are less than the other vector
    */
   lt(other) {
@@ -468,7 +467,7 @@ export default class Vector extends Array {
 
   /**
    * Check if this vector is less than or equal to other.
-   * @param {Vector|Array<number>} other other vector (or vector alike)
+   * @param {Vector|number[]} other other vector (or vector alike)
    * @returns {boolean} true, if all components of this vector are less than or equal to the other vector
    */
   lte(other) {
@@ -478,7 +477,7 @@ export default class Vector extends Array {
 
   /**
    * Overwrite this vector with values from other.
-   * @param {Vector|Array<number>} other other vector
+   * @param {Vector|number[]} other other vector
    * @returns {Vector} this
    */
   set(other) {
