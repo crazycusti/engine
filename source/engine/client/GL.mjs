@@ -819,6 +819,7 @@ function GL_Init() {
   GL.streamBufferPosition = 0;
 
   // upload a checkerboard (red/black) texture for missing pics
+  // FIXME: Mod is also uploading such a texture, we should share it
   missingPicTexture.upload((() => {
     const l = 32;
     const data = new Uint8Array(l * l * 4);

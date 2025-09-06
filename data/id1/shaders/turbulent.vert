@@ -5,12 +5,15 @@ uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 
 attribute vec3 aPosition;
-attribute vec2 aTexCoord;
+attribute vec4 aTexCoord;
+attribute vec4 aLightStyle;
 
-varying vec2 vTexCoord;
+varying vec4 vTexCoord;
+varying vec4 vLightStyle;
 
 void main(void) {
   vec3 position = uViewAngles * (uAngles * aPosition + uOrigin - uViewOrigin);
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
   vTexCoord = aTexCoord;
+  vLightStyle = aLightStyle;
 }

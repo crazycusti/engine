@@ -332,10 +332,18 @@ class MainMenu extends BaseMenu {
 
 * Navigation: made serialization of waypoints optional
 * Mod: started cleaning up that code base to make way to for map formats, adding BSP2 support next
+  * fell down the rabbit hole on this one
+  * I want to change the whole Mod.ForName and precache infrastructure
+  * Server sends to Client modelindex, setup by precache commands
+  * Client only works with modelindex
+  * Rendering code checks what kind of model type is set and renders stuff accordingly
+  * precache to model things should be a map instead of a list
 * index.html: removed error handler
 * Sys: cancel outstanding fetch requests when quitting
 * SV: allocate more edicts on the fly in chunks of 64
 * Def: bumped version to 1.1.2 reflecting the newly added features
+* R: consider lightmaps being available on turbulents
+  * I really need to cleanup the rendering backend, there’s too much duplicate code
 
 ### 2025-09-02
 

@@ -2,13 +2,19 @@ import Vector from '../../../shared/Vector.mjs';
 
 export class Plane { // TODO: move to shared
   type = 0;
+
+  /** @type {0|1|2|3|4|5|6|7} bits 1, 2 and 3 represent the normal’s components signess */
   signbits = 0;
 
+  /**
+   * @param {Vector} normal normal vector
+   * @param {number} dist distance from origin
+   */
   constructor(normal, dist) {
-    /** @type {Vector} */
+    /** @type {Vector} plane’s normal vector, on n-sided polygons it might not be facing correctly */
     this.normal = normal;
 
-    /** @type {number} */
+    /** @type {number} distance from origin along normal (in direction of normal) */
     this.dist = dist;
   }
 };

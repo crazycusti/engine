@@ -208,6 +208,9 @@ export default class Draw {
 
       glt.resize(lump.width, lump.height);
       glt.upload(lump.data);
+    }).catch((err) => {
+      console.error('LoadPicFromLumpDeferred(\'' + name + '\'): ' + err.message);
+      // TODO: handle error here
     });
 
     return glt;

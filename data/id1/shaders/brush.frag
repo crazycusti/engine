@@ -35,7 +35,6 @@ void main(void) {
     uAlpha
   );
 
-  // float d = dot(texture2D(tLightmap, vTexCoord.zw), lightstyle * 43.828125);
   vec3 d;
 
   d.r = dot(
