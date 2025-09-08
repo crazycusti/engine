@@ -7,9 +7,7 @@ export type SerializableType = (string | number | boolean | Vector);
 
 export type GLTexture = import("../engine/client/GL.mjs").GLTexture;
 
-export type ClientdataMap = {
-  [key: string]: SerializableType;
-};
+export type ClientdataMap = Record<string, SerializableType>;
 
 export type ViewmodelConfig = {
   visible: boolean;
@@ -27,6 +25,16 @@ export type RefDef = { // TODO: move to engine shared, it’s V’s refdef
   vieworg: Vector;
   viewangles: Vector;
   // TODO: fov?
+};
+
+export interface ParsedQC {
+  cd: string;
+  origin: Vector;
+  base: string | null;
+  skin: string | null;
+  frames: string[];
+  animations: Record<string, number[]>;
+  scale: number;
 };
 
 export type ViewportResizeEvent = ViewportDimensions;

@@ -393,7 +393,7 @@ export class ServerEdict {
    * @returns {boolean} true, when walking was successful
    */
   walkMove(yaw, dist) {
-    if ((this.entity.flags & (SV.fl.onground + SV.fl.fly + SV.fl.swim)) === 0) {
+    if ((this.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
       return false;
     }
 
@@ -528,7 +528,7 @@ export class ServerEdict {
    * @returns {boolean} true, when successful
    */
   moveToGoal(dist, target = null) {
-    if ((this.entity.flags & (SV.fl.onground + SV.fl.fly + SV.fl.swim)) === 0) {
+    if ((this.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
       return false;
     }
 

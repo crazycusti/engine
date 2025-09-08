@@ -6,6 +6,7 @@ import Q from '../../shared/Q.mjs';
 import W, { translateIndexToRGBA, WadFileInterface } from './W.mjs';
 import { CRC16CCITT } from './CRC.mjs';
 import { BaseModel, Face, Plane } from './model/BaseModel.mjs';
+import { BSP29 } from './model/BSP.mjs';
 
 const Mod = {};
 
@@ -216,12 +217,12 @@ Mod.LoadModelFromBuffer = function (loadmodel, buffer) {
       return Mod.LoadSpriteModel(loadmodel, buffer);
     case Mod.version.brush:
       return Mod.LoadBrushModel(loadmodel, buffer);
+      // return new BSP29(loadmodel.name).load(buffer);
     case Mod.version.bsp2:
       throw new NotImplementedError('BSP2 loading not implemented yet');
     default:
       throw new NotImplementedError('Unknown model format ' + ident + ' for ' + loadmodel.name);
   }
-  return null;
 };
 
 /** @deprecated use Mod.LoadModelAsync instead */
@@ -846,12 +847,10 @@ Mod.LoadPlanes = function(loadmodel, buf) {
   const count = filelen / 20;
   loadmodel.planes = [];
   for (let i = 0; i < count; i++) {
-    const out = Object.assign(new Plane(), {
-      normal: new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true)),
-      dist: view.getFloat32(fileofs + 12, true),
-      type: view.getUint32(fileofs + 16, true),
-      signbits: 0,
-    });
+    const normal = new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true));
+    const dist = view.getFloat32(fileofs + 12, true);
+    const out = new Plane(normal, dist);
+    out.type = view.getUint32(fileofs + 16, true);
     if (out.normal[0] < 0) {
       out.signbits |= 1;
     }
@@ -869,7 +868,7 @@ Mod.LoadPlanes = function(loadmodel, buf) {
 /**
  *
  * @param {BrushModel} loadmodel
- * @param {*} buffer
+ * @param {ArrayBuffer} buffer
  */
 Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
@@ -1329,6 +1328,8 @@ Mod.Print = function() {
   }
 };
 
+/** @typedef {import('../../shared/GameInterfaces.d.ts').ParsedQC} ParsedQC_t */
+/** @augments {ParsedQC_t} */
 export class ParsedQC {
   /** @type {string} */
   cd = null;
@@ -1339,71 +1340,79 @@ export class ParsedQC {
   skin = null;
   /** @type {string[]} */
   frames = [];
-  /** @type {{[key: string]: number[]}} */
+  /** @type {Record<string, number[]>} */
   animations = {};
   /** @type {number} */
   scale = 1.0;
+
+  /**
+   * @param {string} qcContent qc model source
+   * @returns {this} this
+   */
+  parseQC(qcContent) {
+    console.assert(typeof qcContent === 'string', 'qcContent must be a string');
+
+    const lines = qcContent.trim().split('\n');
+
+    for (const line of lines) {
+      if (line.trim() === '' || line.startsWith('#') || line.startsWith('//')) {
+        continue;
+      }
+
+      const parts = line.split(/\s+/);
+      const [key, value] = [parts.shift(), parts.join(' ')];
+
+      switch (key) {
+        case '$cd':
+          this.cd = value;
+          break;
+
+        case '$origin':
+          this.origin = new Vector(...value.split(/\s+/).map((n) => Q.atof(n)));
+          break;
+
+        case '$base':
+          this.base = value;
+          break;
+
+        case '$skin':
+          this.skin = value;
+          break;
+
+        case '$scale':
+          this.scale = +value;
+          break;
+
+        case '$frame': {
+            const frames = value.split(/\s+/);
+
+            this.frames.push(...frames);
+
+            for (const frame of frames) {
+              const matches = frame.match(/^([^0-9]+)([0-9]+)$/);
+
+              if (matches) {
+                if (!this.animations[matches[1]]) {
+                  this.animations[matches[1]] = [];
+                }
+
+                this.animations[matches[1]].push(this.frames.indexOf(matches[0]));
+              }
+            }
+          }
+          break;
+
+        default:
+          console.assert(false, 'QC field unknown', key);
+      }
+    }
+
+    return this;
+  }
 };
 
 Mod.ParseQC = function(qcContent) {
-  console.assert(typeof qcContent === 'string', 'qcContent must be a string');
-
   const data = new ParsedQC();
 
-  const lines = qcContent.trim().split('\n');
-
-  for (const line of lines) {
-    if (line.trim() === '' || line.startsWith('#') || line.startsWith('//')) {
-      continue;
-    }
-
-    const parts = line.split(/\s+/);
-    const [key, value] = [parts.shift(), parts.join(' ')];
-
-    switch (key) {
-      case '$cd':
-        data.cd = value;
-        break;
-
-      case '$origin':
-        data.origin = new Vector(...value.split(/\s+/).map((n) => Q.atof(n)));
-        break;
-
-      case '$base':
-        data.base = value;
-        break;
-
-      case '$skin':
-        data.skin = value;
-        break;
-
-      case '$scale':
-        data.scale = +value;
-        break;
-
-      case '$frame': {
-          const frames = value.split(/\s+/);
-
-          data.frames.push(...frames);
-
-          for (const frame of frames) {
-            const matches = frame.match(/^([^0-9]+)([0-9]+)$/);
-
-            if (matches) {
-              if (!data.animations[matches[1]]) {
-                data.animations[matches[1]] = [];
-              }
-
-              data.animations[matches[1]].push(data.frames.indexOf(matches[0]));
-            }
-          }
-        }
-        break;
-
-      default:
-        Con.Print(`Mod.ParseQC: unknown QC field ${key}\n`);
-    }
-  }
-
-  return data;
+  return data.parseQC(qcContent);
 };

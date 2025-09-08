@@ -328,6 +328,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-08
+
+* airplane mode: cleaning up code
+
 ### 2025-09-06
 
 * Navigation: made serialization of waypoints optional
