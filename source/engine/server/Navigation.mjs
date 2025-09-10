@@ -1335,7 +1335,7 @@ export class Navigation {
       // Sample along the segment every 5 units
       for (let dist = 0; dist <= totalDistance; dist += stepLength) {
         const samplePoint = start.copy().add(diff.copy().multiply(dist));
-        this.#emitDot(samplePoint, color, 1);
+        this.#emitDot(samplePoint, color, 10);
       }
     }
   }

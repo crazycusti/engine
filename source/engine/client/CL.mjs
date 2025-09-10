@@ -313,6 +313,7 @@ export default class CL {
   /** @type {Cvar} */ static m_forward = null;
   /** @type {Cvar} */ static m_side = null;
   /** @type {Cvar} */ static nopred = null;
+  /** @type {Cvar} */ static nohud = null;
 
   /** @type {SFX} */ static sfx_wizhit = null;
   /** @type {SFX} */ static sfx_knighthit = null;
@@ -554,6 +555,10 @@ export default class CL {
   }
 
   static DrawHUD() {
+    if (this.nohud.value !== 0) {
+      return;
+    }
+
     if (this.state.gameAPI) {
       this.state.gameAPI.draw();
     }
@@ -969,6 +974,7 @@ CL.Init = async function() { // public, by Host.js
   CL.m_side = new Cvar('m_side', '0.8', Cvar.FLAG.ARCHIVE);
   CL.rcon_password = new Cvar('rcon_password', '');
   CL.nopred = new Cvar('cl_nopred', '0', Cvar.FLAG.NONE, 'Enables/disables client-side prediction');
+  CL.nohud = new Cvar('cl_nohud', '0', Cvar.FLAG.NONE, 'Disables all HUD elements');
   Cmd.AddCommand('entities', CL.PrintEntities_f);
   Cmd.AddCommand('disconnect', CL.Disconnect);
   Cmd.AddCommand('record', CL.Record_f);

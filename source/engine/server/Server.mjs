@@ -1640,7 +1640,8 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
       neworg[1] = origin[1] + move[1];
       neworg[2] = origin[2];
       if (i === 0 && enemy) {
-        const dz = ent.entity.origin[2] - enemy.entity.origin[2];
+        const enemyEntity = enemy instanceof ServerEdict ? enemy.entity : enemy;
+        const dz = ent.entity.origin[2] - enemyEntity.origin[2];
         if (dz > 40.0) {
           neworg[2] -= 8.0;
         } else if (dz < 30.0) {
@@ -1718,7 +1719,7 @@ SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
     // console.log('no step here', move.toString());
     return false;
   }
-  ent.entity.flags &= (~SV.fl.partialground >>> 0);
+  ent.entity.flags &= ~SV.fl.partialground;
   ent.entity.groundentity = trace.ent.entity;
   if (relink) {
     SV.LinkEdict(ent, true);
@@ -2064,6 +2065,12 @@ SV.AddGravity = function(ent) {
 
   const velocity = ent.entity.velocity;
   velocity[2] += ent_gravity * SV.gravity.value * Host.frametime * -1.0;
+  ent.entity.velocity = velocity;
+};
+
+SV.AddBoyancy = function(ent) {
+  const velocity = ent.entity.velocity;
+  velocity[2] += SV.gravity.value * Host.frametime * 0.01;
   ent.entity.velocity = velocity;
 };
 
@@ -2485,15 +2492,22 @@ SV.Physics_Toss = function(ent) {
  * @param {ServerEdict} ent edict
  */
 SV.Physics_Step = function(ent) {
-  if ((ent.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
+  const entity = ent.entity;
+  if ((entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
     const hitsound = (ent.entity.velocity[2] < (SV.gravity.value * -0.1));
     SV.AddGravity(ent);
     SV.CheckVelocity(ent);
     SV.FlyMove(ent, Host.frametime);
     SV.LinkEdict(ent, true);
-    if (((ent.entity.flags & SV.fl.onground) !== 0) && (hitsound === true)) { // TODO: move to game logic
+    if (((entity.flags & SV.fl.onground) !== 0) && (hitsound === true)) { // TODO: move to game logic
       SV.StartSound(ent, 0, 'demon/dland2.wav', 255, 1.0);
     }
+  }
+  if ((entity.flags & (SV.fl.monster)) !== 0 && entity.health <= 0 && entity.waterlevel > 0) {
+    SV.AddBoyancy(ent);
+    SV.CheckVelocity(ent);
+    SV.FlyMove(ent, Host.frametime);
+    SV.LinkEdict(ent, true);
   }
   SV.RunThink(ent);
   SV.CheckWaterTransition(ent);
