@@ -1060,22 +1060,24 @@ R.RenderScene = function() {
 
 R.RenderView = function() {
   gl.finish();
-  let time1;
+  // let time1;
   if (R.speeds.value !== 0) {
-    time1 = Sys.FloatTime();
+    // time1 = Sys.FloatTime();
+    console.profile('R.RenderView');
   }
   R.c_brush_verts = 0;
   R.c_alias_polys = 0;
   gl.clear(gl.COLOR_BUFFER_BIT + gl.DEPTH_BUFFER_BIT);
   R.RenderScene();
   if (R.speeds.value !== 0) {
-    const time2 = Math.floor((Sys.FloatTime() - time1) * 1000.0);
-    const c_brush_polys = R.c_brush_verts / 3;
-    const c_alias_polys = R.c_alias_polys;
-    let msg = ((time2 >= 100) ? '' : ((time2 >= 10) ? ' ' : '  ')) + time2 + ' ms  ';
-    msg += ((c_brush_polys >= 1000) ? '' : ((c_brush_polys >= 100) ? ' ' : ((c_brush_polys >= 10) ? '  ' : '   '))) + c_brush_polys + ' wpoly ';
-    msg += ((c_alias_polys >= 1000) ? '' : ((c_alias_polys >= 100) ? ' ' : ((c_alias_polys >= 10) ? '  ' : '   '))) + c_alias_polys + ' epoly\n';
-    Con.Print(msg);
+    console.profileEnd('R.RenderView');
+    // const time2 = Math.floor((Sys.FloatTime() - time1) * 1000.0);
+    // const c_brush_polys = R.c_brush_verts / 3;
+    // const c_alias_polys = R.c_alias_polys;
+    // let msg = ((time2 >= 100) ? '' : ((time2 >= 10) ? ' ' : '  ')) + time2 + ' ms  ';
+    // msg += ((c_brush_polys >= 1000) ? '' : ((c_brush_polys >= 100) ? ' ' : ((c_brush_polys >= 10) ? '  ' : '   '))) + c_brush_polys + ' wpoly ';
+    // msg += ((c_alias_polys >= 1000) ? '' : ((c_alias_polys >= 100) ? ' ' : ((c_alias_polys >= 10) ? '  ' : '   '))) + c_alias_polys + ' epoly\n';
+    // Con.Print(msg);
   }
 };
 

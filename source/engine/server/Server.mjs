@@ -1978,14 +1978,14 @@ SV.FlyMove = function(ent, time) {
   let bumpcount;
   let numplanes = 0;
   let dir;
-  const planes = []; let plane;
+  const planes = [];
   const primal_velocity = ent.entity.velocity;
   let original_velocity = ent.entity.velocity;
   const new_velocity = new Vector();
   let i; let j;
   let time_left = time;
   let blocked = 0;
-  for (bumpcount = 0; bumpcount <= 3; ++bumpcount) {
+  for (bumpcount = 0; bumpcount < 4; bumpcount++) {
     if (ent.entity.velocity.isOrigin()) {
       break;
     }
@@ -2028,7 +2028,7 @@ SV.FlyMove = function(ent, time) {
       SV.ClipVelocity(original_velocity, planes[i], new_velocity, 1.0);
       for (j = 0; j < numplanes; j++) {
         if (j !== i) {
-          plane = planes[j];
+          const plane = planes[j];
           if ((new_velocity[0] * plane[0] + new_velocity[1] * plane[1] + new_velocity[2] * plane[2]) < 0.0) { // plane is not a Vector
             break;
           }
@@ -2250,9 +2250,13 @@ SV.CheckWater = function(ent) {
   cont = SV.PointContents(point);
   if (cont <= Defs.content.CONTENT_WATER) {
     ent.entity.waterlevel = 2.0;
-    point[2] = origin[2] + ent.entity.view_ofs[2]; // FIXME: not guaranteed to be available
-    cont = SV.PointContents(point);
-    if (cont <= Defs.content.CONTENT_WATER) {
+    if ('view_ofs' in ent.entity) {
+      point[2] = origin[2] + ent.entity.view_ofs[2];
+      cont = SV.PointContents(point);
+      if (cont <= Defs.content.CONTENT_WATER) {
+        ent.entity.waterlevel = 3.0;
+      }
+    } else {
       ent.entity.waterlevel = 3.0;
     }
   }
@@ -2493,6 +2497,7 @@ SV.Physics_Toss = function(ent) {
  */
 SV.Physics_Step = function(ent) {
   const entity = ent.entity;
+  // SV.CheckWater(ent);
   if ((entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
     const hitsound = (ent.entity.velocity[2] < (SV.gravity.value * -0.1));
     SV.AddGravity(ent);
@@ -2502,12 +2507,11 @@ SV.Physics_Step = function(ent) {
     if (((entity.flags & SV.fl.onground) !== 0) && (hitsound === true)) { // TODO: move to game logic
       SV.StartSound(ent, 0, 'demon/dland2.wav', 255, 1.0);
     }
-  }
-  if ((entity.flags & (SV.fl.monster)) !== 0 && entity.health <= 0 && entity.waterlevel > 0) {
-    SV.AddBoyancy(ent);
-    SV.CheckVelocity(ent);
-    SV.FlyMove(ent, Host.frametime);
-    SV.LinkEdict(ent, true);
+  // } else if ((entity.flags & SV.fl.monster) !== 0 && entity.health <= 0 && entity.waterlevel > 2) {
+  //   SV.AddBoyancy(ent);
+  //   SV.CheckVelocity(ent);
+  //   SV.FlyMove(ent, Host.frametime);
+  //   SV.LinkEdict(ent, true);
   }
   SV.RunThink(ent);
   SV.CheckWaterTransition(ent);
@@ -2567,18 +2571,18 @@ SV.SetIdealPitch = function() {
   const cosval = Math.cos(angleval);
   const top = new Vector(0.0, 0.0, origin[2] + ent.entity.view_ofs[2]);
   const bottom = new Vector(0.0, 0.0, top[2] - 160.0);
-  let i; let tr; const z = [];
-  for (i = 0; i < 6; i++) {
+  const z = [];
+  for (let i = 0; i < 6; i++) {
     top[0] = bottom[0] = origin[0] + cosval * (i + 3) * 12.0;
     top[1] = bottom[1] = origin[1] + sinval * (i + 3) * 12.0;
-    tr = SV.Move(top, Vector.origin, Vector.origin, bottom, 1, ent);
+    const tr = SV.Move(top, Vector.origin, Vector.origin, bottom, 1, ent);
     if (tr.allsolid || tr.fraction === 1.0) {
       return;
     }
     z[i] = top[2] - tr.fraction * 160.0;
   }
   let dir = 0.0; let step; let steps = 0;
-  for (i = 1; i < 6; i++) {
+  for (let i = 1; i < 6; i++) {
     step = z[i] - z[i - 1];
     if ((step > -0.1) && (step < 0.1)) {
       continue;
@@ -2586,7 +2590,7 @@ SV.SetIdealPitch = function() {
     if ((dir !== 0.0) && (((step - dir) > 0.1) || ((step - dir) < -0.1))) {
       return;
     }
-    ++steps;
+    steps++;
     dir = step;
   }
   if (dir === 0.0) {

@@ -201,7 +201,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### JavaScript instead of QuakeC
 
-* introduce client game code as JavaScript modules --> needs specs
+* introduce client game code as JavaScript modules --> in progress
 * introduce server game code as JavaScript modules --> in progress
 * but keep backward compatibility and have interfaces available --> in progress
 * would allow to write easier and better custom mods
@@ -295,7 +295,7 @@ class MainMenu extends BaseMenu {
 * look into GoldSrc’s StudioModel or some other format, just as a coding challenge
 * look into colored lights
   * dynamic lights can already have color
-  * static lights are still grayscale
+  * ~~static lights are still grayscale~~ added lit file support
 * make it Quake2 compatible?
   * not that trivial, since Quake2 game code is ia32/native
   * we could port over features though
@@ -305,8 +305,8 @@ class MainMenu extends BaseMenu {
 * integrate some debugging tools like a texture and pic browser --> done
 * integrate a model viewer tool
 * There are a couple of things QuakeWorld improved and introduced, I should take a look at them and decide what’s good and what’s bad.
-* rewrite qbsp, vis, light etc. in TypeScript and use https://github.com/gpujs/gpu.js
-* implement aas from Quake 3 to enable better pathfinding for our Quake 1 AI
+* ~~rewrite qbsp, vis, light etc. in TypeScript and use https://github.com/gpujs/gpu.js~~ nope
+* ~~implement aas from Quake 3 to enable better pathfinding for our Quake 1 AI~~ added a nav mesh system using A*
 
 ## Resources
 
@@ -327,6 +327,12 @@ class MainMenu extends BaseMenu {
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 
 ## Log
+
+### 2025-09-14
+
+* airplane mode
+  * cleaning up some stuff
+  * replaced that in-house profiling with `console.profile`
 
 ### 2025-09-10
 

@@ -249,10 +249,9 @@ export default class COM {
 
   static Path_f() {
     Con.Print('Current search path:\n');
-    let i = this.searchpaths.length; let j; let s;
-    for (i = this.searchpaths.length - 1; i >= 0; --i) {
-      s = this.searchpaths[i];
-      for (j = s.pack.length - 1; j >= 0; --j) {
+    for (let i = this.searchpaths.length - 1; i >= 0; i--) {
+      const s = this.searchpaths[i];
+      for (let j = s.pack.length - 1; j >= 0; j--) {
         Con.Print(s.filename + 'pak' + j + '.pak (' + s.pack[j].length + ' files)\n');
       }
       Con.Print(s.filename + '\n');
@@ -293,6 +292,8 @@ export default class COM {
    * @deprecated this blocks the main thread – use async version instead
    */
   static LoadFile(filename) {
+    console.trace('sync IO requested', filename);
+
     filename = filename.toLowerCase();
 
     const xhr = new XMLHttpRequest();

@@ -311,7 +311,15 @@ Host._Frame = function() {
     Cmd.Execute();
 
     if (SV.server.active === true) {
+      if (Host.speeds.value !== 0) {
+        console.profile('Host.ServerFrame');
+      }
+
       Host.ServerFrame();
+
+      if (Host.speeds.value !== 0) {
+        console.profileEnd('Host.ServerFrame');
+      }
     }
 
     // TODO: add times
@@ -335,19 +343,41 @@ Host._Frame = function() {
     CL.ReadFromServer();
   }
 
+  if (Host.speeds.value !== 0) {
+    console.profile('CL.ClientFrame');
+  }
   CL.ClientFrame();
+  if (Host.speeds.value !== 0) {
+    console.profileEnd('CL.ClientFrame');
+  }
 
   CL.SendCmd();
 
   if (SV.server.active === true) {
+    if (Host.speeds.value !== 0) {
+      console.profile('Host.ServerFrame');
+    }
+
     Host.ServerFrame();
+
+    if (Host.speeds.value !== 0) {
+      console.profileEnd('Host.ServerFrame');
+    }
   }
 
   // Set up prediction for other players
   CL.SetUpPlayerPrediction(false);
 
+  if (Host.speeds.value !== 0) {
+    console.profile('CL.PredictMove');
+  }
+
   // do client side motion prediction
   CL.PredictMove();
+
+  if (Host.speeds.value !== 0) {
+    console.profileEnd('CL.PredictMove');
+  }
 
   // Set up prediction for other players
   CL.SetUpPlayerPrediction(true);
@@ -355,13 +385,10 @@ Host._Frame = function() {
   // build a refresh entity list
   CL.EmitEntities();
 
-  if (Host.speeds.value !== 0) {
-    time1 = Sys.FloatTime();
-  }
   SCR.UpdateScreen();
-  // FIXME: time2 is no longer accurrate, because SCR.UpdateScreen uses requestAnimationFrame to render at the next best opportunity
+
   if (Host.speeds.value !== 0) {
-    time2 = Sys.FloatTime();
+    console.profile('S.Update');
   }
 
   if (CL.cls.signon === 4) {
@@ -372,19 +399,7 @@ Host._Frame = function() {
   CDAudio.Update();
 
   if (Host.speeds.value !== 0) {
-    pass1 = (time1 - Host.time3) * 1000.0;
-    Host.time3 = Sys.FloatTime();
-    pass2 = (time2 - time1) * 1000.0;
-    pass3 = (Host.time3 - time2) * 1000.0;
-    tot = Math.floor(pass1 + pass2 + pass3);
-    Con.Print((tot <= 99 ? (tot <= 9 ? '  ' : ' ') : '') +
-			tot + ' tot ' +
-			(pass1 < 100.0 ? (pass1 < 10.0 ? '  ' : ' ') : '') +
-			Math.floor(pass1) + ' server ' +
-			(pass2 < 100.0 ? (pass2 < 10.0 ? '  ' : ' ') : '') +
-			Math.floor(pass2) + ' gfx ' +
-			(pass3 < 100.0 ? (pass3 < 10.0 ? '  ' : ' ') : '') +
-			Math.floor(pass3) + ' snd\n');
+    console.profileEnd('S.Update');
   }
 
   Host.framecount++;
