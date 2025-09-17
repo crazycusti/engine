@@ -1329,7 +1329,7 @@ Mod.Print = function() {
 };
 
 /** @typedef {import('../../shared/GameInterfaces.d.ts').ParsedQC} ParsedQC_t */
-/** @augments {ParsedQC_t} */
+/** @augments ParsedQC_t */
 export class ParsedQC {
   /** @type {string} */
   cd = null;

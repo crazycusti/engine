@@ -64,8 +64,8 @@ Grouped by sections and then sorted by priority (more or less).
   * [_] monster_oldone
   * [X] monster_shalrath
   * [X] monster_shambler
-  * [_] monster_tarbaby
-  * [_] monster_wizard
+  * [X] monster_tarbaby
+  * [X] monster_wizard
   * [_] monster_boss
     * [_] event_lightning
   * [X] monster_enforcer
@@ -327,6 +327,11 @@ class MainMenu extends BaseMenu {
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 
 ## Log
+
+### 2025-09-17
+
+* implemented monster_wizard
+* hiveminded enemy position upon use on monsters
 
 ### 2025-09-14
 
