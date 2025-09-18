@@ -328,6 +328,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-18
+
+* fly/swim monsters no longer use navmesh
+* in-pain acquired targets will no longer break pain states
+* all in-pain acquired targets will set an enemy now
+
 ### 2025-09-17
 
 * implemented monster_wizard
