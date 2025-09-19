@@ -328,6 +328,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-19
+
+* it’s no longer necessary to precache resources, but it’s highly adviced
+  * this change allows spawning entities during gameplay without precache gymnastics
+
 ### 2025-09-18
 
 * fly/swim monsters no longer use navmesh

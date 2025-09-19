@@ -24,6 +24,11 @@ eventBus.subscribe('registry.frozen', () => {
 
 V.dmg_time = 0.0;
 
+/**
+ * @param {Vector} angles angles
+ * @param {Vector} velocity velocity
+ * @returns {number} roll angle
+ */
 V.CalcRoll = function (angles, velocity) { // FIXME: this is required for dedicated as well
   const { right } = angles.angleVectors();
   let side = velocity[0] * right[0] + velocity[1] * right[1] + velocity[2] * right[2];

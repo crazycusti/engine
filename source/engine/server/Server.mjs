@@ -1360,16 +1360,6 @@ SV.SpawnServer = function(mapname) {
   SV.server.signon.clear();
   // hooking up the edicts reserved for clients
   SV.server.num_edicts = SV.svs.maxclients + 1;
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    const ent = SV.server.edicts[i + 1];
-
-    // we need to spawn the player entity in those client edict slots
-    if (!SV.server.gameAPI.prepareEntity(ent, 'player')) {
-      Con.PrintWarning('SV.SpawnServer: Cannot start server, because game does not know what a player entity is.\n');
-      SV.server.active = false;
-      return false;
-    }
-  }
   SV.server.loading = true;
   SV.server.paused = false;
   SV.server.loadgame = false;
@@ -1399,6 +1389,18 @@ SV.SpawnServer = function(mapname) {
     //       also each submodule is a brush connected to an entity (doors etc.)
     SV.server.model_precache[i + 1] = '*' + i;
     SV.server.models[i + 1] = Mod.ForName('*' + i);
+  }
+
+  // boot up the players
+  for (i = 0; i < SV.svs.maxclients; i++) {
+    const ent = SV.server.edicts[i + 1];
+
+    // we need to spawn the player entity in those client edict slots
+    if (!SV.server.gameAPI.prepareEntity(ent, 'player')) {
+      Con.PrintWarning('SV.SpawnServer: Cannot start server, because game does not know what a player entity is.\n');
+      SV.server.active = false;
+      return false;
+    }
   }
 
   SV.server.lightstyles = [];
@@ -1473,6 +1475,9 @@ SV.SpawnServer = function(mapname) {
     SV.server.active = false;
     return false;
   }
+
+  // invoke the spawn function for the worldspawn
+  SV.server.gameAPI.spawnPreparedEntity(ent);
 
   // populate all edicts by the entities file
   ED.LoadFromFile(SV.server.worldmodel.entities);
