@@ -97,6 +97,7 @@ SV.fl = {
 // main
 
 SV.server = {
+  time: 0,
   num_edicts: 0,
   datagram: new SzBuffer(4096, 'SV.server.datagram'),
   expedited_datagram: new SzBuffer(4096, 'SV.server.expedited_datagram'),

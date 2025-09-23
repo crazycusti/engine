@@ -328,6 +328,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-24
+
+* reorganized the precaching stuff a bit, allowing more dynamic spawning of objects
+* added `FindAllByFilter` deprecating the old methods over time
+
 ### 2025-09-19
 
 * it’s no longer necessary to precache resources, but it’s highly adviced

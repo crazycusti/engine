@@ -91,7 +91,8 @@ export default class Q {
    * @returns {string} hours:mins:seconds
    */
   static secsToTime(secs) {
-    let seconds = Math.floor(secs);
+    let negative = secs < 0;
+    let seconds = Math.floor(Math.abs(secs));
     let minutes = Math.floor(seconds / 60);
     let hours = 0;
     if (minutes > 0) {
@@ -102,7 +103,7 @@ export default class Q {
       }
     }
 
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${negative ? '-' : ''}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
 
   /**

@@ -294,6 +294,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     const mins = origin.copy().subtract(vradius);
     const maxs = origin.copy().add(vradius);
 
+    /** @type {ServerEdict[]} */
     const edicts = [];
 
     for (const ent of this.#FindInAreaNode(SV.areanodes[0], mins, maxs)) {
@@ -315,8 +316,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return edicts; // used to be a generator, but we need to return an array due to changing linked lists in between
   }
 
+  /** @deprecated use FindAllByFilter instead */
   static FindByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
     for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+      /** @type {ServerEdict} */
       const ent = SV.server.edicts[i];
 
       if (ent.isFree()) {
@@ -331,8 +334,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return null;
   }
 
+  /** @deprecated use FindAllByFilter instead */
   static *FindAllByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
     for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+      /** @type {ServerEdict} */
       const ent = SV.server.edicts[i];
 
       if (ent.isFree()) {
@@ -340,6 +345,20 @@ export class ServerEngineAPI extends CommonEngineAPI {
       }
 
       if (ent.entity[field] === value) {
+        yield ent;
+      }
+    }
+  }
+
+  static *FindAllByFilter(filterFn = null, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
+    for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+      const ent = SV.server.edicts[i];
+
+      if (ent.isFree()) {
+        continue;
+      }
+
+      if (!filterFn || filterFn(ent)) {
         yield ent;
       }
     }
@@ -395,14 +414,19 @@ export class ServerEngineAPI extends CommonEngineAPI {
   static SpawnEntity(classname, initialData = {}) {
     const edict = ED.Alloc();
 
-    if (!SV.server.gameAPI.prepareEntity(edict, classname, initialData)) {
-      edict.freeEdict();
-      return null;
-    }
+    try {
+      if (!SV.server.gameAPI.prepareEntity(edict, classname, initialData)) {
+        edict.freeEdict();
+        return null;
+      }
 
-    if (!SV.server.gameAPI.spawnPreparedEntity(edict)) {
+      if (!SV.server.gameAPI.spawnPreparedEntity(edict)) {
+        edict.freeEdict();
+        return null;
+      }
+    } catch (e) {
       edict.freeEdict();
-      return null;
+      throw e;
     }
 
     return edict.entity;
@@ -707,9 +731,17 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get levelname() {
       return CL.state.levelname;
     },
-    get time() {
+    /**
+     * local time, not game time! If you are looking for SV.server.time, check gametime
+     * @returns {number} local time
+     */
+    get time() { // FIXME: rename to localtime to make the distinction clearer
       return CL.state.time;
     },
+    /**
+     * latest SV.server.time, NOT local time!
+     * @returns {number} game time
+     */
     get gametime() {
       return CL.state.clientMessages.mtime[0];
     },
