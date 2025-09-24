@@ -334,6 +334,7 @@ class MainMenu extends BaseMenu {
 * added `FindAllByFilter` deprecating the old methods over time
 * dedicated server will automatically build navmeshes once something is wrong with it
 * increased network buffers
+* `PutClientInServer` vs `ClientConnect` doesn’t make much sense, I added `ClientBegin` which is called _after_ sending `being` marking the player as spawned
 
 ### 2025-09-19
 

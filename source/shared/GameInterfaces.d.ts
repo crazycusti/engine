@@ -93,6 +93,8 @@ export interface ServerGameInterface {
 
   PutClientInServer(clientEdict: ServerEdict): void;
 
+  ClientBegin?(clientEdict: ServerEdict): void;
+
   init(mapname: string, serverflags: number): void;
   shutdown(isCrashShutdown: boolean): void;
   startFrame(): void;

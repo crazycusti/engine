@@ -1323,6 +1323,11 @@ Host.Begin_f = function() {  // signon 3, step 1
     return;
   }
   this.client.spawned = true;
+
+  if (SV.server.gameAPI.ClientBegin) {
+    SV.server.gameAPI.time = SV.server.time;
+    SV.server.gameAPI.ClientBegin(this.client.edict);
+  }
 };
 
 Host.Kick_f = function() { // FIXME: Host.client
