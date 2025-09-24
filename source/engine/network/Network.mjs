@@ -25,7 +25,7 @@ NET.FormatIP = function(ip, port) {
 };
 
 NET.activeSockets = [];
-NET.message = new SzBuffer(8192, 'NET.message');
+NET.message = new SzBuffer(16384, 'NET.message');
 NET.activeconnections = 0;
 NET.listening = false;
 

@@ -99,11 +99,11 @@ SV.fl = {
 SV.server = {
   time: 0,
   num_edicts: 0,
-  datagram: new SzBuffer(4096, 'SV.server.datagram'),
-  expedited_datagram: new SzBuffer(4096, 'SV.server.expedited_datagram'),
-  reliable_datagram: new SzBuffer(4096, 'SV.server.reliable_datagram'),
+  datagram: new SzBuffer(16384, 'SV.server.datagram'),
+  expedited_datagram: new SzBuffer(16384, 'SV.server.expedited_datagram'),
+  reliable_datagram: new SzBuffer(16384, 'SV.server.reliable_datagram'),
   /** sent during client prespawn */
-  signon: new SzBuffer(4096, 'SV.server.signon'),
+  signon: new SzBuffer(16384, 'SV.server.signon'),
   edicts: [],
   mapname: null,
   worldmodel: null,
@@ -1134,7 +1134,7 @@ SV.WriteClientdataToMessage = function(clientEdict, msg) {
 SV.SendClientDatagram = function() { // FIXME: Host.client
   /** @type {ServerClient} */
   const client = Host.client;
-  const msg = new SzBuffer(4096, 'SV.SendClientDatagram');
+  const msg = new SzBuffer(16000, 'SV.SendClientDatagram');
   MSG.WriteByte(msg, Protocol.svc.time);
   MSG.WriteFloat(msg, SV.server.time);
 

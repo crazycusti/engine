@@ -201,8 +201,13 @@ export class Navigation {
       .then(() => Con.PrintSuccess('Navigation: navigation graph loaded!\n'))
       .catch((err) => {
         Con.PrintWarning('Navigation: ' + err + '\n');
+
+        if ((err instanceof NavMeshOutOfDateException) && registry.isDedicatedServer) {
+          setTimeout(() => this.build(), 100); // wait a bit for the server to be ready
+          return;
+        }
+
         Con.Print('Use nav command to build the navigation graph.\n');
-        // setTimeout(() => this.build(), 1000); // wait a bit for the server to be ready
       });
   }
 
