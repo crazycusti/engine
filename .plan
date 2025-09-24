@@ -332,6 +332,8 @@ class MainMenu extends BaseMenu {
 
 * reorganized the precaching stuff a bit, allowing more dynamic spawning of objects
 * added `FindAllByFilter` deprecating the old methods over time
+* dedicated server will automatically build navmeshes once something is wrong with it
+* increased network buffers
 
 ### 2025-09-19
 
