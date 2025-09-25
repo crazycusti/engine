@@ -116,7 +116,7 @@ export default class Sys {
       await Q.sleep(Math.max(0, 1000.0 / 60.0 - dtime));
 
       // when there are no more commands to process and no active connections, we can sleep indefinitely
-      if (NET.activeconnections === 0 && Host._scheduledForNextFrame.length === 0) {
+      if (NET.activeconnections === 0 && Host._scheduledForNextFrame.length === 0 && Cmd.text === '') {
         await mainLoop.sleep();
       }
     }

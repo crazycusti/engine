@@ -3188,7 +3188,7 @@ SV.LinkEdict = function(ent, touch_triggers = false) {
   ent.area.next.prev = ent.area;
   ent.area.ent = ent;
 
-  if (touch_triggers) {
+  if (ent.entity.movetype !== SV.movetype.noclip && touch_triggers) {
     SV.TouchLinks(ent, SV.areanodes[0]);
   }
 };

@@ -1,3 +1,4 @@
+import sampleBSpline from '../../shared/BSpline.mjs';
 import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
@@ -1249,8 +1250,9 @@ export class Navigation {
         // prepend exact start and append exact goal for precision
         path[0] = startPos.copy();
         path.push(goalPos.copy());
-        this.#debugPath(path);
-        return path;
+        const bspath = sampleBSpline(path, Math.min(200, path.length * 10));
+        this.#debugPath(bspath);
+        return bspath;
       }
 
       openSet.delete(currentId);

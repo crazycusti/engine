@@ -328,6 +328,14 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-25
+
+* noclip’d players will no longer touch entities/triggers
+* mainloop will no longer sleep when there are pending console commands
+* sending extended clientdata is not properly propagating for all others (should introduce a global flag, so that some things still obey PVS)
+* A-star lookups are a bit slow, I need to look into parallelizing that using workers
+* A-star paths were too edgy, b-spline it is
+
 ### 2025-09-24
 
 * reorganized the precaching stuff a bit, allowing more dynamic spawning of objects
