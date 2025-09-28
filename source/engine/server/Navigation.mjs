@@ -1250,7 +1250,7 @@ export class Navigation {
         // prepend exact start and append exact goal for precision
         path[0] = startPos.copy();
         path.push(goalPos.copy());
-        const bspath = sampleBSpline(path, Math.min(200, path.length * 10));
+        const bspath = sampleBSpline(path, Math.min(200, path.length * 4));
         this.#debugPath(bspath);
         return bspath;
       }

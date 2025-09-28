@@ -316,7 +316,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return edicts; // used to be a generator, but we need to return an array due to changing linked lists in between
   }
 
-  /** @deprecated use FindAllByFilter instead */
+  /** @deprecated use FindAllByFieldAndValue instead */
   static FindByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
     for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
       /** @type {ServerEdict} */
@@ -334,7 +334,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return null;
   }
 
-  /** @deprecated use FindAllByFilter instead */
+  // TODO: optimize lookups by using maps for fields such as targetname, etc.
   static *FindAllByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
     for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
       /** @type {ServerEdict} */
