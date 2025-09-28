@@ -331,6 +331,9 @@ class MainMenu extends BaseMenu {
 ### 2025-09-28
 
 * fixed player pixel shader
+* added simple lighting to brush models
+* I’m not sure if I broke fullbright colors in textures, I need to double check
+* also animated light interpolation needs to be applied to lighting up entities properly
 
 ### 2025-09-25
 

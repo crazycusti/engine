@@ -9,9 +9,12 @@ uniform sampler2D tLightmap;
 uniform sampler2D tDlight;
 uniform sampler2D tLightStyleA;
 uniform sampler2D tLightStyleB;
+uniform vec3 uAmbientLight;
+uniform vec3 uShadeLight;
 
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;
+varying float vLightDot;
 
 void main(void) {
   vec4 textureA = texture2D(tTextureA, vTexCoord.xy);
@@ -65,6 +68,10 @@ void main(void) {
     texture.b * mix(1.0, d.b + texture2D(tDlight, vTexCoord.zw).b, texture.a),
     1.0
   );
+
+  gl_FragColor.r = gl_FragColor.r * (vLightDot * uShadeLight.r + uAmbientLight.r);
+  gl_FragColor.g = gl_FragColor.g * (vLightDot * uShadeLight.g + uAmbientLight.g);
+  gl_FragColor.b = gl_FragColor.b * (vLightDot * uShadeLight.b + uAmbientLight.b);
 
   gl_FragColor.r = pow(gl_FragColor.r, uGamma);
   gl_FragColor.g = pow(gl_FragColor.g, uGamma);

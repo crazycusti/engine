@@ -869,6 +869,7 @@ Mod.LoadPlanes = function(loadmodel, buf) {
  *
  * @param {BrushModel} loadmodel
  * @param {ArrayBuffer} buffer
+ * @returns {BrushModel}
  */
 Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
@@ -1210,9 +1211,7 @@ Mod.LoadAliasModel = function(loadmodel, buffer) {
           triangle = loadmodel._triangles[k];
           for (l = 0; l < 3; l++) {
             vert = frame.v[triangle.vertindex[l]];
-            if (vert.lightnormalindex >= 162) {
-              throw new Error('lightnormalindex >= NUMVERTEXNORMALS');
-            }
+            console.assert(vert.lightnormalindex < R.avertexnormals.length);
             cmds[cmds.length] = vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0];
             cmds[cmds.length] = vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1];
             cmds[cmds.length] = vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2];
@@ -1230,9 +1229,7 @@ Mod.LoadAliasModel = function(loadmodel, buffer) {
       triangle = loadmodel._triangles[j];
       for (k = 0; k < 3; k++) {
         vert = frame.v[triangle.vertindex[k]];
-        if (vert.lightnormalindex >= 162) {
-          throw new Error('lightnormalindex >= NUMVERTEXNORMALS');
-        }
+        console.assert(vert.lightnormalindex < R.avertexnormals.length);
         cmds[cmds.length] = vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0];
         cmds[cmds.length] = vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1];
         cmds[cmds.length] = vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2];

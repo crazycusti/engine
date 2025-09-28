@@ -523,7 +523,7 @@ export class Navigation {
     // - grid-sample the face bounding box and keep points that lie inside the polygon
     for (const surface of walkableSurfaces) {
       const face = surface.face;
-      /** collect ordered vertices for this face */
+      /** @type {Vector[]} collect ordered vertices for this face */
       const verts3 = [];
       for (let i = 0; i < face.numedges; i++) {
         const vec = new Vector();
@@ -553,6 +553,7 @@ export class Navigation {
       // build local orthonormal basis (u, v) on the face plane
       const u = n.cross(arbitrary);
       const uLen = u.normalize();
+
       if (uLen === 0) {
         continue;
       }

@@ -94,6 +94,9 @@ export const effect = Object.freeze({
   /** makes sure that the model is always rendered fullbright */
   EF_FULLBRIGHT: 16,
 
+  /** makes sure the model is never completely dark */
+  EF_MINLIGHT: 32,
+
   EF_NODRAW: 128,
 });
 
