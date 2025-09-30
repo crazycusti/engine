@@ -63,15 +63,15 @@ void main(void) {
   );
 
   gl_FragColor = vec4(
-    texture.r * mix(1.0, d.r + texture2D(tDlight, vTexCoord.zw).r, texture.a),
-    texture.g * mix(1.0, d.g + texture2D(tDlight, vTexCoord.zw).g, texture.a),
-    texture.b * mix(1.0, d.b + texture2D(tDlight, vTexCoord.zw).b, texture.a),
+    texture.r * mix(1.0, (d.r + texture2D(tDlight, vTexCoord.zw).r) * (vLightDot * uShadeLight.r + uAmbientLight.r), texture.a),
+    texture.g * mix(1.0, (d.g + texture2D(tDlight, vTexCoord.zw).g) * (vLightDot * uShadeLight.g + uAmbientLight.g), texture.a),
+    texture.b * mix(1.0, (d.b + texture2D(tDlight, vTexCoord.zw).b) * (vLightDot * uShadeLight.b + uAmbientLight.b), texture.a),
     1.0
   );
 
-  gl_FragColor.r = gl_FragColor.r * (vLightDot * uShadeLight.r + uAmbientLight.r);
-  gl_FragColor.g = gl_FragColor.g * (vLightDot * uShadeLight.g + uAmbientLight.g);
-  gl_FragColor.b = gl_FragColor.b * (vLightDot * uShadeLight.b + uAmbientLight.b);
+  if (gl_FragColor.r == 0.0 && gl_FragColor.g == 0.0 && gl_FragColor.b == 0.0 && texture.a == 0.0) {
+    discard;
+  }
 
   gl_FragColor.r = pow(gl_FragColor.r, uGamma);
   gl_FragColor.g = pow(gl_FragColor.g, uGamma);

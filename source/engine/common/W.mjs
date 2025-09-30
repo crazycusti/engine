@@ -309,42 +309,7 @@ class Wad3File extends WadFileInterface {
   }
 
   _parseMiptexLump(name, data, mipmapLevel) {
-    const view = new DataView(data);
-    const width = view.getUint32(16, true);
-    const height = view.getUint32(20, true);
-
-    const mipoffsets = [
-      view.getUint32(24, true),
-      view.getUint32(28, true),
-      view.getUint32(32, true),
-      view.getUint32(36, true),
-    ];
-
-    console.assert(mipmapLevel >= 0 && mipmapLevel < mipoffsets.length, 'valid mipmap level');
-
-    const texName = Q.memstr(new Uint8Array(data, 0, 16)) || name;
-
-    const mipDataOffset = mipoffsets[mipmapLevel];
-    const scale = 1 << mipmapLevel;
-    const swidth = width / scale;
-    const sheight = height / scale;
-
-    const uint8data = new Uint8Array(data, mipDataOffset, swidth * sheight);
-
-    const palette = new Uint8Array(data,
-      40 + // 40 = header
-      width * height + // pixel data
-      width / 2 * height / 2 + // mipmap level 1
-      width / 4 * height / 4 + // mipmap level 2
-      width / 8 * height / 8 + // mipmap level 3
-      2, // how many colors being used for palette in short
-      768, // 768 = 256 colors * 3 bytes (RGB)
-    );
-
-    // Textures with a name starting with '{' are transparent, so we set the transparent color to 255
-    const rgba = translateIndexToRGBA(uint8data, swidth, sheight, palette, texName[0] === '{' ? 255 : null);
-
-    return new WadLumpTexture(texName, swidth, sheight, rgba);
+    return readWad3Texture(data, name, mipmapLevel);
   }
 
   /**
@@ -449,14 +414,16 @@ W._handlers.push(Wad3File);
 
 /**
  * Helper function to convert indexed 8-bit data to RGBA format.
+ * It has options for transparency and fullbright colors.
  * @param {Uint8Array} uint8data indexed 8-bit data, each byte is an index to the palette
  * @param {number} width width
  * @param {number} height height
  * @param {?Uint8Array} palette palette data, 256 colors, each color is 3 bytes (RGB), default is W.d_8to24table_u8
  * @param {?number} transparentColor optional color index to treat as transparent (default is null, no transparency)
+ * @param {?number} fullbrightColorStart optional color index where fullbright colors start (default is null, no fullbright)
  * @returns {Uint8Array} RGBA data, each pixel is 4 bytes (R, G, B, A)
  */
-export function translateIndexToRGBA(uint8data, width, height, palette = W.d_8to24table_u8, transparentColor = null) {
+export function translateIndexToRGBA(uint8data, width, height, palette = W.d_8to24table_u8, transparentColor = null, fullbrightColorStart = null) {
   const rgba = new Uint8Array(width * height * 4);
 
   for (let i = 0; i < width * height; i++) {
@@ -468,12 +435,61 @@ export function translateIndexToRGBA(uint8data, width, height, palette = W.d_8to
       rgba[i * 4 + 3] = 0;
       continue;
     }
+
     // lookup the color in the palette
     rgba[i * 4 + 0] = palette[colorIndex * 3];
     rgba[i * 4 + 1] = palette[colorIndex * 3 + 1];
     rgba[i * 4 + 2] = palette[colorIndex * 3 + 2];
-    rgba[i * 4 + 3] = 255;
+
+    // our pixel shader is considering the alpha channel whether to use the lightmap or not
+    rgba[i * 4 + 3] = fullbrightColorStart !== null && colorIndex > fullbrightColorStart ? 0 : 255;
   }
 
   return rgba;
+};
+
+/**
+ * Reads a WAD3 texture from the given data.
+ * @param {ArrayBuffer} data WAD3 texture data
+ * @param {string} name texture name, used if the texture name in the data is empty
+ * @param {number} mipmapLevel 0..3, 0 is the base level
+ * @returns {WadLumpTexture} the decoded texture data
+ */
+export function readWad3Texture(data, name, mipmapLevel = 0) {
+  const view = new DataView(data);
+  const width = view.getUint32(16, true);
+  const height = view.getUint32(20, true);
+
+  const mipoffsets = [
+    view.getUint32(24, true),
+    view.getUint32(28, true),
+    view.getUint32(32, true),
+    view.getUint32(36, true),
+  ];
+
+  console.assert(mipmapLevel >= 0 && mipmapLevel < mipoffsets.length, 'valid mipmap level');
+
+  const texName = Q.memstr(new Uint8Array(data, 0, 16)) || name;
+
+  const mipDataOffset = mipoffsets[mipmapLevel];
+  const scale = 1 << mipmapLevel;
+  const swidth = width / scale;
+  const sheight = height / scale;
+
+  const uint8data = new Uint8Array(data, mipDataOffset, swidth * sheight);
+
+  const palette = new Uint8Array(data,
+    40 + // 40 = header
+    width * height + // pixel data
+    width / 2 * height / 2 + // mipmap level 1
+    width / 4 * height / 4 + // mipmap level 2
+    width / 8 * height / 8 + // mipmap level 3
+    2, // how many colors being used for palette in short
+    768, // 768 = 256 colors * 3 bytes (RGB)
+  );
+
+  // Textures with a name starting with '{' are transparent, so we set the transparent color to 255
+  const rgba = translateIndexToRGBA(uint8data, swidth, sheight, palette, texName[0] === '{' ? 255 : null);
+
+  return new WadLumpTexture(texName, swidth, sheight, rgba);
 };

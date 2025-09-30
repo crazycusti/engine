@@ -3,7 +3,7 @@ import GL, { GLTexture, resampleTexture8 } from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { CorruptedResourceError, MissingResourceError, NotImplementedError } from './Errors.mjs';
 import Q from '../../shared/Q.mjs';
-import W, { translateIndexToRGBA, WadFileInterface } from './W.mjs';
+import W, { readWad3Texture, translateIndexToRGBA, WadFileInterface } from './W.mjs';
 import { CRC16CCITT } from './CRC.mjs';
 import { BaseModel, Face, Plane } from './model/BaseModel.mjs';
 import { BSP29 } from './model/BSP.mjs';
@@ -330,19 +330,7 @@ Mod.LoadTextures = function(loadmodel, buf) {
       sky: false,
       turbulent: false,
     };
-    // prototyped an external wad file loading for textures:
-    // try {
-    //   const tex = halflifeWad.getLumpMipmap(tx.name, 0);
-    //   if (tex) {
-    //     tx.width = tex.width;
-    //     tx.height = tex.height;
-    //     tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, tex.data);
-    //     loadmodel.textures[i] = tx;
-    //     continue;
-    //   }
-    // } catch(e) {
-    //   console.error(e);
-    // }
+
     if (!registry.isDedicatedServer) {
       if (tx.name.substring(0, 3).toLowerCase() === 'sky') {
         R.InitSky(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), 32768));
@@ -350,10 +338,35 @@ Mod.LoadTextures = function(loadmodel, buf) {
         R.skytexturenum = i;
         tx.sky = true;
       } else {
-        tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, translateIndexToRGBA(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), tx.width * tx.height), tx.width, tx.height));
-        if (tx.name[0] === '*') {
-          tx.turbulent = true;
+        // awful hack to load WAD3 textures if available
+        const len = (
+          40 +
+          tx.width / 1 * tx.height / 1 +
+          tx.width / 2 * tx.height / 2 +
+          tx.width / 4 * tx.height / 4 +
+          tx.width / 8 * tx.height / 8 +
+          2 + 768
+        );
+
+        if (miptexofs + len - 2 - 768 < buf.byteLength) {
+          const magic = view.getInt16(miptexofs + len - 2 - 768, true);
+
+          if (magic === 256) { // guessing it’s WAD3 texmip
+            const data = new ArrayBuffer(len);
+            new Uint8Array(data).set(new Uint8Array(buf, miptexofs, len));
+            const wtex = readWad3Texture(data, tx.name, 0);
+
+            tx.glt = GLTexture.FromLumpTexture(wtex);
+          }
         }
+      }
+
+      if (!tx.glt) {
+        tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, translateIndexToRGBA(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), tx.width * tx.height), tx.width, tx.height, W.d_8to24table_u8, null, 240));
+      }
+
+      if (tx.name[0] === '*' || tx.name[0] === '!') {
+        tx.turbulent = true;
       }
     }
     loadmodel.textures[i] = tx;

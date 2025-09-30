@@ -1,4 +1,11 @@
+import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import { eventBus } from '../registry.mjs';
+
+class FullscreenCommand extends ConsoleCommand {
+  run() {
+    VID.mainwindow.requestFullscreen();
+  }
+}
 
 export default class VID {
   /** @type {number} */
@@ -58,6 +65,8 @@ export default class VID {
     VID.Resize(); // trigger once since we are ready now
 
     window.addEventListener('resize', VID.Resize);
+
+    Cmd.AddCommand('fullscreen', FullscreenCommand);
 
     eventBus.publish('vid.ready');
   };

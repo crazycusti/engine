@@ -328,6 +328,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-09-30
+
+* awful hack to load WAD3 textures from BSP29 if the palette color field equals 256
+* added support for transparent textures, a bit ugly due to the alpha channel being used for fullbright texels as well
+* added `fullscreen` console command (for mobile devices)
+
 ### 2025-09-28
 
 * fixed player pixel shader

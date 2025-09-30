@@ -8,7 +8,7 @@ Added features include but not limited to:
 * Improved resource loading using asynchroneous code.
 * Support for client-side game code.
 * 32-bit texture support.
-* WAD3 file support.
+* WAD3 file support and texture support.
 * Colored dynamic lighting support, also support for `.lit` files.
 * Slightly improved console subsystem.
 * Smooth animations using lerping.
@@ -19,10 +19,10 @@ Yet, there is still plenty to do.
 
 Some features on the roadmap:
 
-* Proper WAD3 support when maps refer them.
+* Proper WAD3 support when maps refer them, loading them from external WAD, if not compiled in.
 * Better network code with client-side predicition.
 * More flexible rendering subsystem, making it easier to reuse model rendering etc.
-* HLBSP/BSP30 support.
+* BSP2 and HLBSP/BSP30 support.
 
 This is an educational and recreational project.
 Though the vision is to provide an id tech 2 based game engine running in the browser for fun multiplayer projects.
