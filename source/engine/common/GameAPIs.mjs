@@ -284,8 +284,8 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
   /**
    * Finds all edicts around origin in given radius.
-   * @param {Vector} origin
-   * @param {number} radius
+   * @param {Vector} origin point in space
+   * @param {number} radius not really a radius, it’s used for creating an axis-aligned bounding box
    * @param {(ent: ServerEdict) => boolean} filterFn optional filter function, if provided, will be used to filter entities
    * @returns {ServerEdict[]} matching edict
    */
