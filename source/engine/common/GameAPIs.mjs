@@ -603,7 +603,7 @@ export class ClientEngineAPI extends CommonEngineAPI {
   /**
    * Translates world coordinates to screen coordinates.
    * @param {Vector} origin position in world coordinates
-   * @returns {{x: number, y: number, z: number, visible: boolean}} position in screen coordinates and visibility flag
+   * @returns {Vector|null} position in screen coordinates, or null if the point is behind the camera
    */
   static WorldToScreen(origin) {
     return R.WorldToScreen(origin);

@@ -913,10 +913,9 @@ function multiplyMatrixVec4(m, v) {
 /**
  *
  * @param {Vector} origin position in the world
- * @returns {{x: number, y: number, z: number, visible: boolean}|null} screen coordinates and visibility
+ * @returns {Vector|null} screen coordinates or null if off-screen
  */
 R.WorldToScreen = function(origin) {
-  const result = { x: 0, y: 0, z: 0, visible: false };
   const projectionMatrix = R.projectionMatrix;
   const viewMatrix = R.viewMatrix; // This is uViewAngles — rotation only
 
@@ -948,7 +947,7 @@ R.WorldToScreen = function(origin) {
 
   // If the clip space W coordinate is zero, we can't convert to NDC
   if (clip[3] === 0) {
-    return result;
+    return null;
   }
 
   const ndc = [
@@ -957,12 +956,15 @@ R.WorldToScreen = function(origin) {
     clip[2] / clip[3],
   ];
 
-  result.x = R.refdef.vrect.x + (ndc[0] + 1) * 0.5 * R.refdef.vrect.width;
-  result.y = R.refdef.vrect.y + (1 - ndc[1]) * 0.5 * R.refdef.vrect.height;
-  result.z = ndc[2];
-  result.visible = clip[3] > 0 && ndc[0] >= -1 && ndc[0] <= 1 && ndc[1] >= -1 && ndc[1] <= 1 && ndc[2] >= 0 && ndc[2] <= 1;
+  if (clip[3] > 0 && ndc[0] >= -1 && ndc[0] <= 1 && ndc[1] >= -1 && ndc[1] <= 1 && ndc[2] >= 0 && ndc[2] <= 1) {
+    return new Vector(
+      R.refdef.vrect.x + (ndc[0] + 1) * 0.5 * R.refdef.vrect.width,
+      R.refdef.vrect.y + (1 - ndc[1]) * 0.5 * R.refdef.vrect.height,
+      ndc[2],
+    );
+  }
 
-  return result;
+  return null;
 };
 
 R.perspective = [
