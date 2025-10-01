@@ -1028,11 +1028,7 @@ R.Perspective = function() {
     }
     if (program.uFogParams != null) {
       // uFogParams = vec4(start, end, density, mode)
-      gl.uniform4f(program.uFogParams,
-          parseFloat(R.fog_start.value) || 100.0,
-          parseFloat(R.fog_end.value) || 1000.0,
-          parseFloat(R.fog_density.value) || 0.01,
-          parseFloat(R.fog_mode.value) || 0.0);
+      gl.uniform4f(program.uFogParams, R.fog_start.value || 100.0, R.fog_end.value || 1000.0, R.fog_density.value || 0.01, R.fog_mode.value || 0.0);
     }
   }
 };
@@ -1422,12 +1418,11 @@ R.Init = async function() {
   R.nocolors = new Cvar('gl_nocolors', '0');
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
   // fog controls
-  R.fog = new Cvar('r_fog', '0', Cvar.FLAG.ARCHIVE, 'Enable fog (0/1)');
   R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.ARCHIVE, 'Fog color: R G B (0-255)');
   R.fog_start = new Cvar('r_fog_start', '100', Cvar.FLAG.ARCHIVE, 'Fog start distance');
   R.fog_end = new Cvar('r_fog_end', '1000', Cvar.FLAG.ARCHIVE, 'Fog end distance (linear)');
   R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.ARCHIVE, 'Fog density (for exp/exp2)');
-  R.fog_mode = new Cvar('r_fog_mode', '0', Cvar.FLAG.ARCHIVE, 'Fog mode: 0=linear,1=exp,2=exp2');
+  R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.ARCHIVE, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
 
   await R.InitParticles();
 

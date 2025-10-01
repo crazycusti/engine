@@ -25,7 +25,9 @@ void main(void) {
   vLightStyle = aLightStyle;
   vLightDot = dot(aNormal, uLightVec);
   float dist = length(aPosition + uOrigin - uViewOrigin);
-  if (uFogParams.w < 0.5) {
+  if (uFogParams.w < 0.0) {
+    vFog = 1.0;
+  } else if (uFogParams.w < 0.5) {
     float denom = max(0.0001, uFogParams.y - uFogParams.x);
     vFog = clamp((uFogParams.y - dist) / denom, 0.0, 1.0);
   } else if (abs(uFogParams.w - 1.0) < 0.5) {

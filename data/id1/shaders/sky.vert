@@ -16,6 +16,10 @@ void main(void) {
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
 
   vTexCoord = aPosition.xy * uScale.xy * 1.5;
-  // sky is effectively infinitely far away -> fully fogged (use fog color)
-  vFog = 0.0;
+
+  if (uFogParams.w < 0.0) {
+    vFog = 1.0;
+  } else {
+    vFog = 0.0;
+  }
 }

@@ -26,5 +26,6 @@ void main(void) {
       color += texture2D(tTexture, warpedCoord + vec2(float(i) * texOffset.x, float(j) * texOffset.y)) * kernel[i + 1 + (j + 1) * 3];
     }
   }
+
   gl_FragColor = color;
 }
