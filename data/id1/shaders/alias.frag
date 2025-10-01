@@ -8,6 +8,8 @@ uniform sampler2D tTexture;
 
 varying vec2 vTexCoord;
 varying float vLightDot;
+varying float vFog;
+uniform vec3 uFogColor;
 
 void main(void){
   vec4 texture = texture2D(tTexture, vTexCoord);
@@ -20,4 +22,7 @@ void main(void){
   gl_FragColor.r = pow(gl_FragColor.r, uGamma);
   gl_FragColor.g = pow(gl_FragColor.g, uGamma);
   gl_FragColor.b = pow(gl_FragColor.b, uGamma);
+  // apply fog
+  vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
+  gl_FragColor = vec4(finalRgb, gl_FragColor.a);
 }

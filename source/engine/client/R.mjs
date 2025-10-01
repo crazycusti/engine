@@ -1021,6 +1021,19 @@ R.Perspective = function() {
     if (program.uGamma != null) {
       gl.uniform1f(program.uGamma, V.gamma.value);
     }
+    // global fog uniforms (only set when shader declares them)
+    if (program.uFogColor != null) {
+      const colParts = (R.fog_color.string || '128 128 128').split(/\s+/).map(Number);
+      gl.uniform3fv(program.uFogColor, [(colParts[0]||128)/255.0, (colParts[1]||128)/255.0, (colParts[2]||128)/255.0]);
+    }
+    if (program.uFogParams != null) {
+      // uFogParams = vec4(start, end, density, mode)
+      gl.uniform4f(program.uFogParams,
+          parseFloat(R.fog_start.value) || 100.0,
+          parseFloat(R.fog_end.value) || 1000.0,
+          parseFloat(R.fog_density.value) || 0.01,
+          parseFloat(R.fog_mode.value) || 0.0);
+    }
   }
 };
 
@@ -1408,12 +1421,19 @@ R.Init = async function() {
   R.flashblend = new Cvar('gl_flashblend', '0');
   R.nocolors = new Cvar('gl_nocolors', '0');
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
+  // fog controls
+  R.fog = new Cvar('r_fog', '0', Cvar.FLAG.ARCHIVE, 'Enable fog (0/1)');
+  R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.ARCHIVE, 'Fog color: R G B (0-255)');
+  R.fog_start = new Cvar('r_fog_start', '100', Cvar.FLAG.ARCHIVE, 'Fog start distance');
+  R.fog_end = new Cvar('r_fog_end', '1000', Cvar.FLAG.ARCHIVE, 'Fog end distance (linear)');
+  R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.ARCHIVE, 'Fog density (for exp/exp2)');
+  R.fog_mode = new Cvar('r_fog_mode', '0', Cvar.FLAG.ARCHIVE, 'Fog mode: 0=linear,1=exp,2=exp2');
 
   await R.InitParticles();
 
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
@@ -1422,7 +1442,7 @@ R.Init = async function() {
       ],
       ['tTexture']),
   GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha'],
+    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 4],
@@ -1435,7 +1455,7 @@ R.Init = async function() {
       [['aPosition', gl.FLOAT, 3]],
       []),
   GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom'],
+    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
@@ -1444,11 +1464,11 @@ R.Init = async function() {
       ],
       ['tTexture', 'tPlayer']),
   GL.CreateProgram('sprite',
-      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma'],
+    ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
       [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2]],
       ['tTexture']),
   GL.CreateProgram('turbulent',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime'],
+    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime', 'uFogColor', 'uFogParams'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 4],
@@ -1568,7 +1588,7 @@ R.InitParticles = async function() {
   }
 
   await GL.CreateProgram('particle',
-      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma'],
+    ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
       [['aOrigin', gl.FLOAT, 3], ['aCoord', gl.FLOAT, 2], ['aScale', gl.FLOAT, 1], ['aColor', gl.UNSIGNED_BYTE, 3, true]],
       []);
 };
@@ -2589,7 +2609,7 @@ R.MakeSky = async function() {
 
   await Promise.all([
     GL.CreateProgram('sky',
-      ['uViewAngles', 'uPerspective', 'uScale', 'uGamma', 'uTime'],
+      ['uViewAngles', 'uPerspective', 'uScale', 'uGamma', 'uTime', 'uFogColor', 'uFogParams'],
       [['aPosition', gl.FLOAT, 3]],
       ['tSolid', 'tAlpha']),
     GL.CreateProgram('sky-chain',
