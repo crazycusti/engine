@@ -109,8 +109,8 @@ export default class Sys {
 
       const dtime = Date.now() - startTime;
 
-      if ((Date.now() - startTime) > 100) {
-        Sys.Print(`Host.Frame took too long: ${dtime}ms\n`);
+      if (dtime > 100) {
+        Sys.Print(`Host.Frame took too long: ${dtime} ms\n`);
       }
 
       await Q.sleep(Math.max(0, 1000.0 / 60.0 - dtime));

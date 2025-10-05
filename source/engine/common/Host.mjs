@@ -87,7 +87,6 @@ Host.InitLocal = function() {
   Host.framerate = new Cvar('host_framerate', '0');
   Host.speeds = new Cvar('host_speeds', '0');
   Host.ticrate = new Cvar('sys_ticrate', '0.05');
-  Host.serverprofile = new Cvar('serverprofile', '0');
   Host.developer = new Cvar('developer', '0');
   Host.pausable = new Cvar('pausable', '1', Cvar.FLAG.SERVER);
   Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER); // actually a game cvar, but we need it here, since a bunch of server code is using it
@@ -275,7 +274,6 @@ Host.ScheduleInFuture = function(name, callback, whenInSeconds) {
   });
 };
 
-Host.time3 = 0.0;
 Host._Frame = function() {
   // Math.random();
   Host.realtime = Sys.FloatTime();
@@ -334,8 +332,6 @@ Host._Frame = function() {
     SCR.UpdateScreen();
     return;
   }
-
-  let time1; let time2; let pass1; let pass2; let pass3; let tot;
 
   Cmd.Execute();
 
@@ -425,41 +421,16 @@ Host.HandleCrash = function(e) {
   Sys.Quit();
 };
 
-Host.timetotal = 0.0;
-Host.timecount = 0;
 Host.Frame = function() {
   if (inHandleCrash) {
     return;
   }
 
-  if (Host.serverprofile.value === 0) {
-    try {
-      Host._Frame();
-    } catch (e) {
-      Host.HandleCrash(e);
-    }
-    return;
-  }
-  const time1 = Sys.FloatTime();
   try {
     Host._Frame();
   } catch (e) {
     Host.HandleCrash(e);
   }
-  Host.timetotal += Sys.FloatTime() - time1;
-  if (++Host.timecount <= 999) {
-    return;
-  }
-  const m = (Host.timetotal * 1000.0 / Host.timecount) >> 0;
-  Host.timecount = 0;
-  Host.timetotal = 0.0;
-  let i; let c = 0;
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    if (SV.svs.clients[i].active === true) {
-      ++c;
-    }
-  }
-  Con.Print('serverprofile: ' + (c <= 9 ? ' ' : '') + c + ' clients ' + (m <= 9 ? ' ' : '') + m + ' msec\n');
 };
 
 Host.Init = async function() {
@@ -700,26 +671,24 @@ Host.Ping_f = function() {
   if (this.forward()) {
     return;
   }
+
   Host.ClientPrint('Client ping times:\n');
-  let i; let client; let total; let j;
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    client = SV.svs.clients[i];
+
+  for (let i = 0; i < SV.svs.maxclients; i++) {
+    /** @type {ServerClient} */
+    const client = SV.svs.clients[i];
+
     if (client.active !== true) {
       continue;
     }
-    total = 0;
-    for (j = 0; j <= 15; j++) {
+
+    let total = 0;
+
+    for (let j = 0; j < client.ping_times.length; j++) {
       total += client.ping_times[j];
     }
-    total = (total * 62.5).toFixed(0);
-    if (total.length === 1) {
-      total = '   ' + total;
-    } else if (total.length === 2) {
-      total = '  ' + total;
-    } else if (total.length === 3) {
-      total = ' ' + total;
-    }
-    Host.ClientPrint(total + ' ' + client.name + '\n');
+
+    Host.ClientPrint((total * 62.5).toFixed(0).padStart(3) + ' ' + client.name + '\n');
   }
 };
 

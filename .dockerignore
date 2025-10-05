@@ -1,0 +1,5 @@
+data/id1/*.wad
+data/id1/*.pak
+!data/id1/pak*.pak
+!data/id1/maps/*.nav
+!data/id1/shaders/*

@@ -362,7 +362,7 @@ Mod.LoadTextures = function(loadmodel, buf) {
       }
 
       if (!tx.glt) {
-        tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, translateIndexToRGBA(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), tx.width * tx.height), tx.width, tx.height, W.d_8to24table_u8, null, 240));
+        tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, translateIndexToRGBA(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), tx.width * tx.height), tx.width, tx.height, W.d_8to24table_u8, tx.name[0] === '{' ? 255 : null, 240));
       }
 
       if (tx.name[0] === '*' || tx.name[0] === '!') {

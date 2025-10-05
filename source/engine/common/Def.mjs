@@ -10,6 +10,16 @@ export const productName = 'The Quake Shack';
 export const productVersion = '1.1.2+dev';
 
 /**
+ * Default game directory.
+ */
+export const defaultGame = 'id1';
+
+/**
+ * Default base directory.
+ */
+export const defaultBasedir = 'id1';
+
+/**
  * Engine limitations.
  * @enum {number}
  * @readonly

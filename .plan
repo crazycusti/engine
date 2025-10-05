@@ -328,6 +328,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-05
+
+* added support for transparent textures starting with `{`
+* added default game and basedir in Defs (intended for standalone modding support)
+* some code cleanup
+
 ### 2025-10-01
 
 * added simple linear fog

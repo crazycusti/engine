@@ -8,6 +8,7 @@ import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
 import Cvar from './Cvar.mjs';
 import W from './W.mjs';
 import Cmd from './Cmd.mjs';
+import { defaultBasedir, defaultGame } from './Def.mjs';
 
 let { Con, Sys } = registry;
 
@@ -47,7 +48,7 @@ export default class COM {
   static gamedir = null;
 
   /** @type {string} mod name */
-  static game = 'id1';
+  static game = defaultGame;
 
   static DefaultExtension(path, extension) {
     for (let i = path.length - 1; i >= 0; i--) {
@@ -642,7 +643,7 @@ export default class COM {
     if (search !== undefined) {
       await this.AddGameDirectory(search);
     } else {
-      await this.AddGameDirectory('id1');
+      await this.AddGameDirectory(defaultBasedir);
     }
 
     if (this.rogue === true) {
@@ -659,6 +660,10 @@ export default class COM {
         this.game = search;
         await this.AddGameDirectory(search);
       }
+    } else if (defaultGame !== defaultBasedir) {
+      this.game = defaultGame;
+      this.modified = true;
+      await this.AddGameDirectory(defaultGame);
     }
 
     this.gamedir = [this.searchpaths[this.searchpaths.length - 1]];

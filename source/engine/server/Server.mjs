@@ -104,6 +104,7 @@ SV.server = {
   reliable_datagram: new SzBuffer(16384, 'SV.server.reliable_datagram'),
   /** sent during client prespawn */
   signon: new SzBuffer(16384, 'SV.server.signon'),
+  /** @type {ServerEdict[]} */
   edicts: [],
   mapname: null,
   worldmodel: null,
