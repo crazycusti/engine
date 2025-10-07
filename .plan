@@ -328,6 +328,14 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-07
+
+* turns out navmesh queries are insanely slow, especially if you run things on a Raspberry Pi lol
+* coming up with a worker infrastructure:
+  * abstracting away differences between node.js and browsers
+  * messages will be passed over the event bus
+  * some stub versions of Con, Sys, COM, making sure that I/O works, maybe even SV with basic information
+
 ### 2025-10-05
 
 * added support for transparent textures starting with `{`

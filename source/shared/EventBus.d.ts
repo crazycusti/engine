@@ -26,4 +26,7 @@ export interface EventBus {
    * Unsubscribes from all events.
    */
   unsubscribeAll(): void;
+
+  /** All subscribed topics. */
+  get topics(): string[];
 };

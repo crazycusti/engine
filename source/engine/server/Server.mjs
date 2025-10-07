@@ -1340,6 +1340,12 @@ SV.SpawnServer = function(mapname) {
     for (const client of SV.svs.clients) {
       client.changelevel();
     }
+
+    // shut down navigation, since map has changed
+    if (SV.server.navigation) {
+      SV.server.navigation.shutdown();
+      SV.server.navigation = null;
+    }
   }
 
   Con.DPrint('Clearing memory\n');

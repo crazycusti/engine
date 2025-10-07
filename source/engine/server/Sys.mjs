@@ -12,6 +12,7 @@ import Cvar from '../common/Cvar.mjs';
 import { REPLServer } from 'node:repl';
 import Cmd from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
+import WorkerManager, { WorkerThread } from './WorkerManager.mjs';
 
 let { COM, Host, NET } = registry;
 
@@ -56,6 +57,16 @@ export default class Sys {
   static #repl = null;
 
   /**
+   * Spawns a worker thread and sets up event forwarding.
+   * @param {string} script Path to worker script
+   * @param {string[]} events list of events the worker wants to subscribe to
+   * @returns {WorkerThread} worker thread wrapper
+   */
+  static SpawnWorker(script, events) {
+    return WorkerManager.SpawnWorker(script, events);
+  }
+
+  /**
    * Initializes the low-level system.
    */
   static async Init() {
@@ -68,6 +79,9 @@ export default class Sys {
 
     // Record the initial time
     Sys.#oldtime = Date.now() * 0.001;
+
+    // Start worker manager
+    WorkerManager.Init();
 
     // Start webserver
     Sys.StartWebserver();

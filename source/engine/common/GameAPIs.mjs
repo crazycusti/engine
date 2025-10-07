@@ -7,6 +7,7 @@ import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ED, ServerEdict } from '../server/Edict.mjs';
+import { Navigation } from '../server/Navigation.mjs';
 import Cmd from './Cmd.mjs';
 import Cvar from './Cvar.mjs';
 import { HostError } from './Errors.mjs';
@@ -507,6 +508,16 @@ export class ServerEngineAPI extends CommonEngineAPI {
    */
   static Navigate(start, end) {
     return SV.server.navigation.findPath(start, end);
+  }
+
+  /**
+   * Will return a series of waypoints from start to end.
+   * @param {Vector} start start point
+   * @param {Vector} end end point
+   * @returns {Promise<Vector[]>} array of waypoints from start to end, including start and end
+   */
+  static async NavigateAsync(start, end) {
+    return SV.server.navigation.findPathAsync(start, end);
   }
 
   static get maxplayers() {

@@ -34,7 +34,8 @@ export const registry = {
 // make sure the registry is not extensible beyond the defined properties
 Object.seal(registry);
 
-/** @type {import('../shared/EventBus').EventBus} */
+/** @typedef {import('../shared/EventBus').EventBus} EventBusT */
+/** @augments EventBusT */
 export class EventBus {
   /** @type {Map<string, Set<Function>>} */
   #listeners = new Map();
@@ -94,6 +95,14 @@ export class EventBus {
 
   toString() {
     return `EventBus(${this.#name}): ${this.#listeners.size} topics`;
+  }
+
+  /**
+   * All subscribed topics.
+   * @returns {string[]} topics
+   */
+  get topics() {
+    return Array.from(this.#listeners.keys());
   }
 };
 

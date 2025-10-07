@@ -779,6 +779,16 @@ Host.Restart_f = function() {
   }
 };
 
+// NOTE: this is the dedicated server version of disconnect
+Host.Disconnect_f = function() {
+  if (!SV.server.active) {
+    Con.Print('No active server\n');
+    return;
+  }
+
+  SV.ShutdownServer(false);
+};
+
 Host.Reconnect_f = function() {
   if (registry.isDedicatedServer) {
     Con.Print('cannot reconnect in dedicated server mode\n');
@@ -1514,6 +1524,8 @@ Host.InitCommands = function() {
     Cmd.AddCommand('bind', () => {});
     Cmd.AddCommand('unbind', () => {});
     Cmd.AddCommand('unbindall', () => {});
+
+    Cmd.AddCommand('disconnect', Host.Disconnect_f);
   }
 
   Cmd.AddCommand('status', Host.Status_f);
@@ -1561,6 +1573,38 @@ Host.InitCommands = function() {
   Cmd.AddCommand('fatalerror', class extends ConsoleCommand {
     run(message) {
       throw new Error(message);
+    }
+  });
+
+  Cmd.AddCommand('eb_topics', class extends ConsoleCommand {
+    run() {
+      if (Host.developer.value === 0) {
+        return;
+      }
+
+      for (const topic of eventBus.topics.sort()) {
+        Con.Print(topic + '\n');
+      }
+    }
+  });
+
+  Cmd.AddCommand('eb_publish', class extends ConsoleCommand {
+    run(eventName, ...args) {
+      if (Host.developer.value === 0) {
+        return;
+      }
+
+      if (!eventName) {
+        Con.Print(`Usage: ${this.command} <eventName> [args...]\n`);
+        return;
+      }
+
+      if (!eventBus.topics.includes(eventName)) {
+        Con.PrintError(`No such event topic: ${eventName}\n`);
+        return;
+      }
+
+      eventBus.publish(eventName, ...args);
     }
   });
 };

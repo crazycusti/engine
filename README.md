@@ -14,6 +14,7 @@ Added features include but not limited to:
 * Smooth animations using lerping.
 * Somewhat optimized network code.
 * Navigation mesh for smarter NPC behavior.
+* Limited multithreading support.
 
 Yet, there is still plenty to do.
 

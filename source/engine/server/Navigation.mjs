@@ -2,6 +2,7 @@ import sampleBSpline from '../../shared/BSpline.mjs';
 import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
+// import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { CorruptedResourceError, MissingResourceError } from '../common/Errors.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
@@ -10,7 +11,9 @@ import { Face } from '../common/model/BaseModel.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
 
-let { CL, COM, Con, R, SV } = registry;
+/** @typedef {import('./WorkerManager.mjs').WorkerThread} WorkerThread */
+
+let { CL, COM, Con, R, SV, Sys } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -18,6 +21,7 @@ eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   R = registry.R;
   SV = registry.SV;
+  Sys = registry.Sys;
 });
 
 class Waypoint {
@@ -134,8 +138,10 @@ class Node {
 
   /**
    * @param {any[]} data serialized data
-   * @param {Navigation} navigation
+   * @param {Navigation} navigation navigation instance
+   * @returns {Node} deserialized node
    */
+  // eslint-disable-next-line no-unused-vars
   static deserialize(data, navigation) {
     const node = new Node(data[0], new Vector(...data[1]));
 
@@ -150,9 +156,9 @@ class Node {
   }
 };
 
-class NavMeshOutOfDateException extends CorruptedResourceError {};
+export class NavMeshOutOfDateException extends CorruptedResourceError {};
 
-const NAV_FILE_VERSION = 2; // 1 = JSON, 2 = compact binary
+const NAV_FILE_VERSION = 2;
 
 export class Navigation {
   /** @type {Cvar} */
@@ -170,10 +176,14 @@ export class Navigation {
   requiredHeight = -Def.hull[0][0][2] + Def.hull[0][1][2]; // hull 1
   requiredRadius = (-Def.hull[0][0][0] + Def.hull[0][1][0]) / 2; // hull 1 (radius, not diameter)
 
-  constructor(worldmodel) {
-    console.assert(worldmodel, 'Navigation: worldmodel is required');
+  /** @type {Record<string,(path:Vector[]|null)=>(void)>} holds pending requests for the worker thread */
+  #requests = {};
 
-    /** @type {BrushModel} */
+  /** @type {WorkerThread?} worker thread handling navigation lookups */
+  #worker = null;
+
+  constructor(worldmodel) {
+    /** @type {BrushModel?} */
     this.worldmodel = worldmodel;
     this.graph = {
       /** @type {Node[]} */
@@ -193,12 +203,48 @@ export class Navigation {
     this.nav_debug_graph = new Cvar('nav_debug_graph', '0', Cvar.FLAG.NONE, 'if set to 1, will render the navigation graph for debugging');
     this.nav_debug_waypoints = new Cvar('nav_debug_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will render all waypoints for debugging');
     this.nav_debug_path = new Cvar('nav_debug_path', '0', Cvar.FLAG.NONE | Cvar.FLAG.CHEAT, 'if set to 1, will render the last computed path for debugging');
+
+    // worker thread -> main thread: mesh probably out of date
+    eventBus.subscribe('nav.build', () => {
+      if (SV.server.navigation) {
+        SV.server.navigation.build();
+      }
+    });
+  }
+
+  #initWorker() {
+    this.#worker = Sys.SpawnWorker('server/NavigationWorker.mjs', [
+      'nav.load',
+      'nav.path.request',
+    ]);
+
+    eventBus.subscribe('nav.path.response', (id, path) => {
+      const vecpath = path ? path.map((p) => new Vector(...p)) : null;
+
+      // since all events are global, we need to check what’s intended for us
+      if (id in this.#requests) {
+        this.#requests[id](vecpath);
+        delete this.#requests[id];
+      }
+    });
+  }
+
+  #shutdownWorker() {
+    if (this.#worker) {
+      this.#worker.shutdown();
+    }
   }
 
   init() {
     Con.Print('Navigation: initializing navigation graph...\n');
 
-    this.load()
+    if (registry.isDedicatedServer) {
+      this.#initWorker();
+      eventBus.publish('nav.load', SV.server.mapname);
+      return;
+    }
+
+    this.load(SV.server.mapname)
       .then(() => Con.PrintSuccess('Navigation: navigation graph loaded!\n'))
       .catch((err) => {
         Con.PrintWarning('Navigation: ' + err + '\n');
@@ -216,10 +262,14 @@ export class Navigation {
     for (const timeout of Object.values(this.relinkEdictCooldown)) {
       clearTimeout(timeout);
     }
+
+    this.#shutdownWorker();
   }
 
-  async load() {
-    const filename = `maps/${SV.server.mapname}.nav`;
+  async load(mapname) {
+    console.assert(this.worldmodel, 'Navigation: worldmodel is required');
+
+    const filename = `maps/${mapname}.nav`;
 
     // Try to load binary file first (ArrayBuffer). Fallback to text JSON for older files.
     const buf = await COM.LoadFileAsync(filename);
@@ -262,7 +312,7 @@ export class Navigation {
     const requiredHeight = readFloat32();
     const requiredRadius = readFloat32();
 
-    if (worldName !== SV.server.mapname) {
+    if (worldName !== mapname) {
       throw new CorruptedResourceError(filename, 'wrong map');
     }
 
@@ -311,7 +361,9 @@ export class Navigation {
           }
           surfData.push([stability, [nx, ny, nz], faceIndex, wps]);
         }
-        node.surfaces = new Set(surfData.map((sd) => WalkableSurface.deserialize(sd, this)));
+        if (this.worldmodel) {
+          node.surfaces = new Set(surfData.map((sd) => WalkableSurface.deserialize(sd, this)));
+        }
       }
 
       // neighbors
@@ -332,6 +384,8 @@ export class Navigation {
   }
 
   async save() {
+    console.assert(this.worldmodel, 'Navigation: worldmodel is required');
+
     const filename = `maps/${SV.server.mapname}.nav`;
 
     const bytes = [];
@@ -412,6 +466,11 @@ export class Navigation {
 
     const out = new Uint8Array(bytes);
     COM.WriteFile(filename, out, out.length);
+
+    if (registry.isDedicatedServer) {
+      // tell the worker thread to reload the data
+      eventBus.publish('nav.load', SV.server.mapname);
+    }
   }
 
   /**
@@ -443,13 +502,12 @@ export class Navigation {
     return trace.fraction;
   }
 
-  #testTraceDynamic(startpos, endpos, mins = Vector.origin, maxs = Vector.origin) {
-    return SV.Move(startpos.copy(), mins, maxs, endpos.copy(), SV.move.normal, null, this.relinkSkiplist);
-  }
-
   #extractWalkableSurfaces() {
     const walkableSurfaces = [];
+
     const downwards = new Vector(0, 0, -1);
+    const upwards = new Vector(0, 0, 1);
+    const sidewards = new Vector(0, 1, 0);
 
     // Pass 1: collect all potentially walkable surfaces
     for (let i = 0; i < this.worldmodel.faces.length; i++) {
@@ -548,7 +606,7 @@ export class Navigation {
       const n = surface.normal.copy();
 
       /** pick arbitrary axis not parallel to normal */
-      const arbitrary = Math.abs(n[2]) < 0.9 ? new Vector(0, 0, 1) : new Vector(0, 1, 0);
+      const arbitrary = Math.abs(n[2]) < 0.9 ? upwards : sidewards;
 
       // build local orthonormal basis (u, v) on the face plane
       const u = n.cross(arbitrary);
@@ -814,10 +872,10 @@ export class Navigation {
     const nodes = this.graph.nodes;
     nodes.length = 0;
 
-    const distance = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+    const distance = (/** @type {Vector} */ a, /** @type {Vector} */ b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 
     // Helper function to project a point onto a surface plane
-    const projectOntoSurface = (point, surface) => {
+    const projectOntoSurface = (/** @type {Vector} */ point, /** @type {WalkableSurface} */ surface) => {
       const normal = surface.normal;
       const face = surface.face;
 
@@ -911,12 +969,12 @@ export class Navigation {
     }
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
-    /** @type {number[][]} @deprecated unused */
-    // const edges = this.graph.edges;
-    // edges.length = 0;
+    const viewOffset = new Vector(0, 0, 22); // trace at roughly head height (FIXME: viewofs)
+    const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps (FIXME: STEPSIZE)
 
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
+
       for (let j = i + 1; j < nodes.length; j++) {
         const b = nodes[j];
         const dist = b.origin.distanceTo(a.origin);
@@ -926,8 +984,6 @@ export class Navigation {
         }
 
         // perform a trace between the two node origins to ensure unobstructed path
-        const viewOffset = new Vector(0, 0, 22); // trace at roughly head height (FIXME: viewofs)
-        const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps (FIXME: STEPSIZE)
         const start = a.origin.copy().add(viewOffset);
         const end = b.origin.copy().add(viewOffset);
         const startStepped = start.copy().add(stepOffset);
@@ -957,12 +1013,11 @@ export class Navigation {
 
         a.neighbors.push([b.id, costBasis + costA, 0]);
         b.neighbors.push([a.id, costBasis + costB, 0]);
-        // edges.push([a.id, b.id, costBasis + costA + costB]);
       }
     }
   }
 
-  /** @type {Record<number,NodeJS.Timeout>} edict number to timeout, we cool down incoming updates here */
+  /** @type {Record<number,*>} edict number to timeout, we cool down incoming updates here */
   relinkEdictCooldown = {};
 
   /** @type {Record<number,Node>} */
@@ -973,7 +1028,7 @@ export class Navigation {
 
   /**
    * updates navigation links based on entity position
-   * @param {ServerEdict} edict
+   * @param {ServerEdict} edict edict to relink
    */
   relinkEdict(edict) {
     const entity = edict.entity;
@@ -998,7 +1053,10 @@ export class Navigation {
     }, 1000);
   }
 
-  /** @param {ServerEdict} edict */
+  /**
+   * updates navigation links based on entity position
+   * @param {ServerEdict} edict edict to relink
+   */
   #relinkEdict(edict) {
     if (edict.isFree()) {
       return;
@@ -1033,7 +1091,7 @@ export class Navigation {
         continue;
       }
 
-      const destination = ServerEngineAPI.FindByFieldAndValue('targetname', source.target)?.entity;
+      const destination = Array.from(ServerEngineAPI.FindAllByFieldAndValue('targetname', source.target))[0]?.entity;
 
       if (!destination) {
         console.warn('Navigation: teleporter without a valid target', source);
@@ -1172,6 +1230,24 @@ export class Navigation {
   /**
    * Find path between two world positions using A* over the navgraph.
    * Returns an array of Vector positions (node origins) or null if no path.
+   * Using this async version will offload the pathfinding to another worker thread and it will not recover during save/load games!
+   * @param {Vector} startPos start position
+   * @param {Vector} goalPos goal position
+   * @returns {Promise<Vector[]|null>} path made out of waypoints, or null if no path found, it will include start and end positions
+   */
+  findPathAsync(startPos, goalPos) {
+    return new Promise((resolve) => {
+      const id = Math.random().toString(36).substring(2, 10);
+
+      eventBus.publish('nav.path.request', id, startPos, goalPos);
+
+      this.#requests[id] = resolve;
+    });
+  }
+
+  /**
+   * Find path between two world positions using A* over the navgraph.
+   * Returns an array of Vector positions (node origins) or null if no path.
    * @param {Vector} startPos start position
    * @param {Vector} goalPos goal position
    * @returns {Vector[]|null} path made out of waypoints, or null if no path found, it will include start and end positions
@@ -1201,20 +1277,7 @@ export class Navigation {
     const gScore = {}; // id -> cost
     const fScore = {}; // id -> estimated total
 
-    const heuristic = (a, b) => a.distanceTo(b);
-
-    // const isBlocked = (a, b) => {
-    //   const aa = a.copy(); aa[2] += 18.0; // STEPSIZE
-    //   const ab = b.copy(); ab[2] += 18.0; // STEPSIZE
-
-    //   const { fraction } = this.#testTraceDynamic(aa, ab);
-
-    //   // if (fraction < 1.0) {
-    //   //   this.#debugPath([aa, ab], 192);
-    //   // }
-
-    //   return fraction < 1.0;
-    // };
+    const heuristic = (/** @type {Vector} */ a, /** @type {Vector} */ b) => a.distanceTo(b);
 
     for (const n of this.graph.nodes) {
       gScore[n.id] = Infinity;
@@ -1260,11 +1323,6 @@ export class Navigation {
 
       for (const nb of this.graph.nodes[currentId].neighbors) {
         const tentativeG = gScore[currentId] + nb[1] + nb[2];
-
-        // // perform a quick trace check to see if the link is still valid (nb[1] == 0 means teleporter, always valid)
-        // if (startNode.id !== currentId && isBlocked(this.graph.nodes[currentId].origin, this.graph.nodes[nb[0]].origin) && nb[1] > 0) {
-        //   continue;
-        // }
 
         const nbId = nb[0];
         if (tentativeG < gScore[nbId]) {
@@ -1323,7 +1381,7 @@ export class Navigation {
    * @param {number} color indexed color
    */
   #debugPath(vectors, color = 251) {
-    if (!Navigation.nav_debug_path.value) {
+    if (!Navigation.nav_debug_path?.value) {
       return;
     }
 
@@ -1383,6 +1441,8 @@ export class Navigation {
   }
 
   build() {
+    console.assert(this.worldmodel, 'Navigation: worldmodel is required');
+
     this.graph.octree = null;
     this.graph.nodes.length = 0;
 
