@@ -346,6 +346,7 @@ class MainMenu extends BaseMenu {
   * should neatly integrate with the lightmaps
 * need to fix skychain
 * need to work on this horrendous way of creating those vertex buffer chains
+* `.lit` files are no longer used, the BSP loader now supports BSPX format
 
 ### 2025-10-07
 

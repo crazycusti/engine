@@ -328,7 +328,7 @@ R.RecursiveLightPoint = function(node, start, end) {
 };
 
 R.LightPoint = function(p) {
-  if (CL.state.worldmodel.lightdata === null) {
+  if (CL.state.worldmodel.lightdata === null && CL.state.worldmodel.lightdata_rgb === null) {
     return [new Vector(255, 255, 255), new Vector(0, 0, 0)];
   }
 
@@ -337,8 +337,6 @@ R.LightPoint = function(p) {
   if (r === null) {
     return [new Vector(0, 0, 0), new Vector(0, 0, 0)];
   }
-
-  // console.log(p, r[0]);
 
   return r;
 };
@@ -627,7 +625,7 @@ R._CalculateLightValues = function (e) {
     shadelight.set(ambientlight);
   }
 
-  const nearestLightOrigin = e.lerp.origin.copy().add(new Vector(0, 0, 32)); // FIXME: lightOrigin.copy() is not working
+  const nearestLightOrigin = lightOrigin.copy();
 
   // add dynamic lights
   for (let i = 0; i < Def.limits.dlights; i++) {
@@ -1495,6 +1493,11 @@ R.InitTextures = function() {
   alphaskytexture.lockTextureMode('GL_NEAREST');
   solidskytexture.lockTextureMode('GL_LINEAR');
 
+  R.deluxemap_texture = gl.createTexture();
+  GL.Bind(0, R.deluxemap_texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
   R.lightmap_texture = gl.createTexture();
   GL.Bind(0, R.lightmap_texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -1552,7 +1555,7 @@ R.InitShaders = async function() {
           ['aTangent', gl.FLOAT, 3],
           ['aBitangent', gl.FLOAT, 3],
         ],
-        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal']),
+        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap']),
 
     // rendering dynamic lights
     GL.CreateProgram('dlight',
@@ -2151,6 +2154,7 @@ R.lightmap_modified = [];
 R.lightmaps = new Uint8Array(new ArrayBuffer(4194304));
 R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(4194304 * 4));
 R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(1048576 * 4)); // TODO: doesn’t need to be 32 bits I guess
+R.deluxemap = new Uint8Array(new ArrayBuffer(4194304 * 4));
 
 R.AddDynamicLights = function(surf) {
   const smax = (surf.extents[0] >> 4) + 1;
@@ -2275,7 +2279,7 @@ R.BuildLightMap = function(surf) {
   }
 };
 
-R.BuildLightMapRGB = function(surf) {
+R.BuildLightMapEx = function(surf) {
   const smax = (surf.extents[0] >> 4) + 1;
   const tmax = (surf.extents[1] >> 4) + 1;
 
@@ -2289,6 +2293,10 @@ R.BuildLightMapRGB = function(surf) {
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata_rgb[(lightmap + j * 3) + k];
+
+          if (R.currentmodel.deluxemap) {
+            R.deluxemap[dest + (j << 2) + offset] = R.currentmodel.deluxemap[(lightmap + j * 3) + k];
+          }
         }
         lightmap += smax * 3;
         dest += 4096;
@@ -2300,6 +2308,7 @@ R.BuildLightMapRGB = function(surf) {
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
+          R.deluxemap[dest + (j << 2) + offset] = 0;
         }
         dest += 4096;
       }
@@ -2388,7 +2397,7 @@ R.DrawBrushModel = function(e) {
   gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
   gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
   gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % .2) / .2 : 0);
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
+  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
   } else {
     GL.Bind(program.tLightmap, R.lightmap_texture);
@@ -2433,11 +2442,12 @@ R.DrawBrushModel = function(e) {
   gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
   gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
   gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
+  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
   } else {
     GL.Bind(program.tLightmap, R.lightmap_texture);
   }
+  GL.Bind(program.tDeluxemap, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.deluxemap_texture : R.null_texture);
   GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
   GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
   gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, e.model.waterchain);
@@ -2494,7 +2504,7 @@ R.DrawWorld = function() {
   gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, 44);
   gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
   gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
+  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
   } else {
     GL.Bind(program.tLightmap, R.lightmap_texture);
@@ -2580,7 +2590,7 @@ R.DrawWorldTurbolents = function() {
   // gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 56);
   // gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 68);
   gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
+  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
   } else {
     GL.Bind(program.tLightmap, R.lightmap_texture);
@@ -2742,7 +2752,7 @@ R.BuildLightmaps = function() {
         if (!surf.sky) {
           R.AllocBlock(surf);
           if (R.currentmodel.lightdata_rgb !== null) {
-            R.BuildLightMapRGB(surf);
+            R.BuildLightMapEx(surf);
           } else if (R.currentmodel.lightdata !== null) {
             R.BuildLightMap(surf);
           }
@@ -2759,6 +2769,9 @@ R.BuildLightmaps = function() {
 
   GL.Bind(0, R.lightmap_texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 4096, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
+
+  GL.Bind(0, R.deluxemap_texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 4096, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
 };
 
 // scan

@@ -12,6 +12,7 @@ uniform sampler2D tLightStyleB;
 uniform sampler2D tLuminance;
 uniform sampler2D tNormal;
 uniform sampler2D tSpecular;
+uniform sampler2D tDeluxemap;
 
 uniform bool uUseVertexLighting;
 
@@ -33,6 +34,48 @@ void main(void) {
   vec4 textureA = texture2D(tTextureA, vTexCoord.xy);
   vec4 textureB = texture2D(tTextureB, vTexCoord.xy);
   vec4 luminance = texture2D(tLuminance, vTexCoord.xy);
+
+  // interpolation
+  vec4 texture = mix(textureA, textureB, uAlpha);
+  vec4 lightstyle = mix(
+    vec4(
+      texture2D(tLightStyleA, vec2(vLightStyle.x, 0.0)).a,
+      texture2D(tLightStyleA, vec2(vLightStyle.y, 0.0)).a,
+      texture2D(tLightStyleA, vec2(vLightStyle.z, 0.0)).a,
+      texture2D(tLightStyleA, vec2(vLightStyle.w, 0.0)).a
+    ),
+    vec4(
+      texture2D(tLightStyleB, vec2(vLightStyle.x, 0.0)).a,
+      texture2D(tLightStyleB, vec2(vLightStyle.y, 0.0)).a,
+      texture2D(tLightStyleB, vec2(vLightStyle.z, 0.0)).a,
+      texture2D(tLightStyleB, vec2(vLightStyle.w, 0.0)).a
+    ),
+    uAlpha
+  );
+
+  vec3 deluxemap;
+
+  deluxemap.r = dot(
+    texture2D(
+      tDeluxemap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0)
+    ),
+    lightstyle * 43.828125
+  );
+  deluxemap.g = dot(
+    texture2D(
+      tDeluxemap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)
+    ),
+    lightstyle * 43.828125
+  );
+  deluxemap.b = dot(
+    texture2D(
+      tDeluxemap,
+      vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.5)
+    ),
+    lightstyle * 43.828125
+  );
 
   float bumpLightDot = 1.0;
   float specFactor = 0.0;
@@ -59,11 +102,13 @@ void main(void) {
     b = normalize(cross(n, t));
     vec3 bumpNormal = normalize(t * normalMap.x + b * normalMap.y + n * normalMap.z);
 
+    deluxemap = normalize(deluxemap * 2.0 - 1.0);
+
     // Use bumped normal for lighting calculation
-    bumpLightDot = max(0.0, dot(bumpNormal, vLightVec));
+    bumpLightDot = max(0.0, dot(bumpNormal, deluxemap));
 
     vec3 N = bumpNormal;
-    vec3 L = normalize(vLightVec);
+    vec3 L = normalize(deluxemap);
     vec3 V = normalize(vViewVec);
 
     lightFactor = max(dot(N, L), 0.0);
@@ -72,41 +117,23 @@ void main(void) {
     specFactor = specIntensity * pow(max(dot(N, H), 0.0), 16.0);
   }
 
-  // interpolation
-  vec4 texture = mix(textureA, textureB, uAlpha);
-  vec4 lightstyle = mix(
-    vec4(
-      texture2D(tLightStyleA, vec2(vLightStyle.x, 0.0)).a,
-      texture2D(tLightStyleA, vec2(vLightStyle.y, 0.0)).a,
-      texture2D(tLightStyleA, vec2(vLightStyle.z, 0.0)).a,
-      texture2D(tLightStyleA, vec2(vLightStyle.w, 0.0)).a
-    ),
-    vec4(
-      texture2D(tLightStyleB, vec2(vLightStyle.x, 0.0)).a,
-      texture2D(tLightStyleB, vec2(vLightStyle.y, 0.0)).a,
-      texture2D(tLightStyleB, vec2(vLightStyle.z, 0.0)).a,
-      texture2D(tLightStyleB, vec2(vLightStyle.w, 0.0)).a
-    ),
-    uAlpha
-  );
+  vec3 lightmap;
 
-  vec3 d;
-
-  d.r = dot(
+  lightmap.r = dot(
     texture2D(
       tLightmap,
       vec2(vTexCoord.z, vTexCoord.w / 4.0)
     ),
     lightstyle * 43.828125
   );
-  d.g = dot(
+  lightmap.g = dot(
     texture2D(
       tLightmap,
       vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)
     ),
     lightstyle * 43.828125
   );
-  d.b = dot(
+  lightmap.b = dot(
     texture2D(
       tLightmap,
       vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.5)
@@ -116,12 +143,12 @@ void main(void) {
 
   // Calculate bump mapping factor - blend between full lighting and bump-modified lighting
   // This prevents completely black surfaces while still allowing bump mapping to have effect
-  float bumpFactor = mix(1.0, bumpLightDot * lightFactor, 0.66);
+  float bumpFactor = mix(1.0, pow(bumpLightDot * lightFactor, 0.66), 0.66);
 
   gl_FragColor = vec4(vec3(
-    texture.r * mix(1.0, (d.r + texture2D(tDlight, vTexCoord.zw).r) * (vLightDot * uShadeLight.r + uAmbientLight.r), texture.a * (1.0 - luminance.r)),
-    texture.g * mix(1.0, (d.g + texture2D(tDlight, vTexCoord.zw).g) * (vLightDot * uShadeLight.g + uAmbientLight.g), texture.a * (1.0 - luminance.g)),
-    texture.b * mix(1.0, (d.b + texture2D(tDlight, vTexCoord.zw).b) * (vLightDot * uShadeLight.b + uAmbientLight.b), texture.a * (1.0 - luminance.b))
+    texture.r * mix(1.0, (lightmap.r + texture2D(tDlight, vTexCoord.zw).r) * (vLightDot * uShadeLight.r + uAmbientLight.r), texture.a * (1.0 - luminance.r)),
+    texture.g * mix(1.0, (lightmap.g + texture2D(tDlight, vTexCoord.zw).g) * (vLightDot * uShadeLight.g + uAmbientLight.g), texture.a * (1.0 - luminance.g)),
+    texture.b * mix(1.0, (lightmap.b + texture2D(tDlight, vTexCoord.zw).b) * (vLightDot * uShadeLight.b + uAmbientLight.b), texture.a * (1.0 - luminance.b))
   ) * bumpFactor + specFactor, 1.0);
 
   if (gl_FragColor.r == 0.0 && gl_FragColor.g == 0.0 && gl_FragColor.b == 0.0 && texture.a == 0.0) {

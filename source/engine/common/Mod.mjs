@@ -93,6 +93,8 @@ export class BrushModel extends BaseModel {
   surfedges = [];
 
   nodes = [];
+
+  bspxoffset = 0;
 };
 
 Mod.type = {brush: 0, sprite: 1, alias: 2};
@@ -314,7 +316,7 @@ Mod.lump =
 Mod.LoadTextures = function(loadmodel, buf) {
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.textures << 3) + 4, true);
-  // const filelen = view.getUint32((Mod.lump.textures << 3) + 8, true);
+  const filelen = view.getUint32((Mod.lump.textures << 3) + 8, true);
   loadmodel.textures = [];
   const nummiptex = view.getUint32(fileofs, true);
   let dataofs = fileofs + 4;
@@ -440,6 +442,8 @@ Mod.LoadTextures = function(loadmodel, buf) {
   }
 
   loadmodel.textures[loadmodel.textures.length] = notexture_mip;
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 /** @typedef {{luminance: string|undefined, diffuse: string|undefined, specular: string|undefined, normal: string|undefined}} MaterialDataMaterialT */
@@ -501,14 +505,14 @@ Mod.LoadLighting = function(loadmodel, buf) {
   loadmodel.lightdata_rgb = null;
   loadmodel.lightdata = null;
 
-  const litfile = COM.LoadFile(loadmodel.name.replace('.bsp', '.lit'));
+  // const litfile = COM.LoadFile(loadmodel.name.replace('.bsp', '.lit'));
 
-  if (litfile) {
-    Con.DPrint(`Mod.LoadLighting: using external .lit file for ${loadmodel.name}\n`);
+  // if (litfile) {
+  //   Con.DPrint(`Mod.LoadLighting: using external .lit file for ${loadmodel.name}\n`);
 
-    loadmodel.lightdata_rgb = new Uint8Array(litfile.slice(8)); // skip header
-    // return;
-  }
+  //   loadmodel.lightdata_rgb = new Uint8Array(litfile.slice(8)); // skip header
+  //   // return;
+  // }
 
   const view = new DataView(buf);
   const fileofs = view.getUint32((Mod.lump.lighting << 3) + 4, true);
@@ -518,6 +522,8 @@ Mod.LoadLighting = function(loadmodel, buf) {
   }
   loadmodel.lightdata = new Uint8Array(new ArrayBuffer(filelen));
   loadmodel.lightdata.set(new Uint8Array(buf, fileofs, filelen));
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadVisibility = function(loadmodel, buf) {
@@ -529,6 +535,8 @@ Mod.LoadVisibility = function(loadmodel, buf) {
   }
   loadmodel.visdata = new Uint8Array(new ArrayBuffer(filelen));
   loadmodel.visdata.set(new Uint8Array(buf, fileofs, filelen));
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadEntities = function(loadmodel, buf) {
@@ -536,6 +544,8 @@ Mod.LoadEntities = function(loadmodel, buf) {
   const fileofs = view.getUint32((Mod.lump.entities << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.entities << 3) + 8, true);
   loadmodel.entities = Q.memstr(new Uint8Array(buf, fileofs, filelen));
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadVertexes = function(loadmodel, buf) {
@@ -552,6 +562,8 @@ Mod.LoadVertexes = function(loadmodel, buf) {
     loadmodel.vertexes[i] = new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true));
     fileofs += 12;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadSubmodels = function(loadmodel, buf) {
@@ -621,6 +633,8 @@ Mod.LoadSubmodels = function(loadmodel, buf) {
       face.submodel = true;
     }
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadEdges = function(loadmodel, buf) {
@@ -636,6 +650,8 @@ Mod.LoadEdges = function(loadmodel, buf) {
     loadmodel.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
     fileofs += 4;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadEdgesBSP2 = function(loadmodel, buf) {
@@ -651,6 +667,8 @@ Mod.LoadEdgesBSP2 = function(loadmodel, buf) {
     loadmodel.edges[i] = [view.getUint32(fileofs, true), view.getUint32(fileofs + 4, true)];
     fileofs += 8;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadTexinfo = function(loadmodel, buf) {
@@ -679,6 +697,8 @@ Mod.LoadTexinfo = function(loadmodel, buf) {
     loadmodel.texinfo[i] = out;
     fileofs += 40;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadFaces = function(loadmodel, buf) {
@@ -771,6 +791,8 @@ Mod.LoadFaces = function(loadmodel, buf) {
     loadmodel.faces[i] = out;
     fileofs += 20;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.SetParent = function(node, parent) {
@@ -791,8 +813,7 @@ Mod.LoadNodes = function(loadmodel, buf) {
   }
   const count = filelen / 24;
   loadmodel.nodes = [];
-  let i; let out;
-  for (i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++) {
     loadmodel.nodes[i] = {
       num: i,
       contents: 0,
@@ -806,8 +827,8 @@ Mod.LoadNodes = function(loadmodel, buf) {
     };
     fileofs += 24;
   }
-  for (i = 0; i < count; i++) {
-    out = loadmodel.nodes[i];
+  for (let i = 0; i < count; i++) {
+    const out = loadmodel.nodes[i];
     out.plane = loadmodel.planes[out.planenum];
     if (out.children[0] >= 0) {
       out.children[0] = loadmodel.nodes[out.children[0]];
@@ -821,6 +842,8 @@ Mod.LoadNodes = function(loadmodel, buf) {
     }
   }
   Mod.SetParent(loadmodel.nodes[0]);
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadLeafs = function(loadmodel, buf) {
@@ -832,9 +855,8 @@ Mod.LoadLeafs = function(loadmodel, buf) {
   }
   const count = filelen / 28;
   loadmodel.leafs = [];
-  let i; let out;
-  for (i = 0; i < count; i++) {
-    out = {
+  for (let i = 0; i < count; i++) {
+    const out = {
       num: i,
       contents: view.getInt32(fileofs, true),
       visofs: view.getInt32(fileofs + 4, true),
@@ -850,6 +872,8 @@ Mod.LoadLeafs = function(loadmodel, buf) {
     loadmodel.leafs[i] = out;
     fileofs += 28;
   };
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadClipnodes = function(loadmodel, buf) {
@@ -876,18 +900,19 @@ Mod.LoadClipnodes = function(loadmodel, buf) {
     clip_mins: new Vector(-32.0, -32.0, -24.0),
     clip_maxs: new Vector(32.0, 32.0, 64.0),
   };
-  let i;
-  for (i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++) {
     loadmodel.clipnodes[i] = {
       planenum: view.getUint32(fileofs, true),
       children: [view.getInt16(fileofs + 4, true), view.getInt16(fileofs + 6, true)],
     };
     fileofs += 8;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.MakeHull0 = function(loadmodel) {
-  let node; let child; const clipnodes = []; let i; let out;
+  const clipnodes = [];
   const hull = {
     clipnodes: clipnodes,
     lastclipnode: loadmodel.nodes.length - 1,
@@ -895,9 +920,10 @@ Mod.MakeHull0 = function(loadmodel) {
     clip_mins: new Vector(),
     clip_maxs: new Vector(),
   };
-  for (i = 0; i < loadmodel.nodes.length; i++) {
-    node = loadmodel.nodes[i];
-    out = {planenum: node.planenum, children: []};
+  for (let i = 0; i < loadmodel.nodes.length; i++) {
+    const node = loadmodel.nodes[i];
+    const out = {planenum: node.planenum, children: []};
+    let child;
     child = node.children[0];
     out.children[0] = child.contents < 0 ? child.contents : child.num;
     child = node.children[1];
@@ -913,14 +939,15 @@ Mod.LoadMarksurfaces = function(loadmodel, buf) {
   const filelen = view.getUint32((Mod.lump.marksurfaces << 3) + 8, true);
   const count = filelen >> 1;
   loadmodel.marksurfaces = [];
-  let i; let j;
-  for (i = 0; i < count; i++) {
-    j = view.getUint16(fileofs + (i << 1), true);
+  for (let i = 0; i < count; i++) {
+    const j = view.getUint16(fileofs + (i << 1), true);
     if (j > loadmodel.faces.length) {
       throw new Error('Mod.LoadMarksurfaces: bad surface number');
     }
     loadmodel.marksurfaces[i] = j;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadSurfedges = function(loadmodel, buf) {
@@ -929,10 +956,11 @@ Mod.LoadSurfedges = function(loadmodel, buf) {
   const filelen = view.getUint32((Mod.lump.surfedges << 3) + 8, true);
   const count = filelen >> 2;
   loadmodel.surfedges = [];
-  let i;
-  for (i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++) {
     loadmodel.surfedges[i] = view.getInt32(fileofs + (i << 2), true);
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
 
 Mod.LoadPlanes = function(loadmodel, buf) {
@@ -961,6 +989,74 @@ Mod.LoadPlanes = function(loadmodel, buf) {
     loadmodel.planes[i] = out;
     fileofs += 20;
   }
+
+  loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
+};
+
+Mod.LoadBSPX = function(loadmodel, buffer) {
+  loadmodel.bspxoffset = (loadmodel.bspxoffset + 3) & ~3;
+
+  if (loadmodel.bspxoffset >= buffer.byteLength) {
+    Con.DPrint('Mod.LoadBSPX: no BSPX data found\n');
+    return;
+  }
+
+  const view = new DataView(buffer);
+
+  const magic = view.getUint32(loadmodel.bspxoffset, true); // version
+
+  console.assert(magic === 0x58505342, 'Mod.LoadBSPX: bad magic');
+
+  const numlumps = view.getUint32(loadmodel.bspxoffset + 4, true);
+
+  Con.DPrint('Mod.LoadBSPX: found BSPX data with ' + numlumps + ' lumps\n');
+
+  const bspxLumps = {};
+
+  for (let i = 0, pointer = loadmodel.bspxoffset + 8; i < numlumps; i++, pointer += 32) {
+    const name = Q.memstr(new Uint8Array(buffer, pointer, 24));
+    const fileofs = view.getUint32(pointer + 24, true);
+    const filelen = view.getUint32(pointer + 24 + 4, true);
+
+    bspxLumps[name] = {
+      fileofs,
+      filelen,
+    };
+  }
+
+  loadmodel.bspxlumps = bspxLumps;
+};
+
+Mod.LoadLightingRGB = function(loadmodel, buf) {
+  loadmodel.lightdata_rgb = null;
+
+  if (!loadmodel.bspxlumps || !loadmodel.bspxlumps['RGBLIGHTING']) {
+    return;
+  }
+
+  const { fileofs, filelen } = loadmodel.bspxlumps['RGBLIGHTING'];
+
+  if (filelen === 0) {
+    return;
+  }
+
+  loadmodel.lightdata_rgb = new Uint8Array(buf.slice(fileofs, fileofs + filelen));
+};
+
+Mod.LoadDeluxeMap = function(loadmodel, buf) {
+  loadmodel.deluxemap = null;
+
+  if (!loadmodel.bspxlumps || !loadmodel.bspxlumps['LIGHTINGDIR']) {
+    return;
+  }
+
+  const { fileofs, filelen } = loadmodel.bspxlumps['LIGHTINGDIR'];
+
+  if (filelen === 0) {
+    return;
+  }
+
+  loadmodel.deluxemap = new Uint8Array(buf.slice(fileofs, fileofs + filelen));
 };
 
 /**
@@ -972,6 +1068,7 @@ Mod.LoadPlanes = function(loadmodel, buf) {
 Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
   loadmodel.version = /** @type {29|844124994} */ ((new DataView(buffer)).getUint32(0, true));
+  loadmodel.bspxoffset = 0;
   Mod.LoadVertexes(loadmodel, buffer); // OK
   Mod.LoadEdges(loadmodel, buffer);
   Mod.LoadSurfedges(loadmodel, buffer); // OK
@@ -989,6 +1086,9 @@ Mod.LoadBrushModel = function(loadmodel, buffer) {
   Mod.MakeHull0(loadmodel);
   Mod.LoadEntities(loadmodel, buffer);
   Mod.LoadSubmodels(loadmodel, buffer);
+  Mod.LoadBSPX(loadmodel, buffer);
+  Mod.LoadLightingRGB(loadmodel, buffer);
+  Mod.LoadDeluxeMap(loadmodel, buffer);
 
   const mins = new Vector(), maxs = new Vector();
   for (let i = 0; i < loadmodel.vertexes.length; i++) {

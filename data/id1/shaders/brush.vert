@@ -38,7 +38,7 @@ void main(void) {
   vViewVec = normalize(worldPos - uViewOrigin);
   // calculate stuff for per-pixel lighting
   if (!uUseVertexLighting) {
-    vLightVec = normalize(worldPos - (uLightVec + aNormal * 24.0)); // FIXME: use proper light sorces here
+    vLightVec = normalize(uAngles * (worldPos - (uLightVec + aNormal * 24.0))); // FIXME: use proper light sorces here
     vNormal = normalize(uAngles * aNormal);
     vTangent = normalize(uAngles * aTangent);
     vBitangent = normalize(uAngles * aBitangent);
