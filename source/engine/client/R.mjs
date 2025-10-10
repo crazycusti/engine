@@ -242,7 +242,7 @@ R.RecursiveLightPoint = function(node, start, end) {
     start[2] + (end[2] - start[2]) * frac,
   );
 
-  const  r = R.RecursiveLightPoint(node.children[side ? 1 : 0], start, mid);
+  const r = R.RecursiveLightPoint(node.children[side ? 1 : 0], start, mid);
 
   if (r !== null) {
     return r;
@@ -254,7 +254,7 @@ R.RecursiveLightPoint = function(node, start, end) {
 
   for (let i = 0; i < node.numfaces; i++) {
     const surf = CL.state.worldmodel.faces[node.firstface + i];
-    // if ((surf.sky === true) || (surf.turbulent === true)) {
+
     if (surf.sky) {
       continue;
     }
@@ -273,29 +273,34 @@ R.RecursiveLightPoint = function(node, start, end) {
     }
 
     if (surf.lightofs === 0) {
-      return new Vector();
+      return [new Vector(), mid];
     }
 
     ds >>= 4;
     dt >>= 4;
 
+    const smax = (surf.extents[0] >> 4) + 1;
+    const tmax = (surf.extents[1] >> 4) + 1;
+
     const r3 = new Vector();
     const haveRGB = CL.state.worldmodel.lightdata_rgb !== null;
     const lightdata = haveRGB ? CL.state.worldmodel.lightdata_rgb : CL.state.worldmodel.lightdata;
     const channels = haveRGB ? 3 : 1;
-    for (let i = 0; i < channels; i++) {
-      let lightmap = surf.lightofs + dt * ((surf.extents[0] >> 4) + 1) + ds;
-      let r = 0;
-      const size = ((surf.extents[0] >> 4) + 1) * ((surf.extents[1] >> 4) + 1);
-      const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+    const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+
+    for (let k = 0; k < channels; k++) {
+      let lightmap = surf.lightofs + dt * smax + ds;
+
       for (let maps = 0; maps < surf.styles.length; maps++) {
-        r += lightdata[lightmap * channels + i] * (
+        const scale = (
           R.lightstylevalue_a[surf.styles[maps]] * (1 - uAlpha) +
           R.lightstylevalue_b[surf.styles[maps]] * uAlpha
-        ) * 22;
-        lightmap += size;
+        ) * 22.0;
+
+        r3[k] += lightdata[lightmap * channels + k] * scale;
+
+        lightmap += tmax * smax;
       }
-      r3[i] = r >> 8;
     }
 
     if (!haveRGB) {
@@ -304,7 +309,19 @@ R.RecursiveLightPoint = function(node, start, end) {
       r3[2] = r3[0];
     }
 
-    return r3;
+    r3[0] = r3[0] >> 8;
+    r3[1] = r3[1] >> 8;
+    r3[2] = r3[2] >> 8;
+
+    // console.log('light at', mid, 'is', r3);
+
+    return [
+      r3,
+      mid.add(surf.plane.normal.copy().multiply(16.0)),
+    ];
+
+
+    // return [r3, mid];
   }
 
   return R.RecursiveLightPoint(node.children[!side ? 1 : 0], mid, end);
@@ -312,12 +329,17 @@ R.RecursiveLightPoint = function(node, start, end) {
 
 R.LightPoint = function(p) {
   if (CL.state.worldmodel.lightdata === null) {
-    return new Vector(255, 255, 255);
+    return [new Vector(255, 255, 255), new Vector(0, 0, 0)];
   }
+
   const r = R.RecursiveLightPoint(CL.state.worldmodel.nodes[0], p, new Vector(p[0], p[1], p[2] - 2048.0));
+
   if (r === null) {
-    return new Vector();
+    return [new Vector(0, 0, 0), new Vector(0, 0, 0)];
   }
+
+  // console.log(p, r[0]);
+
   return r;
 };
 
@@ -593,15 +615,19 @@ R.avertexnormals = [
 ];
 
 R._CalculateLightValues = function (e) {
-  const ambientlight = R.LightPoint(e.lerp.origin);
+  const [ambientlight, lightOrigin] = R.LightPoint(e.lerp.origin);
   const shadelight = ambientlight.copy();
 
   // never have a pitch black view model
-  if ((e === CL.state.viewent) && (ambientlight.len() < 24.0)) {
-    ambientlight.normalize();
+  if ((e === CL.state.viewent) && (ambientlight.average() < 24.0)) {
+    if (ambientlight.average() === 0) {
+      ambientlight.setTo(1.0, 1.0, 1.0); // no color, set to white
+    }
     ambientlight.multiply(24.0);
     shadelight.set(ambientlight);
   }
+
+  const nearestLightOrigin = e.lerp.origin.copy().add(new Vector(0, 0, 32)); // FIXME: lightOrigin.copy() is not working
 
   // add dynamic lights
   for (let i = 0; i < Def.limits.dlights; i++) {
@@ -615,28 +641,31 @@ R._CalculateLightValues = function (e) {
 
     if (add > 0.0) {
       const color = dl.color.copy();
-      color.normalize();
       const vadd = color.multiply(add);
       ambientlight.add(vadd);
       shadelight.add(vadd);
+
+      nearestLightOrigin.set(dl.origin);
     }
   }
 
   // do not overbright
-  if (ambientlight.len() > 128.0) {
-    ambientlight.normalize();
-    ambientlight.multiply(128.0);
+  const alavg = ambientlight.greatest();
+  if (alavg > 128.0) {
+    ambientlight.multiply(128.0 / alavg);
   }
 
-  if ((ambientlight.copy().add(shadelight)).len() > 192.0) {
-    ambientlight.normalize();
-    ambientlight.multiply(192.0/* - shadelight.len()*/);
+  const alslavg = (ambientlight.copy().add(shadelight)).greatest();
+  if (alslavg > 192.0) {
+    ambientlight.multiply(192.0 / alslavg);
     shadelight.set(ambientlight);
   }
 
   // never let players go totally dark either
-  if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (ambientlight.len() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
-    ambientlight.normalize();
+  if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (ambientlight.greatest() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
+    if (ambientlight.average() === 0) {
+      ambientlight.setTo(1.0, 1.0, 1.0); // no color, set to white
+    }
     ambientlight.multiply(8.0);
     shadelight.set(ambientlight);
   }
@@ -649,7 +678,7 @@ R._CalculateLightValues = function (e) {
   ambientlight.multiply(0.0078125); // / 128.0
   shadelight.multiply(0.0078125); // / 128.0
 
-  return [ ambientlight, shadelight ];
+  return [ ambientlight, shadelight, nearestLightOrigin ];
 };
 
 /**
@@ -694,21 +723,14 @@ R.DrawAliasModel = function(e) {
   gl.uniform3fv(program.uOrigin, e.lerp.origin);
   gl.uniformMatrix3fv(program.uAngles, false, e.lerp.angles.toRotationMatrix());
 
-  const [ambientlight, shadelight] = R._CalculateLightValues(e);
+  const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
 
   gl.uniform3fv(program.uAmbientLight, ambientlight);
   gl.uniform3fv(program.uShadeLight, shadelight);
 
   let i;
 
-  const {forward, right, up} = e.angles.angleVectors();
-  const v = new Vector(-1.0, 0.0, 0.0);
-
-  gl.uniform3fv(program.uLightVec, [
-    forward.dot(v),
-    -right.dot(v),
-    up.dot(v),
-  ]);
+  gl.uniform3fv(program.uLightVec, lightVector);
 
   R.c_alias_polys += clmodel._num_tris; // FIXME: private property access
 
@@ -1100,9 +1122,75 @@ R.RenderView = function() {
 
 // mesh
 
+R.CalculateTagentBitagents = function(cmds, skipFrom, skipTo) {
+  // compute per-triangle tangent/bitangent (stride = 20 floats)
+  const stride = 20;
+  for (let i = 0; i + stride * 3 <= cmds.length; i += stride * 3) {
+    if (i >= skipFrom && i < skipTo) {
+      continue;
+    }
+
+    // vertices of triangle
+    const i0 = i;
+    const i1 = i + stride;
+    const i2 = i + stride * 2;
+    const p0 = [cmds[i0 + 0], cmds[i0 + 1], cmds[i0 + 2]];
+    const p1 = [cmds[i1 + 0], cmds[i1 + 1], cmds[i1 + 2]];
+    const p2 = [cmds[i2 + 0], cmds[i2 + 1], cmds[i2 + 2]];
+    const uv0 = [cmds[i0 + 3], cmds[i0 + 4]];
+    const uv1 = [cmds[i1 + 3], cmds[i1 + 4]];
+    const uv2 = [cmds[i2 + 3], cmds[i2 + 4]];
+
+    const edge1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+    const edge2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+    const deltaUV1 = [uv1[0] - uv0[0], uv1[1] - uv0[1]];
+    const deltaUV2 = [uv2[0] - uv0[0], uv2[1] - uv0[1]];
+    const det = deltaUV1[0] * deltaUV2[1] - deltaUV2[0] * deltaUV1[1];
+    let f = 0.0;
+    if (Math.abs(det) > 1e-6) {
+      f = 1.0 / det;
+    }
+    const tx = f * (deltaUV2[1] * edge1[0] - deltaUV1[1] * edge2[0]);
+    const ty = f * (deltaUV2[1] * edge1[1] - deltaUV1[1] * edge2[1]);
+    const tz = f * (deltaUV2[1] * edge1[2] - deltaUV1[1] * edge2[2]);
+
+    for (const base of [i0, i1, i2]) {
+      // Get the correct normal from the vertex data
+      const nx = cmds[base + 11];
+      const ny = cmds[base + 12];
+      const nz = cmds[base + 13];
+
+      // Gram-Schmidt: tangent = tangent - normal * dot(normal, tangent)
+      const dot_nt = nx * tx + ny * ty + nz * tz;
+      const ortho_tx = tx - nx * dot_nt;
+      const ortho_ty = ty - ny * dot_nt;
+      const ortho_tz = tz - nz * dot_nt;
+
+      // normalize orthogonalized tangent
+      const tlen = Math.hypot(ortho_tx, ortho_ty, ortho_tz) || 1.0;
+      const tnorm = [ortho_tx / tlen, ortho_ty / tlen, ortho_tz / tlen];
+
+      // bitangent = cross(normal, tangent)
+      const bnorm = [
+        ny * tnorm[2] - nz * tnorm[1],
+        nz * tnorm[0] - nx * tnorm[2],
+        nx * tnorm[1] - ny * tnorm[0],
+      ];
+
+      cmds[base + 14] = tnorm[0];
+      cmds[base + 15] = tnorm[1];
+      cmds[base + 16] = tnorm[2];
+      cmds[base + 17] = bnorm[0];
+      cmds[base + 18] = bnorm[1];
+      cmds[base + 19] = bnorm[2];
+    }
+  }
+};
+
 R.MakeBrushModelDisplayLists = function(m) {
-  if (m.cmds != null) {
+  if (m.cmds) {
     gl.deleteBuffer(m.cmds);
+    m.cmds = null;
   }
   const cmds = [];
   const styles = [0.0, 0.0, 0.0, 0.0];
@@ -1126,20 +1214,29 @@ R.MakeBrushModelDisplayLists = function(m) {
       chain[2] += surf.verts.length;
       for (let k = 0; k < surf.verts.length; k++) {
         const vert = surf.verts[k];
-        cmds[cmds.length] = vert[0];
-        cmds[cmds.length] = vert[1];
-        cmds[cmds.length] = vert[2];
-        cmds[cmds.length] = vert[3];
-        cmds[cmds.length] = vert[4];
-        cmds[cmds.length] = vert[5];
-        cmds[cmds.length] = vert[6];
-        cmds[cmds.length] = styles[0];
-        cmds[cmds.length] = styles[1];
-        cmds[cmds.length] = styles[2];
-        cmds[cmds.length] = styles[3];
-        cmds[cmds.length] = vert[7];
-        cmds[cmds.length] = vert[8];
-        cmds[cmds.length] = vert[9];
+        // 28 bytes
+        cmds[cmds.length] = vert[0]; // aPosition 0
+        cmds[cmds.length] = vert[1]; // aPosition 1
+        cmds[cmds.length] = vert[2]; // aPosition 2
+        cmds[cmds.length] = vert[3]; // aTexCoord 0
+        cmds[cmds.length] = vert[4]; // aTexCoord 1
+        cmds[cmds.length] = vert[5]; // aTexCoord 2
+        cmds[cmds.length] = vert[6]; // aTexCoord 3
+        // 16 bytes
+        cmds[cmds.length] = styles[0]; // aLightStyle 0
+        cmds[cmds.length] = styles[1]; // aLightStyle 1
+        cmds[cmds.length] = styles[2]; // aLightStyle 2
+        cmds[cmds.length] = styles[3]; // aLightStyle 3
+        // 36 bytes
+        cmds[cmds.length] = surf.normal[0]; // aNormal 0
+        cmds[cmds.length] = surf.normal[1]; // aNormal 1
+        cmds[cmds.length] = surf.normal[2]; // aNormal 2
+        cmds[cmds.length] = 0.0; // aTangent 0
+        cmds[cmds.length] = 0.0; // aTangent 1
+        cmds[cmds.length] = 0.0; // aTangent 2
+        cmds[cmds.length] = 0.0; // aBitagent 0
+        cmds[cmds.length] = 0.0; // aBitagent 1
+        cmds[cmds.length] = 0.0; // aBitagent 2
       }
     }
     if (chain[2] !== 0) {
@@ -1147,7 +1244,7 @@ R.MakeBrushModelDisplayLists = function(m) {
       verts += chain[2];
     }
   }
-  m.waterchain = verts * 56;
+  m.waterchain = verts * 80;
   verts = 0;
   for (let i = 0; i < m.textures.length; i++) {
     const texture = m.textures[i];
@@ -1167,20 +1264,29 @@ R.MakeBrushModelDisplayLists = function(m) {
       chain[2] += surf.verts.length;
       for (let k = 0; k < surf.verts.length; k++) {
         const vert = surf.verts[k];
-        cmds[cmds.length] = vert[0];
-        cmds[cmds.length] = vert[1];
-        cmds[cmds.length] = vert[2];
-        cmds[cmds.length] = vert[3];
-        cmds[cmds.length] = vert[4];
-        cmds[cmds.length] = vert[5];
-        cmds[cmds.length] = vert[6];
-        cmds[cmds.length] = styles[0];
-        cmds[cmds.length] = styles[1];
-        cmds[cmds.length] = styles[2];
-        cmds[cmds.length] = styles[3];
-        cmds[cmds.length] = vert[7];
-        cmds[cmds.length] = vert[8];
-        cmds[cmds.length] = vert[9];
+        // 28 bytes
+        cmds[cmds.length] = vert[0]; // aPosition 0
+        cmds[cmds.length] = vert[1]; // aPosition 1
+        cmds[cmds.length] = vert[2]; // aPosition 2
+        cmds[cmds.length] = vert[3]; // aTexCoord 0
+        cmds[cmds.length] = vert[4]; // aTexCoord 1
+        cmds[cmds.length] = vert[5]; // aTexCoord 2
+        cmds[cmds.length] = vert[6]; // aTexCoord 3
+        // 16 bytes
+        cmds[cmds.length] = styles[0]; // aLightStyle 0
+        cmds[cmds.length] = styles[1]; // aLightStyle 1
+        cmds[cmds.length] = styles[2]; // aLightStyle 2
+        cmds[cmds.length] = styles[3]; // aLightStyle 3
+        // 36 bytes
+        cmds[cmds.length] = surf.normal[0]; // aNormal 0
+        cmds[cmds.length] = surf.normal[1]; // aNormal 1
+        cmds[cmds.length] = surf.normal[2]; // aNormal 2
+        cmds[cmds.length] = 0.0; // aTangent 0
+        cmds[cmds.length] = 0.0; // aTangent 1
+        cmds[cmds.length] = 0.0; // aTangent 2
+        cmds[cmds.length] = 0.0; // aBitagent 0
+        cmds[cmds.length] = 0.0; // aBitagent 1
+        cmds[cmds.length] = 0.0; // aBitagent 2
       }
     }
     if (chain[2] !== 0) {
@@ -1188,6 +1294,9 @@ R.MakeBrushModelDisplayLists = function(m) {
       verts += chain[2];
     }
   }
+
+  R.CalculateTagentBitagents(cmds, m.skychain, m.waterchain);
+
   m.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
@@ -1220,20 +1329,29 @@ R.MakeWorldModelDisplayLists = function(m) {
         chain[2] += surf.verts.length;
         for (let l = 0; l < surf.verts.length; l++) {
           const vert = surf.verts[l];
-          cmds[cmds.length] = vert[0];
-          cmds[cmds.length] = vert[1];
-          cmds[cmds.length] = vert[2];
-          cmds[cmds.length] = vert[3];
-          cmds[cmds.length] = vert[4];
-          cmds[cmds.length] = vert[5];
-          cmds[cmds.length] = vert[6];
-          cmds[cmds.length] = styles[0];
-          cmds[cmds.length] = styles[1];
-          cmds[cmds.length] = styles[2];
-          cmds[cmds.length] = styles[3];
-          cmds[cmds.length] = 0;
-          cmds[cmds.length] = 0;
-          cmds[cmds.length] = 0;
+          // 28 bytes
+          cmds[cmds.length] = vert[0]; // aPosition 0
+          cmds[cmds.length] = vert[1]; // aPosition 1
+          cmds[cmds.length] = vert[2]; // aPosition 2
+          cmds[cmds.length] = vert[3]; // aTexCoord 0
+          cmds[cmds.length] = vert[4]; // aTexCoord 1
+          cmds[cmds.length] = vert[5]; // aTexCoord 2
+          cmds[cmds.length] = vert[6]; // aTexCoord 3
+          // 16 bytes
+          cmds[cmds.length] = styles[0]; // aLightStyle 0
+          cmds[cmds.length] = styles[1]; // aLightStyle 1
+          cmds[cmds.length] = styles[2]; // aLightStyle 2
+          cmds[cmds.length] = styles[3]; // aLightStyle 3
+          // 36 bytes
+          cmds[cmds.length] = surf.normal[0]; // aNormal 0
+          cmds[cmds.length] = surf.normal[1]; // aNormal 1
+          cmds[cmds.length] = surf.normal[2]; // aNormal 2
+          cmds[cmds.length] = 0.0; // aTangent 0
+          cmds[cmds.length] = 0.0; // aTangent 1
+          cmds[cmds.length] = 0.0; // aTangent 2
+          cmds[cmds.length] = 0.0; // aBitagent 0
+          cmds[cmds.length] = 0.0; // aBitagent 1
+          cmds[cmds.length] = 0.0; // aBitagent 2
         }
       }
       if (chain[2] !== 0) {
@@ -1244,7 +1362,7 @@ R.MakeWorldModelDisplayLists = function(m) {
       }
     }
   }
-  m.skychain = verts * 56;
+  m.skychain = verts * 80;
   verts = 0;
   for (let i = 0; i < m.textures.length; i++) {
     const texture = m.textures[i];
@@ -1296,20 +1414,29 @@ R.MakeWorldModelDisplayLists = function(m) {
         chain[2] += surf.verts.length;
         for (let l = 0; l < surf.verts.length; l++) {
           const vert = surf.verts[l];
-          cmds[cmds.length] = vert[0];
-          cmds[cmds.length] = vert[1];
-          cmds[cmds.length] = vert[2];
-          cmds[cmds.length] = vert[3];
-          cmds[cmds.length] = vert[4];
-          cmds[cmds.length] = vert[5];
-          cmds[cmds.length] = vert[6];
-          cmds[cmds.length] = styles[0];
-          cmds[cmds.length] = styles[1];
-          cmds[cmds.length] = styles[2];
-          cmds[cmds.length] = styles[3];
-          cmds[cmds.length] = 0;
-          cmds[cmds.length] = 0;
-          cmds[cmds.length] = 0;
+          // 28 bytes
+          cmds[cmds.length] = vert[0]; // aPosition 0
+          cmds[cmds.length] = vert[1]; // aPosition 1
+          cmds[cmds.length] = vert[2]; // aPosition 2
+          cmds[cmds.length] = vert[3]; // aTexCoord 0
+          cmds[cmds.length] = vert[4]; // aTexCoord 1
+          cmds[cmds.length] = vert[5]; // aTexCoord 2
+          cmds[cmds.length] = vert[6]; // aTexCoord 3
+          // 16 bytes
+          cmds[cmds.length] = styles[0]; // aLightStyle 0
+          cmds[cmds.length] = styles[1]; // aLightStyle 1
+          cmds[cmds.length] = styles[2]; // aLightStyle 2
+          cmds[cmds.length] = styles[3]; // aLightStyle 3
+          // 36 bytes
+          cmds[cmds.length] = surf.normal[0]; // aNormal 0
+          cmds[cmds.length] = surf.normal[1]; // aNormal 1
+          cmds[cmds.length] = surf.normal[2]; // aNormal 2
+          cmds[cmds.length] = 0.0; // aTangent 0
+          cmds[cmds.length] = 0.0; // aTangent 1
+          cmds[cmds.length] = 0.0; // aTangent 2
+          cmds[cmds.length] = 0.0; // aBitagent 0
+          cmds[cmds.length] = 0.0; // aBitagent 1
+          cmds[cmds.length] = 0.0; // aBitagent 2
         }
       }
       if (chain[2] !== 0) {
@@ -1318,6 +1445,9 @@ R.MakeWorldModelDisplayLists = function(m) {
       }
     }
   }
+
+  R.CalculateTagentBitagents(cmds, m.skychain, m.waterchain);
+
   m.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
@@ -1340,22 +1470,22 @@ R.InitTextures = function() {
       data[((i << 4) + j) * 4 + 0] = 255;
       data[((i << 4) + j) * 4 + 1] = 0;
       data[((i << 4) + j) * 4 + 2] = 0;
-      data[((i << 4) + j) * 4 + 3] = 0;
+      data[((i << 4) + j) * 4 + 3] = 255;
 
       data[(136 + (i << 4) + j) * 4 + 0] = 255;
       data[(136 + (i << 4) + j) * 4 + 1] = 0;
       data[(136 + (i << 4) + j) * 4 + 2] = 0;
-      data[(136 + (i << 4) + j) * 4 + 3] = 0;
+      data[(136 + (i << 4) + j) * 4 + 3] = 255;
 
       data[(8 + (i << 4) + j) * 4 + 0] = 0;
       data[(8 + (i << 4) + j) * 4 + 1] = 0;
       data[(8 + (i << 4) + j) * 4 + 2] = 0;
-      data[(8 + (i << 4) + j) * 4 + 3] = 0;
+      data[(8 + (i << 4) + j) * 4 + 3] = 255;
 
       data[(128 + (i << 4) + j) * 4 + 0] = 0;
       data[(128 + (i << 4) + j) * 4 + 1] = 0;
       data[(128 + (i << 4) + j) * 4 + 2] = 0;
-      data[(128 + (i << 4) + j) * 4 + 3] = 0;
+      data[(128 + (i << 4) + j) * 4 + 3] = 255;
     }
   }
 
@@ -1398,9 +1528,93 @@ R.InitTextures = function() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 };
 
-R.Init = async function() {
-  R.InitTextures();
+R.InitShaders = async function() {
+  // rendering alias models
+  await Promise.all([
+    GL.CreateProgram('alias',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      [
+        ['aPositionA', gl.FLOAT, 3],
+        ['aPositionB', gl.FLOAT, 3],
+        ['aNormal', gl.FLOAT, 3],
+        ['aTexCoord', gl.FLOAT, 2],
+      ],
+      ['tTexture']),
 
+    // rendering brush models (water is down below)
+    GL.CreateProgram('brush',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uUseVertexLighting'],
+        [
+          ['aPosition', gl.FLOAT, 3],
+          ['aTexCoord', gl.FLOAT, 4],
+          ['aLightStyle', gl.FLOAT, 4],
+          ['aNormal', gl.FLOAT, 3],
+          ['aTangent', gl.FLOAT, 3],
+          ['aBitangent', gl.FLOAT, 3],
+        ],
+        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal']),
+
+    // rendering dynamic lights
+    GL.CreateProgram('dlight',
+        ['uOrigin', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uRadius', 'uGamma'],
+        [['aPosition', gl.FLOAT, 3]],
+        []),
+
+    // rendering the player model (similar to alias model but with custom colors)
+    GL.CreateProgram('player',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
+        [
+          ['aPositionA', gl.FLOAT, 3],
+          ['aPositionB', gl.FLOAT, 3],
+          ['aNormal', gl.FLOAT, 3],
+          ['aTexCoord', gl.FLOAT, 2],
+        ],
+        ['tTexture', 'tPlayer']),
+
+    // for rendering sprites (usually effects)
+    GL.CreateProgram('sprite',
+      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
+        [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2]],
+        ['tTexture']),
+
+    // for rendering particles (colored round dots)
+    GL.CreateProgram('particle',
+      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
+        [['aOrigin', gl.FLOAT, 3], ['aCoord', gl.FLOAT, 2], ['aScale', gl.FLOAT, 1], ['aColor', gl.UNSIGNED_BYTE, 3, true]],
+        []),
+
+    // rendering water brushes
+    GL.CreateProgram('turbulent',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime', 'uFogColor', 'uFogParams', 'uUseVertexLighting'],
+        [
+          ['aPosition', gl.FLOAT, 3],
+          ['aTexCoord', gl.FLOAT, 4],
+          ['aLightStyle', gl.FLOAT, 4],
+          // ['aNormal', gl.FLOAT, 3],
+          // ['aTangent', gl.FLOAT, 3],
+          // ['aBitangent', gl.FLOAT, 3],
+        ],
+        ['tTexture', 'tLightmap', 'tDlight', 'tLightStyle']),
+
+    // warp overlay effect
+    GL.CreateProgram('warp',
+        ['uOrtho', 'uTime'],
+        [['aPosition', gl.FLOAT, 2], ['aTexCoord', gl.FLOAT, 2]],
+        ['tTexture']),
+
+    GL.CreateProgram('sky',
+      ['uViewAngles', 'uPerspective', 'uScale', 'uGamma', 'uTime', 'uFogColor', 'uFogParams'],
+      [['aPosition', gl.FLOAT, 3]],
+      ['tSolid', 'tAlpha']),
+
+    GL.CreateProgram('sky-chain',
+      ['uViewOrigin', 'uViewAngles', 'uPerspective'],
+      [['aPosition', gl.FLOAT, 3]],
+      []),
+  ]);
+};
+
+R.Init = async function() {
   if (registry.isDedicatedServer) {
     console.assert(false, 'R.Init called on dedicated server');
     return;
@@ -1426,57 +1640,9 @@ R.Init = async function() {
   R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.ARCHIVE, 'Fog density (for exp/exp2)');
   R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.ARCHIVE, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
 
-  await R.InitParticles();
-
-  await Promise.all([
-    GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
-      [
-        ['aPositionA', gl.FLOAT, 3],
-        ['aPositionB', gl.FLOAT, 3],
-        ['aNormal', gl.FLOAT, 3],
-        ['aTexCoord', gl.FLOAT, 2],
-      ],
-      ['tTexture']),
-  GL.CreateProgram('brush',
-    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams'],
-      [
-        ['aPosition', gl.FLOAT, 3],
-        ['aTexCoord', gl.FLOAT, 4],
-        ['aLightStyle', gl.FLOAT, 4],
-        ['aNormal', gl.FLOAT, 3],
-      ],
-      ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB']),
-  GL.CreateProgram('dlight',
-      ['uOrigin', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uRadius', 'uGamma'],
-      [['aPosition', gl.FLOAT, 3]],
-      []),
-  GL.CreateProgram('player',
-    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
-      [
-        ['aPositionA', gl.FLOAT, 3],
-        ['aPositionB', gl.FLOAT, 3],
-        ['aNormal', gl.FLOAT, 3],
-        ['aTexCoord', gl.FLOAT, 2],
-      ],
-      ['tTexture', 'tPlayer']),
-  GL.CreateProgram('sprite',
-    ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
-      [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2]],
-      ['tTexture']),
-  GL.CreateProgram('turbulent',
-    ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime', 'uFogColor', 'uFogParams'],
-      [
-        ['aPosition', gl.FLOAT, 3],
-        ['aTexCoord', gl.FLOAT, 4],
-        ['aLightStyle', gl.FLOAT, 4],
-      ],
-      ['tTexture', 'tLightmap', 'tDlight', 'tLightStyle']),
-  GL.CreateProgram('warp',
-      ['uOrtho', 'uTime'],
-      [['aPosition', gl.FLOAT, 2], ['aTexCoord', gl.FLOAT, 2]],
-      ['tTexture']),
-  ]);
+  R.InitTextures();
+  R.InitParticles();
+  await R.InitShaders();
 
   R.warpbuffer = gl.createFramebuffer();
   R.warptexture = gl.createTexture();
@@ -1514,7 +1680,7 @@ R.Init = async function() {
     return new Float32Array(positions);
   })(), gl.STATIC_DRAW);
 
-  await R.MakeSky();
+  R.MakeSky();
 };
 
 R.NewMap = function() {
@@ -1568,26 +1734,12 @@ R.ramp1 = [0x6f, 0x6d, 0x6b, 0x69, 0x67, 0x65, 0x63, 0x61];
 R.ramp2 = [0x6f, 0x6e, 0x6d, 0x6c, 0x6b, 0x6a, 0x68, 0x66];
 R.ramp3 = [0x6d, 0x6b, 6, 5, 4, 3];
 
-R.InitParticles = async function() {
-  // let i = COM.CheckParm('-particles');
-  // if (i != null) {
-  //   R.numparticles = Q.atoi(COM.argv[i + 1]);
-  //   if (R.numparticles < 512) {
-  //     R.numparticles = 512;
-  //   }
-  // } else {
-    R.numparticles = 32786;
-  // }
-
+R.InitParticles = function() {
+  R.numparticles = 32786;
   R.avelocities = [];
   for (let i = 0; i <= 161; i++) {
     R.avelocities[i] = [Math.random() * 2.56, Math.random() * 2.56, Math.random() * 2.56];
   }
-
-  await GL.CreateProgram('particle',
-    ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
-      [['aOrigin', gl.FLOAT, 3], ['aCoord', gl.FLOAT, 2], ['aScale', gl.FLOAT, 1], ['aColor', gl.UNSIGNED_BYTE, 3, true]],
-      []);
 };
 
 R.SerializeParticles = function() {
@@ -2161,12 +2313,12 @@ R.BuildLightMapRGB = function(surf) {
  */
 R.TextureAnimation = function(base) {
   let frame = 0;
-  if (base.anim_base != null) {
+  if (base.anim_base !== null) {
     frame = base.anim_frame;
     base = R.currententity.model.textures[base.anim_base];
   }
   let anims = base.anims;
-  if (anims == null) {
+  if (anims.length === 0) {
     return [base, base];
   }
   if ((R.currententity.frame !== 0) && (base.alternate_anims.length !== 0)) {
@@ -2217,20 +2369,24 @@ R.DrawBrushModel = function(e) {
   let program = GL.UseProgram('brush');
 
   if (!clmodel.submodel) {
-    const [ambientlight, shadelight] = R._CalculateLightValues(e);
+    const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
+    gl.uniform3fv(program.uLightVec, lightVector);
   } else {
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
+    gl.uniform3f(program.uLightVec, 0.0, 0.0, 1.0);
   }
 
   gl.uniform3fv(program.uOrigin, e.origin);
   gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 56, 0);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 56, 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 56, 28);
-  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 56, 44);
+  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
+  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, 12);
+  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, 28);
+  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, 44);
+  gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
+  gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
   gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % .2) / .2 : 0);
   if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
@@ -2249,6 +2405,22 @@ R.DrawBrushModel = function(e) {
     R.c_brush_verts += chain[2];
     textureA.glt.bind(program.tTextureA);
     textureB.glt.bind(program.tTextureB);
+
+    gl.uniform1i(program.uUseVertexLighting, !clmodel.textures[chain[0]].normal ? 1 : 0);
+
+    for (const [slot, samplerId] of Object.entries({
+      luminance: 'tLuminance',
+      normal: 'tNormal',
+      specular: 'tSpecular',
+    })) {
+      const t = clmodel.textures[chain[0]][slot];
+      if (t !== null) {
+        t.bind(program[samplerId]);
+      } else {
+        GL.Bind(program[samplerId], R.null_texture);
+      }
+    }
+
     gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
   }
 
@@ -2268,10 +2440,12 @@ R.DrawBrushModel = function(e) {
   }
   GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
   GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 56, e.model.waterchain);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 56, e.model.waterchain + 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 56, e.model.waterchain + 28);
-  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 56, e.model.waterchain + 44);
+  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, e.model.waterchain);
+  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, e.model.waterchain + 12);
+  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, e.model.waterchain + 28);
+  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 44);
+  // gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 56);
+  // gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 68);
   for (let i = 0; i < clmodel.chains.length; i++) {
     const chain = clmodel.chains[i];
     const texture = clmodel.textures[chain[0]];
@@ -2312,11 +2486,14 @@ R.DrawWorld = function() {
   gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
   gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
   gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
+
   gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 56, 0);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 56, 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 56, 28);
-  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 56, 44);
+  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
+  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, 12);
+  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, 28);
+  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, 44);
+  gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
+  gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
   if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
   } else {
@@ -2332,12 +2509,21 @@ R.DrawWorld = function() {
 
   for (let i = 0; i < clmodel.leafs.length; i++) {
     const leaf = clmodel.leafs[i];
-    if ((leaf.visframe !== R.visframecount) || (leaf.skychain === 0)) {
+
+    if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
       continue;
     }
-    if (R.CullBox(leaf.mins, leaf.maxs) === true) {
+
+    if (R.CullBox(leaf.mins, leaf.maxs)) {
       continue;
     }
+
+    const p = leaf.maxs.copy().subtract(leaf.mins).multiply(0.5);
+
+    const [, lightVec] = R.LightPoint(p);
+
+    gl.uniform3fv(program.uLightVec, lightVec);
+
     for (let j = 0; j < leaf.skychain; j++) {
       const cmds = leaf.cmds[j];
       R.c_brush_verts += cmds[2];
@@ -2353,6 +2539,22 @@ R.DrawWorld = function() {
       } else {
         R.notexture.bind(program.tTextureB);
       }
+
+      gl.uniform1i(program.uUseVertexLighting, !clmodel.textures[cmds[0]].normal ? 1 : 0);
+
+      for (const [slot, samplerId] of Object.entries({
+        luminance: 'tLuminance',
+        normal: 'tNormal',
+        specular: 'tSpecular',
+      })) {
+        const t = clmodel.textures[cmds[0]][slot];
+        if (t !== null) {
+          t.bind(program[samplerId]);
+        } else {
+          GL.Bind(program[samplerId], R.null_texture);
+        }
+      }
+
       gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
     }
   }
@@ -2371,10 +2573,12 @@ R.DrawWorldTurbolents = function() {
   const program = GL.UseProgram('turbulent');
   gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
   gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 56, clmodel.waterchain);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 56, clmodel.waterchain + 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 56, clmodel.waterchain + 28);
-  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 56, clmodel.waterchain + 44);
+  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, clmodel.waterchain);
+  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, clmodel.waterchain + 12);
+  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, clmodel.waterchain + 28);
+  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 44);
+  // gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 56);
+  // gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 68);
   gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
   if ((R.fullbright.value !== 0) || (clmodel.lightdata == null)) {
     GL.Bind(program.tLightmap, R.fullbright_texture);
@@ -2515,9 +2719,6 @@ R.BuildSurfaceDisplayList = function(fa) {
       vert[4] = t / texture.height;
       vert[5] = (s - fa.texturemins[0] + (fa.light_s << 4) + 8.0) / 16384.0;
       vert[6] = (t - fa.texturemins[1] + (fa.light_t << 4) + 8.0) / 16384.0;
-      vert[7] = fa.plane.normal[0];
-      vert[8] = fa.plane.normal[1];
-      vert[9] = fa.plane.normal[2];
     }
     if (i >= 3) {
       fa.verts[fa.verts.length] = fa.verts[0];
@@ -2577,7 +2778,7 @@ R.WarpScreen = function() {
 
 // warp
 
-R.MakeSky = async function() {
+R.MakeSky = function() {
   const sin = Array.from({ length: 9 }, (_, i) =>
     Number(Math.sin(i * Math.PI / 16).toFixed(6)),
   );
@@ -2604,17 +2805,6 @@ R.MakeSky = async function() {
     }
   }
 
-  await Promise.all([
-    GL.CreateProgram('sky',
-      ['uViewAngles', 'uPerspective', 'uScale', 'uGamma', 'uTime', 'uFogColor', 'uFogParams'],
-      [['aPosition', gl.FLOAT, 3]],
-      ['tSolid', 'tAlpha']),
-    GL.CreateProgram('sky-chain',
-      ['uViewOrigin', 'uViewAngles', 'uPerspective'],
-      [['aPosition', gl.FLOAT, 3]],
-      []),
-  ]);
-
   R.skyvecs = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, R.skyvecs);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vecs), gl.STATIC_DRAW);
@@ -2630,17 +2820,17 @@ R.DrawSkyBox = function() {
   let program = GL.UseProgram('sky-chain');
   gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
   gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, clmodel.skychain);
-  let i; let j; let leaf; let cmds;
-  for (i = 0; i < clmodel.leafs.length; i++) {
-    leaf = clmodel.leafs[i];
-    if ((leaf.visframe !== R.visframecount) || (leaf.skychain === leaf.waterchain)) {
+
+  for (let i = 0; i < clmodel.leafs.length; i++) {
+    const leaf = clmodel.leafs[i];
+    if (leaf.visframe !== R.visframecount || leaf.skychain === leaf.waterchain) {
       continue;
     }
-    if (R.CullBox(leaf.mins, leaf.maxs) === true) {
+    if (R.CullBox(leaf.mins, leaf.maxs)) {
       continue;
     }
-    for (j = leaf.skychain; j < leaf.waterchain; j++) {
-      cmds = leaf.cmds[j];
+    for (let j = leaf.skychain; j < leaf.waterchain; j++) {
+      const cmds = leaf.cmds[j];
       gl.drawArrays(gl.TRIANGLES, cmds[0], cmds[1]);
     }
   }

@@ -519,47 +519,8 @@ export class Navigation {
 
       const walkableSurface = new WalkableSurface(face, i);
 
-      // Stored normal face is not reliable, recompute it
-      const faceNormal = (() => {
-        const verts = [];
-
-        for (let i = 0; i < face.numedges; i++) {
-          const vec = new Vector();
-          const surfedge = this.worldmodel.surfedges[face.firstedge + i];
-
-          if (surfedge > 0) {
-            vec.set(this.worldmodel.vertexes[this.worldmodel.edges[surfedge][0]]);
-          } else {
-            vec.set(this.worldmodel.vertexes[this.worldmodel.edges[-surfedge][1]]);
-          }
-
-          // triangulate on the fly, absolutely cursed
-          if (i >= 3) {
-            verts.push(verts[0]);
-            verts.push(verts[verts.length - 2]);
-          }
-
-          verts.push(vec);
-        }
-
-        // applying Newell's method for properly handling n-gons
-        const normal = new Vector();
-
-        for (let i = 0; i < verts.length; i++) {
-          const vCurrent = verts[i];
-          const vNext = verts[(i + 1) % verts.length];
-          normal[0] += (vCurrent[1] - vNext[1]) * (vCurrent[2] + vNext[2]);
-          normal[1] += (vCurrent[2] - vNext[2]) * (vCurrent[0] + vNext[0]);
-          normal[2] += (vCurrent[0] - vNext[0]) * (vCurrent[1] + vNext[1]);
-        }
-
-        normal.normalize();
-
-        return normal;
-      })();
-
       // Only accept surfaces whose normals point upward and do not exceed a 45 degrees incline.
-      walkableSurface.stability = faceNormal.dot(downwards);
+      walkableSurface.stability = face.normal.dot(downwards);
 
       if (walkableSurface.stability < this.maxSlope) {
         continue;
@@ -570,7 +531,7 @@ export class Navigation {
         continue;
       }
 
-      walkableSurface.normal.set(faceNormal);
+      walkableSurface.normal.set(face.normal);
 
       walkableSurfaces.push(walkableSurface);
     }

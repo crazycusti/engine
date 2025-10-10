@@ -328,6 +328,25 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-10
+
+* need to clean up the whole texture loading spiel
+  * `GLTexture` holds only just one texture/sampler
+  * `Material` should hold a whole pack of textures for luminance, diffuse, etc.
+  * also I need to release the textures’ alpha channels to carry luminance
+  * WAD2 and WAD3 loader need to spit out different textures
+    * diffuse (the regular texels)
+    * luminance (for bright colors)
+* put back deprecated support for `~` prefix in WAD3 (last 32 indexed colors are deemed fullbright)
+* introduced a simple JSON based format for materials: per BSP texture define a bunch of textures
+* `Face` got `normal` now that is properly calculated which is passed down to the shaders
+* introduced optional normal mapping, first prototype though, missing things:
+  * multiple light sources
+  * world light sources
+  * should neatly integrate with the lightmaps
+* need to fix skychain
+* need to work on this horrendous way of creating those vertex buffer chains
+
 ### 2025-10-07
 
 * turns out navmesh queries are insanely slow, especially if you run things on a Raspberry Pi lol

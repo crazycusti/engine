@@ -31,7 +31,19 @@ eventBus.subscribe('gl.shutdown', () => {
   gl = null;
 });
 
-const notexture_mip = {name: 'notexture', width: 16, height: 16, texturenum: null};
+const notexture_mip = {
+  name: 'notexture', width: 16, height: 16, texturenum: null,
+
+  glt: null,
+  sky: false,
+  turbulent: false,
+  anims: [],
+  anim_base: null,
+  alternate_anims: [],
+  luminance: null,
+  specular: null,
+  normal: null,
+};
 
 /**
  * Mod.BaseModel
@@ -100,16 +112,9 @@ Mod.version = {brush: 29, sprite: 1, alias: 6, bsp2: 844124994};
 
 Mod.known = [];
 
-/** @type {WadFileInterface} */
-let halflifeWad = null;
-
 Mod.Init = function() {
   Mod.novis = new Array(1024);
   Mod.novis.fill(0xff);
-};
-
-Mod.LoadWad = async function() {
-  // halflifeWad = await W.LoadFile('halflife.wad');
 };
 
 Mod.PointInLeaf = function(p, model) { // public method, static access? (PF, R, S use it)
@@ -313,8 +318,8 @@ Mod.LoadTextures = function(loadmodel, buf) {
   loadmodel.textures = [];
   const nummiptex = view.getUint32(fileofs, true);
   let dataofs = fileofs + 4;
-  let i; let miptexofs;
-  for (i = 0; i < nummiptex; i++) {
+  let miptexofs;
+  for (let i = 0; i < nummiptex; i++) {
     miptexofs = view.getInt32(dataofs, true);
     dataofs += 4;
     if (miptexofs === -1) {
@@ -322,15 +327,22 @@ Mod.LoadTextures = function(loadmodel, buf) {
       continue;
     }
     miptexofs += fileofs;
-    const tx = {
+    const tx = { // TODO: material class
       name: Q.memstr(new Uint8Array(buf, miptexofs, 16)),
       width: view.getUint32(miptexofs + 16, true),
       height: view.getUint32(miptexofs + 20, true),
       glt: null,
       sky: false,
       turbulent: false,
+      anims: [],
+      anim_base: null,
+      alternate_anims: [],
+      luminance: null,
+      specular: null,
+      normal: null,
     };
 
+    // dedicated server is not interested in loading textures
     if (!registry.isDedicatedServer) {
       if (tx.name.substring(0, 3).toLowerCase() === 'sky') {
         R.InitSky(new Uint8Array(buf, miptexofs + view.getUint32(miptexofs + 24, true), 32768));
@@ -338,7 +350,8 @@ Mod.LoadTextures = function(loadmodel, buf) {
         R.skytexturenum = i;
         tx.sky = true;
       } else {
-        // awful hack to load WAD3 textures if available
+        // HACK: awful hack to load WAD3 textures if available
+        //       we check if after the textures there is a uint64 with value 256
         const len = (
           40 +
           tx.width / 1 * tx.height / 1 +
@@ -372,8 +385,7 @@ Mod.LoadTextures = function(loadmodel, buf) {
     loadmodel.textures[i] = tx;
   }
 
-  let j; let tx2; let num; let name;
-  for (i = 0; i < nummiptex; i++) {
+  for (let i = 0; i < nummiptex; i++) {
     const tx = loadmodel.textures[i];
     if (tx.name[0] !== '+') {
       continue;
@@ -381,18 +393,19 @@ Mod.LoadTextures = function(loadmodel, buf) {
     if (tx.name[1] !== '0') {
       continue;
     }
-    name = tx.name.substring(2);
+    const name = tx.name.substring(2);
     tx.anims = [i];
     tx.alternate_anims = [];
-    for (j = 0; j < nummiptex; j++) {
-      tx2 = loadmodel.textures[j];
+    for (let j = 0; j < nummiptex; j++) {
+      const tx2 = loadmodel.textures[j];
       if (tx2.name[0] !== '+') {
         continue;
       }
       if (tx2.name.substring(2) !== name) {
         continue;
       }
-      num = tx2.name.charCodeAt(1);
+      // animation groups
+      let num = tx2.name.charCodeAt(1);
       if (num === 48) {
         continue;
       }
@@ -413,13 +426,13 @@ Mod.LoadTextures = function(loadmodel, buf) {
       }
       throw new Error('Bad animating texture ' + tx.name);
     }
-    for (j = 0; j < tx.anims.length; j++) {
-      if (tx.anims[j] == null) {
+    for (let j = 0; j < tx.anims.length; j++) {
+      if (tx.anims[j] === undefined) {
         throw new Error('Missing frame ' + j + ' of ' + tx.name);
       }
     }
-    for (j = 0; j < tx.alternate_anims.length; j++) {
-      if (tx.alternate_anims[j] == null) {
+    for (let j = 0; j < tx.alternate_anims.length; j++) {
+      if (tx.alternate_anims[j] === undefined) {
         throw new Error('Missing frame ' + j + ' of ' + tx.name);
       }
     }
@@ -429,6 +442,61 @@ Mod.LoadTextures = function(loadmodel, buf) {
   loadmodel.textures[loadmodel.textures.length] = notexture_mip;
 };
 
+/** @typedef {{luminance: string|undefined, diffuse: string|undefined, specular: string|undefined, normal: string|undefined}} MaterialDataMaterialT */
+/** @typedef {{version: number, materials: Record<string,MaterialDataMaterialT>}} MaterialDataT */
+
+Mod.LoadMaterials = function(loadmodel) {
+  const matfile = COM.LoadTextFile(loadmodel.name.replace('.bsp', '.qsmat.json'));
+
+  if (!matfile) {
+    return;
+  }
+
+  Con.DPrint(`Mod.LoadMaterials: found materials file for ${loadmodel.name}\n`);
+
+  /** @type {MaterialDataT} */
+  const materialData = JSON.parse(matfile);
+
+  console.assert(materialData.version === 1);
+
+  for (const [txName, textures] of Object.entries(materialData.materials)) {
+    const texture = loadmodel.textures.find((t) => t.name === txName);
+
+    if (!texture) {
+      Con.PrintWarning(`Mod.LoadMaterials: referenced material (${txName}) is not used\n`);
+      continue;
+    }
+
+    for (const category of ['luminance', 'diffuse', 'specular', 'normal']) {
+      if (textures[category]) {
+        GLTexture.FromImageFile(textures[category]).then((function(glt) {
+          const { texture, category } = this;
+          texture[category === 'diffuse' ? 'glt' : category] = glt;
+          Con.DPrint(`Mod.LoadMaterials: loaded ${category} texture for ${texture.name} from ${textures[category]}\n`);
+        }).bind({ texture, category })).catch((e) => {
+          Con.PrintError(`Mod.LoadMaterials: failed to load ${textures[category]}: ${e.message}\n`);
+        });
+      }
+    }
+
+    // if (textures.luminance) {
+    //   GLTexture.FromImageFile(textures.luminance).then((function(glt) {
+    //     texture.luminance = glt;
+    //   }).bind(texture)).catch((e) => {
+    //     Con.PrintError(`Mod.LoadMaterials: failed to load ${textures.luminance}: ${e.message}\n`);
+    //   });
+    // }
+
+    // if (textures.diffuse) {
+    //   GLTexture.FromImageFile(textures.diffuse).then((function(glt) {
+    //     texture.glt = glt;
+    //   }).bind(texture)).catch((e) => {
+    //     Con.PrintError(`Mod.LoadMaterials: failed to load ${textures.diffuse}: ${e.message}\n`);
+    //   });
+    // }
+  }
+};
+
 Mod.LoadLighting = function(loadmodel, buf) {
   loadmodel.lightdata_rgb = null;
   loadmodel.lightdata = null;
@@ -436,7 +504,7 @@ Mod.LoadLighting = function(loadmodel, buf) {
   const litfile = COM.LoadFile(loadmodel.name.replace('.bsp', '.lit'));
 
   if (litfile) {
-    Con.Print(`Mod.LoadLighting: using external .lit file for ${loadmodel.name}\n`);
+    Con.DPrint(`Mod.LoadLighting: using external .lit file for ${loadmodel.name}\n`);
 
     loadmodel.lightdata_rgb = new Uint8Array(litfile.slice(8)); // skip header
     // return;
@@ -652,6 +720,7 @@ Mod.LoadFaces = function(loadmodel, buf) {
     maxs = [-Infinity, -Infinity];
     tex = loadmodel.texinfo[out.texinfo];
     out.texture = tex.texture;
+    const verts = [];
     for (j = 0; j < out.numedges; j++) {
       e = loadmodel.surfedges[out.firstedge + j];
       if (e >= 0) {
@@ -673,6 +742,11 @@ Mod.LoadFaces = function(loadmodel, buf) {
       if (val > maxs[1]) {
         maxs[1] = val;
       }
+      if (j >= 3) {
+        verts.push(verts[0]);
+        verts.push(verts[verts.length - 2]);
+      }
+      verts.push(v);
     }
     out.texturemins = [Math.floor(mins[0] / 16) * 16, Math.floor(mins[1] / 16) * 16];
     out.extents = [Math.ceil(maxs[0] / 16) * 16 - out.texturemins[0], Math.ceil(maxs[1] / 16) * 16 - out.texturemins[1]];
@@ -682,6 +756,17 @@ Mod.LoadFaces = function(loadmodel, buf) {
     } else if (loadmodel.textures[tex.texture].sky === true) {
       out.sky = true;
     }
+
+    // applying Newell's method for properly handling n-gons
+    for (let i = 0; i < verts.length; i++) {
+      const vCurrent = verts[i];
+      const vNext = verts[(i + 1) % verts.length];
+      out.normal[0] += (vCurrent[1] - vNext[1]) * (vCurrent[2] + vNext[2]);
+      out.normal[1] += (vCurrent[2] - vNext[2]) * (vCurrent[0] + vNext[0]);
+      out.normal[2] += (vCurrent[0] - vNext[0]) * (vCurrent[1] + vNext[1]);
+    }
+
+    out.normal.normalize();
 
     loadmodel.faces[i] = out;
     fileofs += 20;
@@ -891,6 +976,7 @@ Mod.LoadBrushModel = function(loadmodel, buffer) {
   Mod.LoadEdges(loadmodel, buffer);
   Mod.LoadSurfedges(loadmodel, buffer); // OK
   Mod.LoadTextures(loadmodel, buffer); // OK
+  Mod.LoadMaterials(loadmodel);
   Mod.LoadLighting(loadmodel, buffer); // OK
   Mod.LoadPlanes(loadmodel, buffer); // OK
   Mod.LoadTexinfo(loadmodel, buffer); // OK

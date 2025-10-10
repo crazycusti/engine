@@ -5,8 +5,11 @@ uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 
 attribute vec3 aPosition;
+// attribute vec3 aNormal;
 attribute vec4 aTexCoord;
 attribute vec4 aLightStyle;
+// attribute vec3 aTangent;
+// attribute vec3 aBitangent;
 
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;

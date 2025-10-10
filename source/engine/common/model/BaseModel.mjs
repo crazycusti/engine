@@ -11,7 +11,7 @@ export class Plane { // TODO: move to shared
    * @param {number} dist distance from origin
    */
   constructor(normal, dist) {
-    /** @type {Vector} plane’s normal vector, on n-sided polygons it might not be facing correctly */
+    /** @type {Vector} plane’s normal vector, on n-sided polygons it might not be facing correctly, better use Face’s normal instead. */
     this.normal = normal;
 
     /** @type {number} distance from origin along normal (in direction of normal) */
@@ -35,6 +35,9 @@ export class Face {
 
   turbulent = false;
   sky = false;
+
+  /** calculated normal with corrected direction */
+  normal = new Vector();
 };
 
 export class BaseModel {

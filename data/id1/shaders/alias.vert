@@ -19,16 +19,17 @@ uniform vec3 uFogColor;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
-  vec3 position = uViewAngles * (uAngles * (
-    mix(aPositionA, aPositionB, uAlpha)
-  ) + uOrigin - uViewOrigin);
+  vec3 lerpPos = mix(aPositionA, aPositionB, uAlpha);
+  vec3 worldPos = uAngles * lerpPos + uOrigin;
+  vec3 position = uViewAngles * (worldPos - uViewOrigin);
 
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
 
   vTexCoord = aTexCoord;
-  vLightDot = dot(aNormal, uLightVec);
+  vLightDot = dot(aNormal, normalize(worldPos - uLightVec));
+
   // fog distance (world position)
-  float dist = length(mix(aPositionA, aPositionB, uAlpha) + uOrigin - uViewOrigin);
+  float dist = length(worldPos - uViewOrigin);
   if (uFogParams.w < 0.0) {
     vFog = 1.0;
   } else if (uFogParams.w < 0.5) {

@@ -559,6 +559,22 @@ export default class Vector extends Array {
   }
 
   /**
+   * Returns the average of the components of this vector.
+   * @returns {number} the average of the components of this vector
+   */
+  average() {
+    return (this[0] + this[1] + this[2]) / 3.0;
+  }
+
+  /**
+   * Returns the greatest component of this vector.
+   * @returns {number} the greatest component of this vector
+   */
+  greatest() {
+    return Math.max(this[0], this[1], this[2]);
+  }
+
+  /**
    * Determines the distance from this to other.
    * @param {Vector} other other vector
    * @returns {number} the distance between this and other

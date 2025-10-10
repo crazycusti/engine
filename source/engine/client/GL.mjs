@@ -318,6 +318,7 @@ export class GLTexture {
       this.width = data.width;
       this.height = data.height;
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.generateMipmap(gl.TEXTURE_2D);
     } else if (data instanceof Uint8Array) {
       console.assert(data.length === this.width * this.height * 4, 'Texture data length must match width and height');
 
@@ -542,19 +543,17 @@ GL.CreateProgram = async function(identifier, uniforms, attribs, textures) {
     attribs: [],
   };
 
-  let source = null;
-
   const vsh = gl.createShader(gl.VERTEX_SHADER);
-  source = await COM.LoadTextFileAsync(`shaders/${identifier}.vert`);
-  gl.shaderSource(vsh, source);
+  const vsource = await COM.LoadTextFileAsync(`shaders/${identifier}.vert`);
+  gl.shaderSource(vsh, vsource);
   gl.compileShader(vsh);
   if (gl.getShaderParameter(vsh, gl.COMPILE_STATUS) !== true) {
     throw new Error('Error compiling shader: ' + gl.getShaderInfoLog(vsh));
   }
 
   const fsh = gl.createShader(gl.FRAGMENT_SHADER);
-  source = await COM.LoadTextFileAsync(`shaders/${identifier}.frag`);
-  gl.shaderSource(fsh, source);
+  const fsource = await COM.LoadTextFileAsync(`shaders/${identifier}.frag`);
+  gl.shaderSource(fsh, fsource);
   gl.compileShader(fsh);
   if (gl.getShaderParameter(fsh, gl.COMPILE_STATUS) !== true) {
     throw new Error('Error compiling shader: ' + gl.getShaderInfoLog(fsh));
@@ -578,10 +577,12 @@ GL.CreateProgram = async function(identifier, uniforms, attribs, textures) {
   program.attribBits = 0;
   for (let i = 0; i < attribs.length; i++) {
     const attribParameters = attribs[i];
+    const location = gl.getAttribLocation(p, attribParameters[0]);
+    console.assert(location !== -1, 'vertex shader attribute must exist and be used!', attribParameters[0]);
     const attrib =
     {
       name: attribParameters[0],
-      location: gl.getAttribLocation(p, attribParameters[0]),
+      location,
       type: attribParameters[1],
       components: attribParameters[2],
       normalized: (attribParameters[3] === true),

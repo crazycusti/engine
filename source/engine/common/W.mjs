@@ -489,7 +489,7 @@ export function readWad3Texture(data, name, mipmapLevel = 0) {
   );
 
   // Textures with a name starting with '{' are transparent, so we set the transparent color to 255
-  const rgba = translateIndexToRGBA(uint8data, swidth, sheight, palette, texName[0] === '{' ? 255 : null);
+  const rgba = translateIndexToRGBA(uint8data, swidth, sheight, palette, texName[0] === '{' ? 255 : null, (texName[0] === '~' || texName[2] === '~') ? 240 : null);
 
   return new WadLumpTexture(texName, swidth, sheight, rgba);
 };
