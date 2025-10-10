@@ -3,7 +3,7 @@ uniform mat3 uAngles;
 uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
-uniform vec3 uLightVec;
+uniform vec4 uLightVec;
 
 uniform bool uUseVertexLighting;
 
@@ -20,6 +20,7 @@ varying float vLightDot;
 varying float vFog;
 varying vec3 vNormal;
 varying vec3 vLightVec;
+varying float vLightMix;
 varying vec3 vTangent;
 varying vec3 vBitangent;
 
@@ -38,12 +39,14 @@ void main(void) {
   vViewVec = normalize(worldPos - uViewOrigin);
   // calculate stuff for per-pixel lighting
   if (!uUseVertexLighting) {
-    vLightVec = normalize(uAngles * (worldPos - (uLightVec + aNormal * 24.0))); // FIXME: use proper light sorces here
+    vLightVec = normalize(worldPos - uLightVec.xyz);
+    float dist = length(worldPos - uLightVec.xyz);
+    vLightMix = clamp(uLightVec.w / dist, 0.0, 1.0);
     vNormal = normalize(uAngles * aNormal);
     vTangent = normalize(uAngles * aTangent);
     vBitangent = normalize(uAngles * aBitangent);
   } else {
-    vLightVec = normalize(worldPos - uLightVec);
+    vLightVec = normalize(worldPos - uLightVec.xyz);
     vLightDot = dot(uAngles * aNormal, vLightVec);
   }
 

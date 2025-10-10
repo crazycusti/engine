@@ -25,6 +25,7 @@ varying float vLightDot;
 varying float vFog;
 varying vec3 vNormal;
 varying vec3 vLightVec;
+varying float vLightMix;
 varying vec3 vTangent;
 varying vec3 vBitangent;
 varying vec3 vViewVec;
@@ -115,6 +116,18 @@ void main(void) {
     float specIntensity = texture2D(tSpecular, vTexCoord.xy).r;
     vec3 H = normalize(L + V);
     specFactor = specIntensity * pow(max(dot(N, H), 0.0), 16.0);
+
+    // Add dynamic light contribution using vLightVec
+    vec3 dynLightDir = vLightVec;
+    float dynLightDot = max(dot(N, dynLightDir), 0.0);
+
+    // Add specular from dynamic light
+    vec3 dynH = normalize(dynLightDir + V);
+    float dynSpecFactor = specIntensity * pow(max(dot(N, dynH), 0.0), 16.0);
+
+    // Combine both light sources
+    bumpLightDot = bumpLightDot + dynLightDot * vLightMix; // Mix in dynamic light at reduced intensity
+    specFactor += dynSpecFactor * vLightMix; // Add dynamic specular
   }
 
   vec3 lightmap;

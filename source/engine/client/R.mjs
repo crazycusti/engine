@@ -1120,14 +1120,11 @@ R.RenderView = function() {
 
 // mesh
 
-R.CalculateTagentBitagents = function(cmds, skipFrom, skipTo) {
+R.CalculateTagentBitagents = function(cmds, cutoff) {
+
   // compute per-triangle tangent/bitangent (stride = 20 floats)
   const stride = 20;
-  for (let i = 0; i + stride * 3 <= cmds.length; i += stride * 3) {
-    if (i >= skipFrom && i < skipTo) {
-      continue;
-    }
-
+  for (let i = 0; i + stride * 3 <= Math.min(cutoff, cmds.length); i += stride * 3) {
     // vertices of triangle
     const i0 = i;
     const i1 = i + stride;
@@ -1293,7 +1290,7 @@ R.MakeBrushModelDisplayLists = function(m) {
     }
   }
 
-  R.CalculateTagentBitagents(cmds, m.skychain, m.waterchain);
+  // R.CalculateTagentBitagents(cmds, cutoff);
 
   m.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
@@ -1307,6 +1304,7 @@ R.MakeWorldModelDisplayLists = function(m) {
   const cmds = [];
   const styles = [0.0, 0.0, 0.0, 0.0];
   let verts = 0;
+  let cutoff = 0;
   for (let i = 0; i < m.textures.length; i++) {
     const texture = m.textures[i];
     if ((texture.sky === true) || (texture.turbulent === true)) {
@@ -1360,6 +1358,7 @@ R.MakeWorldModelDisplayLists = function(m) {
       }
     }
   }
+  cutoff = cmds.length;
   m.skychain = verts * 80;
   verts = 0;
   for (let i = 0; i < m.textures.length; i++) {
@@ -1444,7 +1443,7 @@ R.MakeWorldModelDisplayLists = function(m) {
     }
   }
 
-  R.CalculateTagentBitagents(cmds, m.skychain, m.waterchain);
+  R.CalculateTagentBitagents(cmds, cutoff);
 
   m.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
@@ -1597,7 +1596,7 @@ R.InitShaders = async function() {
           // ['aTangent', gl.FLOAT, 3],
           // ['aBitangent', gl.FLOAT, 3],
         ],
-        ['tTexture', 'tLightmap', 'tDlight', 'tLightStyle']),
+        ['tTexture', 'tLightmap', 'tDlight', 'tLightStyle', 'tDeluxemap']),
 
     // warp overlay effect
     GL.CreateProgram('warp',
@@ -2381,11 +2380,11 @@ R.DrawBrushModel = function(e) {
     const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
-    gl.uniform3fv(program.uLightVec, lightVector);
+    gl.uniform4fv(program.uLightVec, [...lightVector, 1.0]);
   } else {
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
-    gl.uniform3f(program.uLightVec, 0.0, 0.0, 1.0);
+    gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
   }
 
   gl.uniform3fv(program.uOrigin, e.origin);
@@ -2447,7 +2446,7 @@ R.DrawBrushModel = function(e) {
   } else {
     GL.Bind(program.tLightmap, R.lightmap_texture);
   }
-  GL.Bind(program.tDeluxemap, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.deluxemap_texture : R.null_texture);
+  // GL.Bind(program.tDeluxemap, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.deluxemap_texture : R.null_texture);
   GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
   GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
   gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, e.model.waterchain);
@@ -2528,11 +2527,22 @@ R.DrawWorld = function() {
       continue;
     }
 
-    const p = leaf.maxs.copy().subtract(leaf.mins).multiply(0.5);
+    // const p = leaf.maxs.copy().subtract(leaf.mins).multiply(0.5);
 
-    const [, lightVec] = R.LightPoint(p);
+    const lightVector = new Vector(0, 0, 0);
+    let lightRadius = 0;
 
-    gl.uniform3fv(program.uLightVec, lightVec);
+    // naive approach of getting the next best light
+    for (const l of CL.state.clientEntities.dlights) {
+      if (l.die < CL.state.time || l.radius === 0.0) {
+        continue;
+      }
+
+      lightVector.set(l.origin);
+      lightRadius = l.radius;
+    }
+
+    gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
 
     for (let j = 0; j < leaf.skychain; j++) {
       const cmds = leaf.cmds[j];
