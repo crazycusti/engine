@@ -33,6 +33,9 @@ export class Face {
   texturemins = [0, 0];
   extents = [0, 0];
 
+  // lightmap scaling
+  lmshift = 3;
+
   turbulent = false;
   sky = false;
 

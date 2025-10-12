@@ -768,8 +768,9 @@ Mod.LoadFaces = function(loadmodel, buf) {
       }
       verts.push(v);
     }
-    out.texturemins = [Math.floor(mins[0] / 16) * 16, Math.floor(mins[1] / 16) * 16];
-    out.extents = [Math.ceil(maxs[0] / 16) * 16 - out.texturemins[0], Math.ceil(maxs[1] / 16) * 16 - out.texturemins[1]];
+    const lmscale = 1 << out.lmshift;
+    out.texturemins = [Math.floor(mins[0] / lmscale) * lmscale, Math.floor(mins[1] / lmscale) * lmscale];
+    out.extents = [Math.ceil(maxs[0] / lmscale) * lmscale - out.texturemins[0], Math.ceil(maxs[1] / lmscale) * lmscale - out.texturemins[1]];
 
     if (loadmodel.textures[tex.texture].turbulent === true) {
       out.turbulent = true;

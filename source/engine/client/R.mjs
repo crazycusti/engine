@@ -1,7 +1,6 @@
 import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
-import Q from '../../shared/Q.mjs';
 import * as Def from '../common/Def.mjs';
 
 import { eventBus, registry } from '../registry.mjs';
@@ -276,11 +275,11 @@ R.RecursiveLightPoint = function(node, start, end) {
       return [new Vector(), mid];
     }
 
-    ds >>= 4;
-    dt >>= 4;
+    ds >>= surf.lmshift;
+    dt >>= surf.lmshift;
 
-    const smax = (surf.extents[0] >> 4) + 1;
-    const tmax = (surf.extents[1] >> 4) + 1;
+    const smax = (surf.extents[0] >> surf.lmshift) + 1;
+    const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
     const r3 = new Vector();
     const haveRGB = CL.state.worldmodel.lightdata_rgb !== null;
@@ -2156,8 +2155,8 @@ R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(1048576 * 4)); // TODO: doesn
 R.deluxemap = new Uint8Array(new ArrayBuffer(4194304 * 4));
 
 R.AddDynamicLights = function(surf) {
-  const smax = (surf.extents[0] >> 4) + 1;
-  const tmax = (surf.extents[1] >> 4) + 1;
+  const smax = (surf.extents[0] >> surf.lmshift) + 1;
+  const tmax = (surf.extents[1] >> surf.lmshift) + 1;
   const size = smax * tmax;
 
   const blocklights = [];
@@ -2184,13 +2183,13 @@ R.AddDynamicLights = function(surf) {
       impact.dot(new Vector(...tex.vecs[1])) + tex.vecs[1][3] - surf.texturemins[1],
     ];
     for (let t = 0; t < tmax; ++t) {
-      let td = local[1] - (t << 4);
+      let td = local[1] - (t << surf.lmshift);
       if (td < 0.0) {
         td = -td;
       }
       td = Math.floor(td);
       for (let s = 0; s < smax; ++s) {
-        let sd = local[0] - (s << 4);
+        let sd = local[0] - (s << surf.lmshift);
         if (sd < 0) {
           sd = -sd;
         }
@@ -2231,12 +2230,12 @@ R.AddDynamicLights = function(surf) {
 };
 
 R.RemoveDynamicLights = function(surf) {
-  const smax = (surf.extents[0] >> 4) + 1;
-  const tmax = (surf.extents[1] >> 4) + 1;
-  for (let t = 0; t < tmax; ++t) {
+  const smax = (surf.extents[0] >> surf.lmshift) + 1;
+  const tmax = (surf.extents[1] >> surf.lmshift) + 1;
+  for (let t = 0; t < tmax; t++) {
     R.lightmap_modified[surf.light_t + t] = true;
     const dest = ((surf.light_t + t) << 10) + surf.light_s;
-    for (let s = 0; s < smax; ++s) {
+    for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;
       for (let i = 0; i < 3; i++) {
         R.dlightmaps_rgba[dldest + i] = 0;
@@ -2247,8 +2246,8 @@ R.RemoveDynamicLights = function(surf) {
 };
 
 R.BuildLightMap = function(surf) {
-  const smax = (surf.extents[0] >> 4) + 1;
-  const tmax = (surf.extents[1] >> 4) + 1;
+  const smax = (surf.extents[0] >> surf.lmshift) + 1;
+  const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   for (let k = 0; k < 3; k++) {
     const offset = 4194304 * k;
@@ -2279,8 +2278,8 @@ R.BuildLightMap = function(surf) {
 };
 
 R.BuildLightMapEx = function(surf) {
-  const smax = (surf.extents[0] >> 4) + 1;
-  const tmax = (surf.extents[1] >> 4) + 1;
+  const smax = (surf.extents[0] >> surf.lmshift) + 1;
+  const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   for (let k = 0; k < 3; k++) {
     const offset = 4194304 * k;
@@ -2687,7 +2686,8 @@ R.MarkLeaves = function() {
 };
 
 R.AllocBlock = function(surf) {
-  const w = (surf.extents[0] >> 4) + 1; const h = (surf.extents[1] >> 4) + 1;
+  const w = (surf.extents[0] >> surf.lmshift) + 1;
+  const h = (surf.extents[1] >> surf.lmshift) + 1;
   let x; let y; let i; let j; let best = 1024; let best2;
   for (i = 0; i < (1024 - w); i++) {
     best2 = 0;
@@ -2737,8 +2737,8 @@ R.BuildSurfaceDisplayList = function(fa) {
       const t = vec.dot(new Vector(...texinfo.vecs[1])) + texinfo.vecs[1][3];
       vert[3] = s / texture.width;
       vert[4] = t / texture.height;
-      vert[5] = (s - fa.texturemins[0] + (fa.light_s << 4) + 8.0) / 16384.0;
-      vert[6] = (t - fa.texturemins[1] + (fa.light_t << 4) + 8.0) / 16384.0;
+      vert[5] = (s - fa.texturemins[0] + (fa.light_s << fa.lmshift) + (1 << (fa.lmshift - 1))) / (1024 * (1 << fa.lmshift));
+      vert[6] = (t - fa.texturemins[1] + (fa.light_t << fa.lmshift) + (1 << (fa.lmshift - 1))) / (1024 * (1 << fa.lmshift));
     }
     if (i >= 3) {
       fa.verts[fa.verts.length] = fa.verts[0];

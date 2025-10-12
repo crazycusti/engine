@@ -163,7 +163,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Rendering improvements
 
-* [_] improve lighting and materials https://chatgpt.com/share/677d90a2-f364-800d-b077-9a93c9343b54
+* [X] improve lighting and materials https://chatgpt.com/share/677d90a2-f364-800d-b077-9a93c9343b54
 * [X] frame interpolation based on the PR state machine
 * [X] rewrite everything to use GL.Upload32 etc., index to RGBA is done on a pic/texture loading level now
 * [_] use precalculated mipmaps (e.g. from WAD3), when uploading textures
@@ -325,8 +325,13 @@ class MainMenu extends BaseMenu {
   * https://github.com/ericwa/ericw-tools – compile maps with q3map2 features
   * https://developer.valvesoftware.com/wiki/MAP_(file_format) – we are using Valve 220
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
+* https://www.jagregory.com/abrash-black-book/ the 3d bible
 
 ## Log
+
+### 2025-10-12
+
+* current WIP: lmscale
 
 ### 2025-10-10
 
@@ -347,6 +352,7 @@ class MainMenu extends BaseMenu {
 * need to fix skychain
 * need to work on this horrendous way of creating those vertex buffer chains
 * `.lit` files are no longer used, the BSP loader now supports BSPX format
+* I need to free the texture’s alpha channel (being used for luminance) so that I can use alpha-blended textures
 
 ### 2025-10-07
 

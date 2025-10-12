@@ -11,6 +11,20 @@ class Con {
     });
   }
 
+  static PrintError(message) {
+    parentPort.postMessage({
+      event: 'worker.con.print',
+      data: [message],
+    });
+  }
+
+  static PrintWarning(message) {
+    parentPort.postMessage({
+      event: 'worker.con.print',
+      data: [message],
+    });
+  }
+
   static DPrint(message) {
     parentPort.postMessage({
       event: 'worker.con.dprint',
