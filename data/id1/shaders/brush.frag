@@ -121,7 +121,9 @@ void main(void) {
 
   // Calculate bump mapping factor - blend between full lighting and bump-modified lighting
   // This prevents completely black surfaces while still allowing bump mapping to have effect
-  float bumpFactor = mix(1.0, lightFactor, 0.66);
+
+  float minAmbient = 0.5;
+  float bumpFactor = minAmbient + (1.0 - minAmbient) * pow(lightFactor, 0.7);
 
   gl_FragColor = vec4(vec3(
     texture.r * mix(1.0, staticLight.r * bumpFactor * (vLightDot * uShadeLight.r + uAmbientLight.r), texture.a * (1.0 - luminance.r)),

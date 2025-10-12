@@ -332,6 +332,7 @@ class MainMenu extends BaseMenu {
 ### 2025-10-12
 
 * current WIP: lmscale
+  * needs to be configurable (aka. reading out the _lmscale from worldspawn)
 
 ### 2025-10-10
 
