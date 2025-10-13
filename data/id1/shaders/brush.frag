@@ -14,7 +14,8 @@ uniform sampler2D tNormal;
 uniform sampler2D tSpecular;
 uniform sampler2D tDeluxemap;
 
-uniform bool uUseVertexLighting;
+uniform bool uPerformDotLighting;
+uniform bool uHaveDeluxemap;
 
 uniform vec3 uAmbientLight;
 uniform vec3 uShadeLight;
@@ -65,15 +66,21 @@ void main(void) {
   float specFactor = 0.0;
   float lightFactor = 1.0;
 
-  if (!uUseVertexLighting) {
-    vec3 deluxemap;
-    deluxemap.x = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.00)), lightstyle * 43.828125);
-    deluxemap.y = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)), lightstyle * 43.828125);
-    deluxemap.z = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.50)), lightstyle * 43.828125);
+  if (uPerformDotLighting) {
+    vec3 lightDirection;
 
-    // CR: Since we are fixing normals when loading the faces, we need to fix the deluxemap accordingly
-    deluxemap.x *= vNormal.x > 0.0 ? 1.0 : -1.0;
-    deluxemap.y *= vNormal.y > 0.0 ? 1.0 : -1.0;
+    if (uHaveDeluxemap) {
+      lightDirection.x = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.00)), lightstyle * 43.828125);
+      lightDirection.y = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)), lightstyle * 43.828125);
+      lightDirection.z = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.50)), lightstyle * 43.828125);
+
+      // CR: Since we are fixing normals when loading the faces, we need to fix the deluxemap accordingly
+      lightDirection.x *= vNormal.x > 0.0 ? 1.0 : -1.0;
+      lightDirection.y *= vNormal.y > 0.0 ? 1.0 : -1.0;
+    } else {
+      // fallback to what the vertex shader has for us
+      lightDirection = vLightVec;
+    }
 
     vec4 specular = texture2D(tSpecular, vTexCoord.xy);
 
@@ -95,7 +102,7 @@ void main(void) {
     b = normalize(cross(n, t));
 
     vec3 N = normalize(t * normalMap.x + b * normalMap.y + n * normalMap.z);
-    vec3 L = normalize(deluxemap * 2.0 - 1.0);
+    vec3 L = normalize(lightDirection * 2.0 - 1.0);
     vec3 V = normalize(vViewVec);
 
     // Use bumped normal for lighting calculation

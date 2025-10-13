@@ -329,6 +329,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-14
+
+* reading out worldspawn’s config is implemented, lmscale is now read out from the map
+* other small fixes, cleaning up shaders
+
 ### 2025-10-12
 
 * current WIP: lmscale

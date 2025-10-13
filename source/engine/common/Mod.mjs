@@ -482,22 +482,6 @@ Mod.LoadMaterials = function(loadmodel) {
         });
       }
     }
-
-    // if (textures.luminance) {
-    //   GLTexture.FromImageFile(textures.luminance).then((function(glt) {
-    //     texture.luminance = glt;
-    //   }).bind(texture)).catch((e) => {
-    //     Con.PrintError(`Mod.LoadMaterials: failed to load ${textures.luminance}: ${e.message}\n`);
-    //   });
-    // }
-
-    // if (textures.diffuse) {
-    //   GLTexture.FromImageFile(textures.diffuse).then((function(glt) {
-    //     texture.glt = glt;
-    //   }).bind(texture)).catch((e) => {
-    //     Con.PrintError(`Mod.LoadMaterials: failed to load ${textures.diffuse}: ${e.message}\n`);
-    //   });
-    // }
   }
 };
 
@@ -544,6 +528,45 @@ Mod.LoadEntities = function(loadmodel, buf) {
   const fileofs = view.getUint32((Mod.lump.entities << 3) + 4, true);
   const filelen = view.getUint32((Mod.lump.entities << 3) + 8, true);
   loadmodel.entities = Q.memstr(new Uint8Array(buf, fileofs, filelen));
+  loadmodel.worldspawnInfo = {};
+
+  let data = loadmodel.entities;
+
+  const parsed = COM.Parse(data);
+
+  console.assert(parsed.data !== null);
+
+  data = parsed.data;
+
+  console.assert(parsed.token === '{');
+
+  while (true) {
+    const parsedKey = COM.Parse(data);
+
+    data = parsedKey.data;
+
+    if (!data) {
+      break;
+    }
+
+    if (parsedKey.token === '}') {
+      break;
+    }
+
+    console.assert(data !== null);
+
+    const parsedValue = COM.Parse(data);
+
+    data = parsedValue.data;
+
+    if (!data) {
+      break;
+    }
+
+    console.assert(parsedValue.token !== '}');
+
+    loadmodel.worldspawnInfo[parsedKey.token] = parsedValue.token;
+  }
 
   loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
 };
@@ -708,6 +731,10 @@ Mod.LoadFaces = function(loadmodel, buf) {
   if ((filelen % 20) !== 0) {
     throw new CorruptedResourceError(loadmodel.name, 'Mod.LoadFaces: funny lump size');
   }
+
+  // support for _lightmap_scale key in worldspawn
+  const lmshift = (loadmodel.worldspawnInfo._lightmap_scale) ? Math.log2(parseInt(loadmodel.worldspawnInfo._lightmap_scale)) : 4;
+
   const count = filelen / 20;
   loadmodel.firstface = 0;
   loadmodel.numfaces = count;
@@ -722,6 +749,7 @@ Mod.LoadFaces = function(loadmodel, buf) {
       texinfo: view.getUint16(fileofs + 10, true),
       styles: [],
       lightofs: view.getInt32(fileofs + 16, true),
+      lmshift,
     });
     if (styles[0] !== 255) {
       out.styles[0] = styles[0];
@@ -1070,6 +1098,7 @@ Mod.LoadBrushModel = function(loadmodel, buffer) {
   loadmodel.type = Mod.type.brush;
   loadmodel.version = /** @type {29|844124994} */ ((new DataView(buffer)).getUint32(0, true));
   loadmodel.bspxoffset = 0;
+  Mod.LoadEntities(loadmodel, buffer);
   Mod.LoadVertexes(loadmodel, buffer); // OK
   Mod.LoadEdges(loadmodel, buffer);
   Mod.LoadSurfedges(loadmodel, buffer); // OK
@@ -1085,7 +1114,6 @@ Mod.LoadBrushModel = function(loadmodel, buffer) {
   Mod.LoadNodes(loadmodel, buffer);
   Mod.LoadClipnodes(loadmodel, buffer);
   Mod.MakeHull0(loadmodel);
-  Mod.LoadEntities(loadmodel, buffer);
   Mod.LoadSubmodels(loadmodel, buffer);
   Mod.LoadBSPX(loadmodel, buffer);
   Mod.LoadLightingRGB(loadmodel, buffer);

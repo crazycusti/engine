@@ -34,7 +34,7 @@ export class Face {
   extents = [0, 0];
 
   // lightmap scaling
-  lmshift = 3;
+  lmshift = null;
 
   turbulent = false;
   sky = false;

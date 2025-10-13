@@ -1527,6 +1527,12 @@ R.InitTextures = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  R.normal_up_texture = gl.createTexture();
+  GL.Bind(0, R.normal_up_texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 };
 
 R.InitShaders = async function() {
@@ -1544,7 +1550,7 @@ R.InitShaders = async function() {
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uUseVertexLighting'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -1586,7 +1592,7 @@ R.InitShaders = async function() {
 
     // rendering water brushes
     GL.CreateProgram('turbulent',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime', 'uFogColor', 'uFogParams', 'uUseVertexLighting'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uTime', 'uFogColor', 'uFogParams', 'uPerformDotLighting'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -2379,7 +2385,7 @@ R.DrawBrushModel = function(e) {
     const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
-    gl.uniform4fv(program.uLightVec, [...lightVector, 1.0]);
+    gl.uniform4fv(program.uLightVec, [...lightVector, 64.0]); // FIXME: calculate/fetch the right light radius value
   } else {
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
@@ -2403,6 +2409,10 @@ R.DrawBrushModel = function(e) {
   GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
   GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
   GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
+  GL.Bind(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
+
+  gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
+
   for (let i = 0; i < clmodel.chains.length; i++) {
     const chain = clmodel.chains[i];
     const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
@@ -2413,7 +2423,7 @@ R.DrawBrushModel = function(e) {
     textureA.glt.bind(program.tTextureA);
     textureB.glt.bind(program.tTextureB);
 
-    gl.uniform1i(program.uUseVertexLighting, !clmodel.textures[chain[0]].normal ? 1 : 0);
+    gl.uniform1i(program.uPerformDotLighting, clmodel.textures[chain[0]].normal ? 1 : 0);
 
     for (const [slot, samplerId] of Object.entries({
       luminance: 'tLuminance',
@@ -2514,6 +2524,9 @@ R.DrawWorld = function() {
   }
   GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
   GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
+  GL.Bind(program.tDeluxemap, R.deluxemap_texture);
+
+  gl.uniform1f(program.uHaveDeluxemap, 1.0); // TODO: check if deluxemap is actually present
 
   for (let i = 0; i < clmodel.leafs.length; i++) {
     const leaf = clmodel.leafs[i];
@@ -2559,7 +2572,7 @@ R.DrawWorld = function() {
         R.notexture.bind(program.tTextureB);
       }
 
-      gl.uniform1i(program.uUseVertexLighting, !clmodel.textures[cmds[0]].normal ? 1 : 0);
+      gl.uniform1i(program.uPerformDotLighting, clmodel.textures[cmds[0]].normal ? 1 : 0);
 
       for (const [slot, samplerId] of Object.entries({
         luminance: 'tLuminance',

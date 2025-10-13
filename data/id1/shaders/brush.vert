@@ -5,7 +5,8 @@ uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform vec4 uLightVec;
 
-uniform bool uUseVertexLighting;
+uniform bool uPerformDotLighting;
+uniform bool uHaveDeluxemap;
 
 attribute vec3 aPosition;
 attribute vec3 aNormal;
@@ -30,24 +31,23 @@ uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
   vec3 worldPos = uAngles * aPosition + uOrigin;
-  // vec3 worldPos = aPosition + uOrigin;
   vec3 position = uViewAngles * (worldPos - uViewOrigin);
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
   vTexCoord = aTexCoord;
   vLightStyle = aLightStyle;
   // view vector in world space (from surface to camera)
   vViewVec = normalize(worldPos - uViewOrigin);
+  vLightVec = normalize(worldPos - uLightVec.xyz);
   // calculate stuff for per-pixel lighting
-  if (!uUseVertexLighting) {
-    vLightVec = normalize(worldPos - uLightVec.xyz);
+  if (uPerformDotLighting) {
     float dist = length(worldPos - uLightVec.xyz);
     vLightMix = clamp(uLightVec.w / dist, 0.0, 1.0);
     vNormal = normalize(uAngles * aNormal);
     vTangent = normalize(uAngles * aTangent);
     vBitangent = normalize(uAngles * aBitangent);
   } else {
-    vLightVec = normalize(worldPos - uLightVec.xyz);
     vLightDot = dot(uAngles * aNormal, vLightVec);
+    vLightMix = 1.0;
   }
 
   // fog stuff
