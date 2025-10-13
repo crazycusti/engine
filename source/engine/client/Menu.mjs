@@ -66,7 +66,7 @@ M.DrawTextBox = function(x, y, width, lines) {
 
   cy = y;
   M.DrawPic(x, cy, M.box_tl);
-  for (n = 0; n < lines; ++n) {
+  for (n = 0; n < lines; n++) {
     M.DrawPic(x, cy += 8, M.box_ml);
   }
   M.DrawPic(x, cy + 8, M.box_bl);
@@ -77,7 +77,7 @@ M.DrawTextBox = function(x, y, width, lines) {
     cy = y;
     M.DrawPic(cx, y, M.box_tm);
     p = M.box_mm;
-    for (n = 0; n < lines; ++n) {
+    for (n = 0; n < lines; n++) {
       M.DrawPic(cx, cy += 8, p);
       if (n === 0) {
         p = M.box_mm2;
@@ -90,7 +90,7 @@ M.DrawTextBox = function(x, y, width, lines) {
 
   cy = y;
   M.DrawPic(cx, cy, M.box_tr);
-  for (n = 0; n < lines; ++n) {
+  for (n = 0; n < lines; n++) {
     M.DrawPic(cx, cy += 8, M.box_mr);
   }
   M.DrawPic(cx, cy + 8, M.box_br);

@@ -205,7 +205,7 @@ Host.ShutdownServer = function(isCrashShutdown) { // TODO: SV duties
         continue;
       }
       NET.GetMessage(Host.client.netconnection);
-      ++count;
+      count++;
     }
     if ((Sys.FloatTime() - start) > 3.0) {
       break;
@@ -1320,13 +1320,13 @@ Host.Kick_f = function() { // FIXME: Host.client
   }
   const save = Host.client;
   const s = argv[1].toLowerCase();
-  let i; let byNumber;
+  let i; let byNumber = false;
   if ((argv.length >= 3) && (s === '#')) {
     i = Q.atoi(argv[2]) - 1;
     if ((i < 0) || (i >= SV.svs.maxclients)) {
       return;
     }
-    if (SV.svs.clients[i].active !== true) {
+    if (!SV.svs.clients[i].active) {
       return;
     }
     Host.client = SV.svs.clients[i];
@@ -1334,7 +1334,7 @@ Host.Kick_f = function() { // FIXME: Host.client
   } else {
     for (i = 0; i < SV.svs.maxclients; i++) {
       Host.client = SV.svs.clients[i];
-      if (Host.client.active !== true) {
+      if (!Host.client.active) {
         continue;
       }
       if (Host.client.name.toLowerCase() === s) {
@@ -1369,16 +1369,16 @@ Host.Kick_f = function() { // FIXME: Host.client
   let dropReason = 'Kicked by ' + who;
   if (message.data !== null) {
     let p = 0;
-    if (byNumber === true) {
-      ++p;
-      for (; p < message.data.length; ++p) {
+    if (byNumber) {
+      p++;
+      for (; p < message.data.length; p++) {
         if (message.data.charCodeAt(p) !== 32) {
           break;
         }
       }
       p += argv[2].length;
     }
-    for (; p < message.data.length; ++p) {
+    for (; p < message.data.length; p++) {
       if (message.data.charCodeAt(p) !== 32) {
         break;
       }

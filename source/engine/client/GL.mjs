@@ -451,20 +451,20 @@ function scaleTextureDimensions(width, height) {
   let scaledHeight = height;
 
   if (((width & (width - 1)) !== 0) || ((height & (height - 1)) !== 0)) {
-    --scaledWidth;
+    scaledWidth--;
     scaledWidth |= (scaledWidth >> 1);
     scaledWidth |= (scaledWidth >> 2);
     scaledWidth |= (scaledWidth >> 4);
     scaledWidth |= (scaledWidth >> 8);
     scaledWidth |= (scaledWidth >> 16);
-    ++scaledWidth;
-    --scaledHeight;
+    scaledWidth++;
+    scaledHeight--;
     scaledHeight |= (scaledHeight >> 1);
     scaledHeight |= (scaledHeight >> 2);
     scaledHeight |= (scaledHeight >> 4);
     scaledHeight |= (scaledHeight >> 8);
     scaledHeight |= (scaledHeight >> 16);
-    ++scaledHeight;
+    scaledHeight++;
   }
 
   if (scaledWidth > GL.maxtexturesize) {
@@ -638,7 +638,7 @@ GL.UseProgram = function(identifier, flushStream) {
   }
   GL.currentProgram = program;
   gl.useProgram(program.program);
-  for (let attrib = 0; enableAttribs !== 0 || disableAttribs !== 0; ++attrib) {
+  for (let attrib = 0; enableAttribs !== 0 || disableAttribs !== 0; attrib++) {
     const mask = 1 << attrib;
     if ((enableAttribs & mask) !== 0) {
       gl.enableVertexAttribArray(attrib);

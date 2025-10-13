@@ -1612,8 +1612,8 @@ SV.CheckBottom = function(ent) {
   }
   let bottom = trace.endpos[2];
   const mid = bottom;
-  for (let x = 0; x <= 1; ++x) {
-    for (let y = 0; y <= 1; ++y) {
+  for (let x = 0; x <= 1; x++) {
+    for (let y = 0; y <= 1; y++) {
       start[0] = stop[0] = (x !== 0) ? maxs[0] : mins[0];
       start[1] = stop[1] = (y !== 0) ? maxs[1] : mins[1];
       trace = SV.Move(start, Vector.origin, Vector.origin, stop, SV.move.nomonsters, ent);
@@ -2128,14 +2128,13 @@ SV.PushMove = function(pusher, movetime) {
   pusher.entity.origin = pushorig;
   pusher.entity.ltime += movetime;
   SV.LinkEdict(pusher);
-  let check; let movetype;
   const moved = [];
-  for (let e = 1; e < SV.server.num_edicts; ++e) {
-    check = SV.server.edicts[e];
+  for (let e = 1; e < SV.server.num_edicts; e++) {
+    const check = SV.server.edicts[e];
     if (check.isFree() === true) {
       continue;
     }
-    movetype = check.entity.movetype;
+    const movetype = check.entity.movetype;
     if ((movetype === SV.movetype.push) || (movetype === SV.movetype.none) || (movetype === SV.movetype.noclip)) {
       continue;
     }
@@ -2229,9 +2228,9 @@ SV.CheckStuck = function(ent) {
     return;
   }
   const norg = ent.entity.origin.copy();
-  for (norg[2] = 0.0; norg[2] <= 17.0; ++norg[2]) {
-    for (norg[0] = -1.0; norg[0] <= 1.0; ++norg[0]) {
-      for (norg[1] = -1.0; norg[1] <= 1.0; ++norg[1]) {
+  for (norg[2] = 0.0; norg[2] <= 17.0; norg[2]++) {
+    for (norg[0] = -1.0; norg[0] <= 1.0; norg[0]++) {
+      for (norg[1] = -1.0; norg[1] <= 1.0; norg[1]++) {
         ent.entity.origin = ent.entity.origin.set(norg).add(norg);
         if (SV.TestEntityPosition(ent) !== true) {
           Con.DPrint('Unstuck.\n');

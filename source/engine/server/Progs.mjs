@@ -1174,7 +1174,7 @@ PR.Profile_f = function() {
       }
       Con.Print(profile + ' ' + PR.GetString(best.name) + '\n');
     }
-    ++num;
+    num++;
     best.profile = 0;
   }
 };
@@ -1236,12 +1236,12 @@ PR.ExecuteProgram = function(fnum) {
   let st; let ed; let ptr; let newf;
 
   for (;;) {
-    ++s;
+    s++;
     st = PR.statements[s];
     if (--runaway === 0) {
       PR.RunError('runaway loop error');
     }
-    ++PR.xfunction.profile;
+    PR.xfunction.profile++;
     PR.xstatement = s;
     if (PR.trace) {
       PR.PrintStatement(st);
@@ -1475,7 +1475,7 @@ PR.ExecuteProgram = function(fnum) {
 
 PR.GetString = function(num) {
   const string = [];
-  for (; num < PR.strings.length; ++num) {
+  for (; num < PR.strings.length; num++) {
     if (PR.strings[num] === 0) {
       break;
     }

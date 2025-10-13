@@ -581,7 +581,7 @@ export default class MSG {
       return -1;
     }
     const c = (new Int8Array(NET.message.data, MSG.readcount, 1))[0];
-    ++MSG.readcount;
+    MSG.readcount++;
     // MSG._messageLog.push({type: 'char', value: c});
     return c;
   }
@@ -593,7 +593,7 @@ export default class MSG {
       return -1;
     }
     const c = (new Uint8Array(NET.message.data, MSG.readcount, 1))[0];
-    ++MSG.readcount;
+    MSG.readcount++;
     // MSG._messageLog.push({type: 'byte', value: c});
     return c;
   }

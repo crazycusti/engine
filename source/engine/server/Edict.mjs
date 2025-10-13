@@ -117,21 +117,21 @@ export class ED {
     if (SV.server.active !== true) {
       return;
     }
-    let i; let ent; let active = 0; let models = 0; let solid = 0; let step = 0;
-    for (i = 0; i < SV.server.num_edicts; i++) {
-      ent = SV.server.edicts[i];
+    let active = 0, models = 0, solid = 0, step = 0;
+    for (let i = 0; i < SV.server.num_edicts; i++) {
+      const ent = SV.server.edicts[i];
       if (ent.isFree() === true) {
         continue;
       }
-      ++active;
+      active++;
       if (ent.entity.solid) {
-        ++solid;
+        solid++;
       }
       if (ent.entity.model) {
-        ++models;
+        models++;
       }
       if (ent.entity.movetype === SV.movetype.step) {
-        ++step;
+        step++;
       }
     }
     const num_edicts = SV.server.num_edicts;

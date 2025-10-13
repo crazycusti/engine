@@ -180,7 +180,7 @@ NET.SendToAll = function(data) {
       state1[i] = state2[i] = true;
       continue;
     }
-    ++count;
+    count++;
     state1[i] = state2[i] = false;
   }
   const start = Sys.FloatTime();
@@ -195,7 +195,7 @@ NET.SendToAll = function(data) {
         } else {
           NET.GetMessage(Host.client.netconnection);
         }
-        ++count;
+        count++;
         continue;
       }
       if (state2[i] !== true) {
@@ -204,7 +204,7 @@ NET.SendToAll = function(data) {
         } else {
           NET.GetMessage(Host.client.netconnection);
         }
-        ++count;
+        count++;
       }
     }
     if ((Sys.FloatTime() - start) > 5.0) {

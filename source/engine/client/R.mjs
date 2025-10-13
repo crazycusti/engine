@@ -107,7 +107,7 @@ R.RenderDlights = function() {
   if (R.flashblend.value === 0) {
     return;
   }
-  ++R.dlightframecount;
+  R.dlightframecount++;
   gl.enable(gl.BLEND);
   const program = GL.UseProgram('dlight'); let a;
   gl.bindBuffer(gl.ARRAY_BUFFER, R.dlightvecs);
@@ -217,7 +217,7 @@ R.PushDlights = function() {
     break;
   }
 
-  ++R.dlightframecount;
+  R.dlightframecount++;
 };
 
 R.RecursiveLightPoint = function(node, start, end) {
@@ -2182,13 +2182,13 @@ R.AddDynamicLights = function(surf) {
       impact.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3] - surf.texturemins[0],
       impact.dot(new Vector(...tex.vecs[1])) + tex.vecs[1][3] - surf.texturemins[1],
     ];
-    for (let t = 0; t < tmax; ++t) {
+    for (let t = 0; t < tmax; t++) {
       let td = local[1] - (t << surf.lmshift);
       if (td < 0.0) {
         td = -td;
       }
       td = Math.floor(td);
-      for (let s = 0; s < smax; ++s) {
+      for (let s = 0; s < smax; s++) {
         let sd = local[0] - (s << surf.lmshift);
         if (sd < 0) {
           sd = -sd;
@@ -2210,10 +2210,10 @@ R.AddDynamicLights = function(surf) {
     }
   }
 
-  for (let t = 0, i = 0; t < tmax; ++t) {
+  for (let t = 0, i = 0; t < tmax; t++) {
     R.lightmap_modified[surf.light_t + t] = true;
     const dest = ((surf.light_t + t) << 10) + surf.light_s;
-    for (let s = 0; s < smax; ++s) {
+    for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;
       const blrgb = [
         Math.min(Math.floor(blocklights[i * 3] / 128), 255),
