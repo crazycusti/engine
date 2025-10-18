@@ -38,7 +38,7 @@ void main(void) {
   vLightStyle = aLightStyle;
   // view vector in world space (from surface to camera)
   vViewVec = normalize(worldPos - uViewOrigin);
-  vLightVec = normalize(uLightVec.xyz - worldPos) * uAngles;
+  vLightVec = normalize(worldPos - uLightVec.xyz * uAngles);
   // calculate stuff for per-pixel lighting
   if (uPerformDotLighting) {
     float dist = length(uLightVec.xyz - worldPos);

@@ -333,6 +333,7 @@ class MainMenu extends BaseMenu {
 
 * brush model lighting fixes applied
 * avelocity can be applied to push type things, however everything else is not implemented yet
+* let GPT-5-Codex refactor CL.mjs into smaller files, it did not go soo badly
 
 ### 2025-10-14
 

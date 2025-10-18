@@ -1,5 +1,5 @@
 import Cvar from '../common/Cvar.mjs';
-import Cmd from '../common/Cmd.mjs';
+import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import * as Def from '../common/Def.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
 import ClientInput from './ClientInput.mjs';
@@ -79,7 +79,11 @@ export default class ClientLifecycle {
   }
 
   static #registerCommands() {
-    Cmd.AddCommand('entities', () => clientRuntimeState.clientEntities.printEntities());
+    Cmd.AddCommand('entities', class EntitiesCommand extends ConsoleCommand {
+      run() {
+        clientRuntimeState.clientEntities.printEntities();
+      }
+    });
     Cmd.AddCommand('disconnect', CL.Disconnect);
     Cmd.AddCommand('record', CL.Record_f);
     Cmd.AddCommand('stop', CL.Stop_f);
