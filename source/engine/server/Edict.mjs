@@ -713,6 +713,6 @@ MSG.RegisterSerializableType(ServerEdict, {
    */
   // eslint-disable-next-line no-unused-vars
   deserializeOnClient(sz) {
-    return CL.EntityNum(MSG.ReadShort());
+    return CL.state.clientEntities.getEntity(MSG.ReadShort());
   },
 });

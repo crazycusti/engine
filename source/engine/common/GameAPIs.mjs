@@ -669,7 +669,7 @@ export class ClientEngineAPI extends CommonEngineAPI {
    * @returns {ClientDlight} dynamic light instance
    */
   static AllocDlight(entityId) {
-    return CL.AllocDlight(entityId);
+    return CL.state.clientEntities.allocateDynamicLight(entityId);
   }
 
   /**

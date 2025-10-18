@@ -13,6 +13,7 @@ import VID from '../client/VID.mjs';
 import { HostError } from './Errors.mjs';
 import CDAudio from '../client/CDAudio.mjs';
 import { content, gameCapabilities } from '../../shared/Defs.mjs';
+import ClientLifecycle from '../client/ClientLifecycle.mjs';
 
 const Host = {};
 
@@ -379,7 +380,7 @@ Host._Frame = function() {
   CL.SetUpPlayerPrediction(true);
 
   // build a refresh entity list
-  CL.EmitEntities();
+  CL.state.clientEntities.emit();
 
   SCR.UpdateScreen();
 
@@ -992,7 +993,7 @@ Host.Loadgame_f = function (savename) {
   const client = SV.svs.clients[0];
   client.spawn_parms = gamestate.spawn_parms;
 
-  CL.ResumeGame(gamestate.clientdata, gamestate.particles);
+  ClientLifecycle.resumeGame(gamestate.clientdata, gamestate.particles);
 };
 
 Host.Name_f = function(...names) { // signon 2, step 1

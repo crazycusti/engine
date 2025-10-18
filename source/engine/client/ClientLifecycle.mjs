@@ -5,6 +5,7 @@ import { gameCapabilities } from '../../shared/Defs.mjs';
 import ClientInput from './ClientInput.mjs';
 import CL from './CL.mjs';
 import { clientRuntimeState } from './ClientState.mjs';
+import { MoveVars, Pmove } from '../common/Pmove.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
@@ -19,8 +20,9 @@ export default class ClientLifecycle {
   static async init() {
     CL.ClearState();
     ClientInput.Init();
-    CL.InitTEnts();
-    CL.InitPmove();
+    clientRuntimeState.clientEntities.initTempEntities(S);
+    CL.pmove = new Pmove();
+    CL.pmove.movevars = new MoveVars();
     this.#registerCvars();
     this.#registerCommands();
     CL.ConfigureConnectionIdentity({ name: CL.name, color: CL.color, rcon_password: CL.rcon_password });
@@ -77,7 +79,7 @@ export default class ClientLifecycle {
   }
 
   static #registerCommands() {
-    Cmd.AddCommand('entities', CL.PrintEntities_f);
+    Cmd.AddCommand('entities', () => clientRuntimeState.clientEntities.printEntities());
     Cmd.AddCommand('disconnect', CL.Disconnect);
     Cmd.AddCommand('record', CL.Record_f);
     Cmd.AddCommand('stop', CL.Stop_f);

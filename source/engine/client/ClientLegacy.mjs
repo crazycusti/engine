@@ -33,7 +33,7 @@ export class DefaultClientEdictHandler extends BaseClientEdictHandler {
       R.EntityParticles(clent);
     }
     if ((clent.effects & effect.EF_MUZZLEFLASH) !== 0) {
-      const dl = CL.AllocDlight(clent.num);
+  const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);
       const fv = clent.angles.angleVectors().forward;
       dl.origin = new Vector(
         clent.origin[0] + 18.0 * fv[0],
@@ -46,13 +46,13 @@ export class DefaultClientEdictHandler extends BaseClientEdictHandler {
       // dl.color = new Vector(1.0, 0.95, 0.85);
     }
     if ((clent.effects & effect.EF_BRIGHTLIGHT) !== 0) {
-      const dl = CL.AllocDlight(clent.num);
+  const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);
       dl.origin = new Vector(clent.origin[0], clent.origin[1], clent.origin[2] + 16.0);
       dl.radius = 400.0 + Math.random() * 32.0;
       dl.die = CL.state.time + 0.001;
     }
     if ((clent.effects & effect.EF_DIMLIGHT) !== 0) {
-      const dl = CL.AllocDlight(clent.num);
+  const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);
       dl.origin = new Vector(clent.origin[0], clent.origin[1], clent.origin[2] + 16.0);
       dl.radius = 200.0 + Math.random() * 32.0;
       dl.die = CL.state.time + 0.001;
@@ -68,7 +68,7 @@ export class DefaultClientEdictHandler extends BaseClientEdictHandler {
       R.RocketTrail(oldorg, clent.origin, 5);
     } else if ((clent.model.flags & modelFlags.MF_ROCKET) !== 0) {
       R.RocketTrail(oldorg, clent.origin, 0);
-      const dl = CL.AllocDlight(clent.num);
+  const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);
       dl.origin = new Vector(clent.origin[0], clent.origin[1], clent.origin[2]);
       dl.radius = 200.0;
       dl.die = CL.state.time + 0.01;

@@ -1,7 +1,7 @@
 import Vector from '../../shared/Vector.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import * as Def from '../common/Def.mjs';
-import { effect } from '../../shared/Defs.mjs';
+import { effect, solid } from '../../shared/Defs.mjs';
 import Chase from './Chase.mjs';
 import { DefaultClientEdictHandler } from './ClientLegacy.mjs';
 import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
@@ -66,7 +66,7 @@ export class ClientBeam {
   start = new Vector();
   end = new Vector();
 
-  /** @type {BaseModel} what model to use to draw the beam */
+  /** @type {import('../common/model/BaseModel.mjs').BaseModel} what model to use to draw the beam */
   model = null;
 
   /** @type {number} */
@@ -367,8 +367,30 @@ export default class ClientEntities {
   num_temp_entities = 0;
   num_visedicts = 0;
 
+  tempEntitySounds = {
+    wizhit: null,
+    knighthit: null,
+    tink1: null,
+    ric1: null,
+    ric2: null,
+    ric3: null,
+    explosion: null,
+  };
+
   constructor() {
     this.clear();
+  }
+
+  initTempEntities(soundSystem) {
+    this.tempEntitySounds = {
+      wizhit: soundSystem.PrecacheSound('wizard/hit.wav'),
+      knighthit: soundSystem.PrecacheSound('hknight/hit.wav'),
+      tink1: soundSystem.PrecacheSound('weapons/tink1.wav'),
+      ric1: soundSystem.PrecacheSound('weapons/ric1.wav'),
+      ric2: soundSystem.PrecacheSound('weapons/ric2.wav'),
+      ric3: soundSystem.PrecacheSound('weapons/ric3.wav'),
+      explosion: soundSystem.PrecacheSound('weapons/r_exp3.wav'),
+    };
   }
 
   /**
@@ -405,6 +427,29 @@ export default class ClientEntities {
 
     for (let i = 0; i < Def.limits.beams; i++) {
       this.beams[i] = new ClientBeam();
+    }
+  }
+
+  setSolidEntities(pmove) {
+    pmove.clearEntities();
+
+    for (const clent of this.getEntities()) {
+      if (clent.num === 0 || !clent.model) {
+        continue;
+      }
+
+      pmove.addEntity(clent, clent.solid === solid.SOLID_BSP ? clent.model : null);
+    }
+  }
+
+  printEntities() {
+    Con.Print('Entities:\n');
+    for (const ent of this.getEntities()) {
+      if (!ent.model) {
+        continue;
+      }
+
+      Con.Print(`${ent}\n`);
     }
   }
 
@@ -555,7 +600,7 @@ export default class ClientEntities {
 
       while (d > 0.0) {
         // non-vanilla feature: colors and fullbright beam (TODO: feature flag)
-        const dl = CL.AllocDlight(0);
+        const dl = this.allocateDynamicLight(0);
         dl.origin = org.copy();
         dl.radius = 50;
         dl.die = CL.state.time + 0.1;

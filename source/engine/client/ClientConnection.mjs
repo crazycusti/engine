@@ -8,6 +8,7 @@ import { clientRuntimeState, clientStaticState } from './ClientState.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import * as Def from '../common/Def.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
+import { parseServerMessage as parseServerCommandMessage } from './ClientServerCommandHandlers.mjs';
 
 let { Con, Host, IN, Mod, NET, SCR, S, SV } = registry;
 
@@ -32,6 +33,8 @@ export default class ClientConnection {
       color: null,
       rcon_password: null,
     };
+    this.processingServerDataState = 0;
+    this.lastServerMessages = [];
   }
 
   configureIdentityCvars({ name, color, rcon_password }) {
@@ -140,6 +143,8 @@ export default class ClientConnection {
 
     this.state.clear();
     this.cls.clear();
+    this.processingServerDataState = 0;
+    this.lastServerMessages.length = 0;
   }
 
   disconnect() {
@@ -258,6 +263,52 @@ export default class ClientConnection {
         return;
       default:
         throw new HostError('Received invalid signon state: ' + this.cls.signon);
+    }
+  }
+
+  readFromServer(CL) {
+    while (true) {
+      if (this.processingServerDataState === 1) {
+        return;
+      }
+
+      let ret;
+      if (this.processingServerDataState === 2) {
+        this.processingServerDataState = 3;
+      } else {
+        ret = this.getMessage();
+        if (ret === -1) {
+          throw new HostError('CL.ReadFromServer: lost server connection');
+        }
+        if (ret === 0) {
+          break;
+        }
+      }
+
+      this.state.last_received_message = Host.realtime;
+      this.parseServerMessage(CL);
+      if (this.cls.state !== Def.clientConnectionState.connected) {
+        break;
+      }
+    }
+
+    if (CL.shownet.value !== 0) {
+      Con.Print('\n');
+    }
+  }
+
+  parseServerMessage(CL) {
+    parseServerCommandMessage(CL);
+  }
+
+  printLastServerMessages() {
+    if (this.lastServerMessages.length === 0) {
+      return;
+    }
+
+    Con.Print('Last server messages:\n');
+    for (const cmd of this.lastServerMessages) {
+      Con.Print(' ' + cmd + '\n');
     }
   }
 }
