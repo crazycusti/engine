@@ -1189,6 +1189,7 @@ R.MakeBrushModelDisplayLists = function(m) {
   const cmds = [];
   const styles = [0.0, 0.0, 0.0, 0.0];
   let verts = 0;
+  let cutoff = 0;
   m.chains = [];
   for (let i = 0; i < m.textures.length; i++) {
     const texture = m.textures[i];
@@ -1238,6 +1239,7 @@ R.MakeBrushModelDisplayLists = function(m) {
       verts += chain[2];
     }
   }
+  cutoff = cmds.length;
   m.waterchain = verts * 80;
   verts = 0;
   for (let i = 0; i < m.textures.length; i++) {
@@ -1289,7 +1291,7 @@ R.MakeBrushModelDisplayLists = function(m) {
     }
   }
 
-  // R.CalculateTagentBitagents(cmds, cutoff);
+  R.CalculateTagentBitagents(cmds, cutoff);
 
   m.cmds = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
@@ -2377,22 +2379,22 @@ R.DrawBrushModel = function(e) {
   }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-  const viewMatrix = e.angles.toRotationMatrix();
+  const viewMatrix = e.lerp.angles.toRotationMatrix();
 
   let program = GL.UseProgram('brush');
 
   if (!clmodel.submodel) {
-    const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
+    const [ambientlight, shadelight, lightPosition] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
-    gl.uniform4fv(program.uLightVec, [...lightVector, 64.0]); // FIXME: calculate/fetch the right light radius value
+    gl.uniform4fv(program.uLightVec, [...lightPosition, 64.0]); // FIXME: calculate/fetch the right light radius value
   } else {
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
     gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
   }
 
-  gl.uniform3fv(program.uOrigin, e.origin);
+  gl.uniform3fv(program.uOrigin, e.lerp.origin);
   gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
   gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
   gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, 12);
@@ -2424,6 +2426,21 @@ R.DrawBrushModel = function(e) {
     textureB.glt.bind(program.tTextureB);
 
     gl.uniform1i(program.uPerformDotLighting, clmodel.textures[chain[0]].normal ? 1 : 0);
+
+    const lightVector = new Vector(0, 0, 0);
+    let lightRadius = 0;
+
+    // naive approach of getting the next best light
+    for (const l of CL.state.clientEntities.dlights) {
+      if (l.die < CL.state.time || l.radius === 0.0) {
+        continue;
+      }
+
+      lightVector.set(l.origin);
+      lightRadius = l.radius;
+    }
+
+    gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
 
     for (const [slot, samplerId] of Object.entries({
       luminance: 'tLuminance',

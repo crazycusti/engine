@@ -329,6 +329,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-18
+
+* brush model lighting fixes applied
+* avelocity can be applied to push type things, however everything else is not implemented yet
+
 ### 2025-10-14
 
 * reading out worldspawn’s config is implemented, lmscale is now read out from the map

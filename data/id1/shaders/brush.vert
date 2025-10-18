@@ -24,6 +24,7 @@ varying vec3 vLightVec;
 varying float vLightMix;
 varying vec3 vTangent;
 varying vec3 vBitangent;
+varying mat3 vAngles;
 
 varying vec3 vViewVec;
 uniform vec3 uFogColor;
@@ -37,14 +38,15 @@ void main(void) {
   vLightStyle = aLightStyle;
   // view vector in world space (from surface to camera)
   vViewVec = normalize(worldPos - uViewOrigin);
-  vLightVec = normalize(worldPos - uLightVec.xyz);
+  vLightVec = normalize(uLightVec.xyz - worldPos) * uAngles;
   // calculate stuff for per-pixel lighting
   if (uPerformDotLighting) {
-    float dist = length(worldPos - uLightVec.xyz);
+    float dist = length(uLightVec.xyz - worldPos);
     vLightMix = clamp(uLightVec.w / dist, 0.0, 1.0);
     vNormal = normalize(uAngles * aNormal);
     vTangent = normalize(uAngles * aTangent);
     vBitangent = normalize(uAngles * aBitangent);
+    vAngles = uAngles;
   } else {
     vLightDot = dot(uAngles * aNormal, vLightVec);
     vLightMix = 1.0;

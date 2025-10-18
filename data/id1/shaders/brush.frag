@@ -31,6 +31,7 @@ varying vec3 vTangent;
 varying vec3 vBitangent;
 varying vec3 vViewVec;
 uniform vec3 uFogColor;
+varying mat3 vAngles;
 
 void main(void) {
   vec4 textureA = texture2D(tTextureA, vTexCoord.xy);
@@ -73,10 +74,14 @@ void main(void) {
       lightDirection.x = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.00)), lightstyle * 43.828125);
       lightDirection.y = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.25)), lightstyle * 43.828125);
       lightDirection.z = dot(texture2D(tDeluxemap, vec2(vTexCoord.z, vTexCoord.w / 4.0 + 0.50)), lightstyle * 43.828125);
+      lightDirection = lightDirection * 2.0 - 1.0;
 
       // CR: Since we are fixing normals when loading the faces, we need to fix the deluxemap accordingly
       lightDirection.x *= vNormal.x > 0.0 ? 1.0 : -1.0;
       lightDirection.y *= vNormal.y > 0.0 ? 1.0 : -1.0;
+
+      // need to adjust for rotation of the surface
+      lightDirection *= vAngles;
     } else {
       // fallback to what the vertex shader has for us
       lightDirection = vLightVec;
@@ -102,7 +107,7 @@ void main(void) {
     b = normalize(cross(n, t));
 
     vec3 N = normalize(t * normalMap.x + b * normalMap.y + n * normalMap.z);
-    vec3 L = normalize(lightDirection * 2.0 - 1.0);
+    vec3 L = normalize(lightDirection);
     vec3 V = normalize(vViewVec);
 
     // Use bumped normal for lighting calculation

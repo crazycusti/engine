@@ -2117,15 +2117,18 @@ SV.PushEntity = function(ent, pushVector) {
  * @param {number} movetime time to move
  */
 SV.PushMove = function(pusher, movetime) {
-  if (pusher.entity.velocity.isOrigin()) {
+  if (pusher.entity.velocity.isOrigin() && pusher.entity.avelocity.isOrigin()) {
     pusher.entity.ltime += movetime;
     return;
   }
   const move = pusher.entity.velocity.copy().multiply(movetime);
+  const rotation = pusher.entity.avelocity.copy().multiply(movetime);
   const mins = pusher.entity.absmin.copy().add(move);
   const maxs = pusher.entity.absmax.copy().add(move);
   const pushorig = pusher.entity.origin.copy().add(move);
+  const pushangle = pusher.entity.angles.copy().add(rotation);
   pusher.entity.origin = pushorig;
+  pusher.entity.angles = pushangle;
   pusher.entity.ltime += movetime;
   SV.LinkEdict(pusher);
   const moved = [];
