@@ -1,0 +1,93 @@
+import Cvar from '../common/Cvar.mjs';
+import Cmd from '../common/Cmd.mjs';
+import * as Def from '../common/Def.mjs';
+import { gameCapabilities } from '../../shared/Defs.mjs';
+import ClientInput from './ClientInput.mjs';
+import CL from './CL.mjs';
+import { clientRuntimeState } from './ClientState.mjs';
+import { ClientEngineAPI } from '../common/GameAPIs.mjs';
+import { eventBus, registry } from '../registry.mjs';
+
+let { PR, S } = registry;
+
+eventBus.subscribe('registry.frozen', () => {
+  PR = registry.PR;
+  S = registry.S;
+});
+
+export default class ClientLifecycle {
+  static async init() {
+    CL.ClearState();
+    ClientInput.Init();
+    CL.InitTEnts();
+    CL.InitPmove();
+    this.#registerCvars();
+    this.#registerCommands();
+    CL.ConfigureConnectionIdentity({ name: CL.name, color: CL.color, rcon_password: CL.rcon_password });
+    CL.sfx_talk = S.PrecacheSound('misc/talk.wav');
+    this.initGame();
+    CL.sbarDisabled = CL.gameCapabilities.includes(gameCapabilities.CAP_HUD_INCLUDES_SBAR);
+  }
+
+  static initGame() {
+    CL.gameCapabilities = PR.capabilities;
+
+    if (!PR.QuakeJS?.identification) {
+      document.title = `${Def.productName} (${Def.productVersion})`;
+      return;
+    }
+
+    document.title = `${PR.QuakeJS.identification.name} (${PR.QuakeJS.identification.version.join('.')}) on ${Def.productName} (${Def.productVersion})`;
+
+    if (PR.QuakeJS.ClientGameAPI) {
+      PR.QuakeJS.ClientGameAPI.Init(ClientEngineAPI);
+    }
+
+    CL.gameCapabilities = PR.QuakeJS.identification.capabilities;
+  }
+
+  static resumeGame(clientdata, particles) {
+    CL.Connect('local');
+    clientRuntimeState.loadClientData = [clientdata, particles];
+  }
+
+  static #registerCvars() {
+    CL.name = new Cvar('_cl_name', 'player', Cvar.FLAG.ARCHIVE);
+    CL.color = new Cvar('_cl_color', '0', Cvar.FLAG.ARCHIVE);
+    CL.upspeed = new Cvar('cl_upspeed', '200');
+    CL.forwardspeed = new Cvar('cl_forwardspeed', '400', Cvar.FLAG.ARCHIVE);
+    CL.backspeed = new Cvar('cl_backspeed', '400', Cvar.FLAG.ARCHIVE);
+    CL.sidespeed = new Cvar('cl_sidespeed', '350');
+    CL.movespeedkey = new Cvar('cl_movespeedkey', '2.0');
+    CL.yawspeed = new Cvar('cl_yawspeed', '140');
+    CL.pitchspeed = new Cvar('cl_pitchspeed', '150');
+    CL.anglespeedkey = new Cvar('cl_anglespeedkey', '1.5');
+    CL.shownet = new Cvar('cl_shownet', '0');
+    CL.nolerp = new Cvar('cl_nolerp', '0', Cvar.FLAG.ARCHIVE);
+    CL.lookspring = new Cvar('lookspring', '0', Cvar.FLAG.ARCHIVE);
+    CL.lookstrafe = new Cvar('lookstrafe', '0', Cvar.FLAG.ARCHIVE);
+    CL.sensitivity = new Cvar('sensitivity', '3', Cvar.FLAG.ARCHIVE);
+    CL.m_pitch = new Cvar('m_pitch', '0.022', Cvar.FLAG.ARCHIVE);
+    CL.m_yaw = new Cvar('m_yaw', '0.022', Cvar.FLAG.ARCHIVE);
+    CL.m_forward = new Cvar('m_forward', '1', Cvar.FLAG.ARCHIVE);
+    CL.m_side = new Cvar('m_side', '0.8', Cvar.FLAG.ARCHIVE);
+    CL.rcon_password = new Cvar('rcon_password', '');
+    CL.nopred = new Cvar('cl_nopred', '0', Cvar.FLAG.NONE, 'Enables/disables client-side prediction');
+    CL.nohud = new Cvar('cl_nohud', '0', Cvar.FLAG.NONE, 'Disables all HUD elements');
+  }
+
+  static #registerCommands() {
+    Cmd.AddCommand('entities', CL.PrintEntities_f);
+    Cmd.AddCommand('disconnect', CL.Disconnect);
+    Cmd.AddCommand('record', CL.Record_f);
+    Cmd.AddCommand('stop', CL.Stop_f);
+    Cmd.AddCommand('playdemo', CL.PlayDemo_f);
+    Cmd.AddCommand('timedemo', CL.TimeDemo_f);
+    Cmd.AddCommand('startdemos', CL.StartDemos_f);
+    Cmd.AddCommand('demos', CL.Demos_f);
+    Cmd.AddCommand('stopdemo', CL.StopDemo_f);
+    Cmd.AddCommand('rcon', CL.Rcon_f);
+    Cmd.AddCommand('serverinfo', CL.ServerInfo_f);
+    Cmd.AddCommand('movearound', CL.MoveAround_f);
+  }
+}

@@ -1,4 +1,4 @@
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import MSG from '../network/MSG.mjs';
 import Q from '../../shared/Q.mjs';
 import * as Def from '../common/Def.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -6,53 +6,34 @@ import Vector from '../../shared/Vector.mjs';
 import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { MoveVars, Pmove, PmovePlayer } from '../common/Pmove.mjs';
-import { EventBus, eventBus, registry } from '../registry.mjs';
+import { eventBus, registry } from '../registry.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { gameCapabilities, solid } from '../../shared/Defs.mjs';
-import { QSocket } from '../network/NetworkDrivers.mjs';
 import ClientDemos from './ClientDemos.mjs';
-import ClientInput from './ClientInput.mjs';
 import { HostError } from '../common/Errors.mjs';
-import ClientEntities, { ClientDlight, ClientEdict } from './ClientEntities.mjs';
-import { ClientMessages, ClientPlayerState } from './ClientMessages.mjs';
+import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
+import { ClientPlayerState } from './ClientMessages.mjs';
 import VID from './VID.mjs';
-import { BaseModel } from '../common/model/BaseModel.mjs';
+import { clientRuntimeState, clientStaticState } from './ClientState.mjs';
+import ClientConnection from './ClientConnection.mjs';
+import ClientLifecycle from './ClientLifecycle.mjs';
+import { parseServerMessage as parseServerCommandMessage } from './ClientServerCommandHandlers.mjs';
 
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
-let { COM, Con, Draw, Host, IN, Mod, NET, PR, R, S, SCR, SV, Sbar, V } = registry;
+let { COM, Con, Draw, Host, Mod, PR, R, S, Sbar } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
   Con = registry.Con;
   Draw = registry.Draw;
   Host = registry.Host;
-  IN = registry.IN;
   Mod = registry.Mod;
-  NET = registry.NET;
   PR = registry.PR;
   R = registry.R;
   S = registry.S;
-  SCR = registry.SCR;
-  SV = registry.SV;
   Sbar = registry.Sbar;
-  V = registry.V;
 });
-
-const clientGameEvents = [
-  'vid.resize',
-  'cvar.changed',
-  'client.paused',
-  'client.unpaused',
-  'client.cdtrack',
-  'client.players.name-changed',
-  'client.players.frags-updated',
-  'client.players.colors-updated',
-  'client.server-info.ready',
-  'client.server-info.updated',
-  'client.damage',
-  'client.chat.message',
-];
 
 export default class CL {
   /** @deprecated – use Def.contentShift */
@@ -65,232 +46,21 @@ export default class CL {
   static pmove = new Pmove();
 
   static #clientDemos = new ClientDemos();
+  static #connection = null;
 
   /** @type {gameCapabilities[]} */
   static gameCapabilities = [];
 
   /** @type {boolean} */
   static sbarDisabled = false;
+  static cls = clientStaticState;
+  static state = clientRuntimeState;
 
-  /** Client Static State – everything here persists across multiple maps or are not directly game related */
-  static cls = class ClientStaticState { // forced to be a class to make eslint/tslint scream about issues
-    /**
-     * Connection signon state:
-     * - 0 = when connecting, waiting for server data, precache, cvars
-     * - 1 = connected, received things to load the map, prespawn
-     * - 2 = received prespawn (statics, baseline), sending name, color
-     * - 3 = spawning the player in game, sending stats
-     * - 4 = connected, in game, ready to play
-     * @type {0|1|2|3|4}
-     */
-    static signon = 0;
-    static state = 0;
-    static spawnparms = '';
-
-    /** changelevel invoked */
-    static changelevel = false;
-
-    /** @type {SzBuffer} outgoing client messages */
-    static message = new SzBuffer(8192, 'CL.cls.message');
-    /** @type {QSocket} current connection */
-    static netcon = null;
-    /** @type {{ message: string, percentage: number }?} */
-    static connecting = null;
-
-    /** @type {{[key: string]: string}} keeps track of Server Cvars (sv_cheats, etc.) */
-    static serverInfo = {};
-
-    static lastcmdsent = 0;
-    static isLocalGame = false;
-
-    /** interval to simulate movement */
-    static movearound = null;
-
-    static get demoplayback() {
-      return CL.#clientDemos.demoplayback;
-    }
-
-    static get demorecording() {
-      return CL.#clientDemos.demorecording;
-    }
-
-    static get demonum() {
-      return CL.#clientDemos.demonum;
-    }
-
-    static set demonum(value) {
-      CL.#clientDemos.demonum = value;
-    }
-
-    static get latency() {
-      return CL.state.scores[CL.state.playernum].ping;
-    }
-
-    static clear() {
-      this.message.clear();
-      this.serverInfo = {};
-      this.lastcmdsent = 0;
-
-      if (this.movearound) {
-        clearInterval(this.movearound);
-        this.movearound = null;
-      }
-    }
-  };
-
-  static state = class ClientState {
-    static clientEntities = new ClientEntities();
-    static clientMessages = new ClientMessages();
-    /** @type {Record<string,{fields: string[], bitsReader: MSG.ReadByte|MSG.ReadShort|MSG.ReadLong}>} */
-    static clientEntityFields = {};
-    /** @type {{[key: string]: import('../../shared/GameInterfaces').SerializableType}} */
-    static clientdata = {};
-    static movemessages = 0;
-    static cmd = new Protocol.UserCmd();
-    static lastcmd = new Protocol.UserCmd();
-    /** @type {number[]} TODO: rename, indicate it’s some lean local player info */
-    static stats = Object.values(Def.stat).fill(0);
-    static items = 0;
-    static item_gettime = new Array(32).fill(0.0);
-    static faceanimtime = 0.0;
-    static cshifts = [
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0, 0.0],
-    ];
-    static viewangles = new Vector();
-    // static velocity = new Vector();
-    static get velocity() { return this.playerentity.velocity; }
-    static punchangle = new Vector();
-    static idealpitch = 0.0;
-    static pitchvel = 0.0;
-    static driftmove = 0.0;
-    static laststop = 0.0;
-    static intermission = 0;
-    /** @type {number} time when the level was completed */
-    static completed_time = 0;
-    static mtime = [0.0, 0.0];
-    /** @type {number} current time */
-    static time = 0.0;
-    /** @type {number} latency */
-    static latency = 0.0;
-    /** @type {number} last received message from server time */
-    static last_received_message = 0.0;
-    /** @type {number} used for position and stuff */
-    static viewentity = 0;
-    /** @type {ClientEdict} the view model */
-    static viewent = null;
-    static cdtrack = 0;
-    static looptrack = 0;
-    /** @type {{name: string, message: string, direct: boolean}[]} chat messages */
-    static chatlog = [];
-    /** @type {BaseModel[]} */
-    static model_precache = [];
-    /** @type {SFX[]} */
-    static sound_precache = [];
-    static levelname = null;
-    static gametype = 0;
-    static onground = false;
-    /** @type {number} maxplayers of the current game */
-    static maxclients = 1;
-    /** @type {ClientScoreSlot[]} */
-    static scores = [];
-    static worldmodel = null;
-    static viewheight = 0;
-    static inwater = false;
-    static nodrift = false;
-    static get playernum() {
-      return this.viewentity - 1;
-    }
-    /** @type {ClientPlayerState} */
-    static get playerstate() {
-      return this.clientMessages.playerstates[CL.state.playernum];
-    }
-    /** @type {ClientEdict} */
-    static get playerentity() {
-      return this.clientEntities.getEntity(CL.state.viewentity);
-    }
-    /** @type {import('../../shared/GameInterfaces').ClientGameInterface} */
-    static gameAPI = null;
-    static paused = false;
-
-    /** event bus solely for engine-game communication, will be reset on every map load */
-    static eventBus = new EventBus('client-game');
-
-    /** @type {Function[]} */
-    static #proxyEventListeners = [];
-
-    /** stores client-game state and particles, things we need to set _after_ signon 4 */
-    static loadClientData = null;
-
-    static clear() {
-      this.clientMessages.clear();
-      this.clientEntities.clear();
-      this.movemessages = 0;
-      this.cmd = new Protocol.UserCmd();
-      this.lastcmd = new Protocol.UserCmd();
-      this.stats = Object.values(Def.stat).map(() => 0);
-      this.items = 0;
-      this.item_gettime.fill(0.0);
-      this.faceanimtime = 0.0;
-      this.viewangles = new Vector();
-      this.punchangle = new Vector();
-      this.idealpitch = 0.0;
-      this.pitchvel = 0.0;
-      this.driftmove = 0.0;
-      this.laststop = 0.0;
-      this.intermission = 0;
-      this.completed_time = 0;
-      this.mtime.fill(0.0);
-      this.time = 0.0;
-      this.last_received_message = 0.0;
-      this.viewentity = 0;
-      this.viewent = new ClientEdict(-1);
-      this.cdtrack = 0;
-      this.looptrack = 0;
-      this.chatlog.length = 0;
-      this.model_precache.length = 0;
-      this.sound_precache.length = 0;
-      this.levelname = null;
-      this.gametype = 0;
-      this.onground = false;
-      this.maxclients = 1;
-      this.scores.length = 0;
-      this.worldmodel = null;
-      this.viewheight = 0;
-      this.inwater = false;
-      this.nodrift = false;
-      this.paused = false;
-      // this.loadClientData = null; -- not clearing this, we want to carry it over upon a load game
-      for (const cshift of this.cshifts) {
-        cshift.fill(0.0);
-      }
-      for (const key of Object.keys(this.clientEntityFields)) {
-        delete this.clientEntityFields[key];
-      }
-      this.#configureProxyEvents();
-    }
-
-    static #configureProxyEvents() {
-      // remove all game event listeners
-      this.eventBus.unsubscribeAll();
-
-      // remove all previous proxy listeners
-      for (const unsubscribe of this.#proxyEventListeners) {
-        unsubscribe();
-      }
-
-      // proxy all relevant events from the client event bus to the game event bus, but not everything
-      for (const event of clientGameEvents) {
-        this.#proxyEventListeners.push(eventBus.subscribe(event, (...args) => this.eventBus.publish(event, ...args)));
-      }
-    }
-  };
+  static {
+    this.#connection = new ClientConnection({ clientDemos: this.#clientDemos });
+    this.cls.bindClientDemos(this.#clientDemos);
+    this.svc_strings = Object.keys(Protocol.svc);
+  }
 
   /** @type {Cvar} */ static nolerp = null;
   /** @type {Cvar} */ static rcon_password = null;
@@ -324,6 +94,11 @@ export default class CL {
   /** @type {SFX} */ static sfx_r_exp3 = null;
   /** @type {SFX} */ static sfx_talk = null;
 
+  /** @type {number} */ static _processingServerDataState = 0;
+  /** @type {string[]} */ static _lastServerMessages = [];
+  /** @type {Protocol.UserCmd} */ static nullcmd = new Protocol.UserCmd();
+
+
   static StartDemos(demos) {
     this.#clientDemos.startDemos(demos);
   }
@@ -347,6 +122,59 @@ export default class CL {
   static NextDemo() { // public, by Host.js, M.js
     this.#clientDemos.playNext();
   };
+
+  static async Init() {
+    return ClientLifecycle.init();
+  }
+
+  static InitGame() {
+    return ClientLifecycle.initGame();
+  }
+
+  static InitPmove() {
+    this.pmove = new Pmove();
+    this.pmove.movevars = new MoveVars();
+  }
+
+  static SetConnectingStep(percentage, message) {
+    CL.#connection.setConnectingStep(percentage, message);
+  }
+
+  static GetMessage() {
+    return CL.#connection.getMessage();
+  }
+
+  static SendCmd() {
+    CL.#connection.sendCmd();
+  }
+
+  static ResetCheatCvars() {
+    CL.#connection.resetCheatCvars();
+  }
+
+  static ClearState() {
+    CL.#connection.clearState();
+  }
+
+  static ConfigureConnectionIdentity(cvars) {
+    CL.#connection.configureIdentityCvars(cvars);
+  }
+
+  static Disconnect() {
+    CL.#connection.disconnect();
+  }
+
+  static CheckConnectingState() {
+    CL.#connection.checkConnectingState();
+  }
+
+  static Connect(host) {
+    CL.#connection.connect(host);
+  }
+
+  static SignonReply() {
+    CL.#connection.signonReply();
+  }
 
   static Stop_f = class StopRecordingCommand extends ConsoleCommand { // private
     run() {
@@ -461,61 +289,6 @@ export default class CL {
     }
   };
 
-  /**
-   * @private
-   * @returns {number}
-   */
-  static GetMessage() { // private
-    // demos are basically recorded server messages
-    if (this.#clientDemos.demoplayback === true) {
-      return this.#clientDemos.getMessage();
-    };
-
-    let r = null;
-
-    while (true) {
-      r = NET.GetMessage(CL.cls.netcon);
-
-      if (r !== 1 && r !== 2) {
-        return r;
-      }
-
-      if (NET.message.cursize === 1 && (new Uint8Array(NET.message.data, 0, 1))[0] === Protocol.svc.nop) {
-        Con.Print('<-- server to client keepalive\n');
-      } else {
-        break;
-      }
-    }
-
-    if (this.#clientDemos.demorecording) {
-      this.#clientDemos.writeDemoMessage();
-    }
-
-    return r;
-  }
-
-  /**
-   * @param {number} percentage percentage of the connection step
-   * @param {string} message loading message
-   */
-  static SetConnectingStep(percentage, message) { // public, by Host.js, probably cleaning up required
-    if (percentage === null && message === null) {
-      this.cls.connecting = null;
-      return;
-    }
-
-    Con.DPrint(`${percentage.toFixed(0).padStart(3, ' ')}% ${message}\n`);
-
-    SCR.con_current = 0; // force Console to disappear
-
-    percentage = Math.round(percentage);
-
-    this.cls.connecting = {
-      percentage,
-      message,
-    };
-  }
-
   static Rcon_f = class extends ConsoleCommand {
     run(...args) { // private
       if (args.length === 0) {
@@ -580,25 +353,6 @@ export default class CL {
     this.state.clientEntities.think();
   }
 
-  static ResetCheatCvars() { // private
-    for (const cvar of Cvar.Filter((/** @type {Cvar} */cvar) => (cvar.flags & Cvar.FLAG.CHEAT) !== 0)) {
-      cvar.reset();
-    }
-  };
-
-  static ClearState() { // private
-    if (!SV.server.active) {
-      Con.DPrint('Clearing memory\n');
-      Mod.ClearAll();
-      this.cls.signon = 0;
-    }
-
-    CL.SetConnectingStep(null, null);
-
-    this.state.clear();
-    this.cls.clear();
-  }
-
   static ParseLightstylePacket() { // private
     const i = MSG.ReadByte();
     if (i >= Def.limits.lightstyles) {
@@ -655,126 +409,7 @@ export default class CL {
   }
 
   static ResumeGame(clientdata, particles) {
-    this.Connect('local');
-    this.state.loadClientData = [clientdata, particles];
-  }
-};
-
-CL.Disconnect = function() { // public, by Host.js
-  CL.SetConnectingStep(null, null);
-  S.StopAllSounds();
-  if (CL.state.gameAPI) {
-    CL.state.gameAPI.shutdown();
-    CL.state.gameAPI = null;
-  }
-  if (CL.cls.demoplayback === true) {
-    CL.StopPlayback();
-  } else if (CL.cls.state === CL.active.connecting) {
-    CL.cls.state = CL.active.disconnected;
-    CL.cls.message.clear();
-  } else if (CL.cls.state === CL.active.connected) {
-    if (CL.cls.demorecording === true) {
-      Cmd.ExecuteString('stopdemo\n');
-    }
-    Con.DPrint('Sending clc_disconnect\n');
-    CL.cls.message.clear();
-    MSG.WriteByte(CL.cls.message, Protocol.clc.disconnect);
-    NET.SendUnreliableMessage(CL.cls.netcon, CL.cls.message);
-    CL.cls.message.clear();
-    NET.Close(CL.cls.netcon);
-    CL.cls.state = CL.active.disconnected;
-    if (SV.server.active === true) {
-      Host.ShutdownServer();
-    }
-  }
-  CL.ClearState(); // clear all client state
-  CL.cls.signon = 0;
-  CL.cls.changelevel = false;
-  CL.ResetCheatCvars();
-  eventBus.publish('client.disconnected');
-};
-
-CL.CheckConnectingState = function() { // public, by Host.js
-  const sock = CL.cls.netcon;
-
-  switch (sock.state) {
-    case QSocket.STATE_CONNECTED:
-      CL.cls.lastcmdsent = Host.realtime;
-      Con.DPrint('CL.Connect: connected to ' + sock.address + '\n');
-      CL.cls.demonum = -1;
-      CL.cls.state = Def.clientConnectionState.connected;
-      CL.cls.signon = 0;
-      CL.SetConnectingStep(10, 'Connecting to ' + sock.address);
-      eventBus.publish('client.connected', sock.address);
-      break;
-
-    case QSocket.STATE_CONNECTING:
-      break;
-
-    case QSocket.STATE_DISCONNECTED:
-      throw new HostError('CL.CheckConnectingState: connection failed');
-  }
-};
-
-CL.Connect = function(host) { // public, by Host.js
-  if (CL.cls.demoplayback === true) {
-    return;
-  }
-  CL.Disconnect();
-  CL.SetConnectingStep(5, 'Connecting to ' + host);
-
-  if (host === 'local') {
-    CL.cls.isLocalGame = true;
-  } else {
-    CL.cls.isLocalGame = false;
-  }
-
-  CL.cls.state = Def.clientConnectionState.connecting;
-  CL.cls.lastcmdsent = Host.realtime;
-
-  eventBus.publish('client.connecting', host);
-
-  const sock = NET.Connect(host);
-
-  if (sock === null) {
-    throw new HostError('CL.Connect: connect failed\n');
-  }
-
-  CL.cls.netcon = sock;
-};
-
-CL.SignonReply = function() { // private
-  Con.DPrint('CL.SignonReply: ' + CL.cls.signon + '\n');
-  switch (CL.cls.signon) {
-    case 1:
-      CL.SetConnectingStep(90, 'Waiting for server data');
-      MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-      MSG.WriteString(CL.cls.message, 'prespawn');
-      return;
-    case 2:
-      eventBus.publish('client.server-info.ready', Object.assign({}, CL.cls.serverInfo));
-      CL.SetConnectingStep(95, 'Setting client state');
-      MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-      MSG.WriteString(CL.cls.message, 'name "' + CL.name.string + '"\n');
-      MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-      MSG.WriteString(CL.cls.message, 'color ' + (CL.color.value >> 4) + ' ' + (CL.color.value & 15) + '\n');
-      MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-      MSG.WriteString(CL.cls.message, 'spawn ' + CL.cls.spawnparms);
-      return;
-    case 3:
-      CL.SetConnectingStep(100, 'Joining the game!');
-      MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-      MSG.WriteString(CL.cls.message, 'begin');
-      return;
-    // called when the first entities are received
-    case 4:
-      CL.SetConnectingStep(null, null);
-      SCR.EndLoadingPlaque();
-      Con.forcedup = true;
-      SCR.con_current = 0;
-      CL.cls.changelevel = false;
-      S.LoadPendingFiles();
-      return;
+    ClientLifecycle.resumeGame(clientdata, particles);
   }
 };
 
@@ -824,51 +459,9 @@ CL.ReadFromServer = function() { // public, by Host.js
   // CL.UpdateTEnts();
 };
 
-CL.SendCmd = function() { // public, by Host.js
-  if (CL.cls.state === CL.active.disconnected) {
-    return;
-  }
-
-  if (CL.cls.signon === 4) {
-    ClientInput.BaseMove();
-    IN.Move();
-    ClientInput.SendMove();
-
-    // always include a read back of the time
-    MSG.WriteByte(CL.cls.message, Protocol.clc.sync);
-    MSG.WriteFloat(CL.cls.message, CL.state.clientMessages.mtime[0]);
-  } else if (!CL.cls.isLocalGame && Host.realtime - CL.cls.lastcmdsent > 10.0) {
-    Con.DPrint('<-- client to server keepalive\n');
-    // MSG.WriteByte(CL.cls.message, Protocol.clc.nop);
-  }
-
-  if (CL.cls.demoplayback) {
-    CL.cls.message.clear();
-    return;
-  }
-
-  if (CL.cls.message.cursize === 0) {
-    return;
-  }
-
-  if (NET.CanSendMessage(CL.cls.netcon) !== true) {
-    Con.DPrint('CL.SendCmd: can\'t send\n');
-    return;
-  }
-
-  if (NET.SendMessage(CL.cls.netcon, CL.cls.message) === -1) {
-    throw new HostError('CL.SendCmd: lost server connection');
-  }
-
-  // Con.DPrint('CL.SendCmd: sent ' + CL.cls.message.cursize + ' bytes, clearing\n');
-  CL.cls.message.clear(); // CR: this clear during a local connect will break everything, make sure to only send an clear after signon 4
-
-  CL.cls.lastcmdsent = Host.realtime;
-};
-
 CL.ServerInfo_f = function() { // private
   if (CL.cls.state !== CL.active.connected) {
-    Con.Print(`Can't "${this.command}", not connected\n`);
+    Con.Print('Can\'t "serverinfo", not connected\n');
     return;
   }
 
@@ -879,7 +472,7 @@ CL.ServerInfo_f = function() { // private
 
 CL.MoveAround_f = function() { // private
   if (CL.cls.state !== CL.active.connected) {
-    Con.Print(`Can't "${this.command}", not connected\n`);
+    Con.Print('Can\'t "movearound", not connected\n');
     return;
   }
 
@@ -921,110 +514,6 @@ CL.MoveAround_f = function() { // private
   }, 1000);
 
   Con.Print('Started moving around.\n');
-};
-
-CL.InitPmove = function() { // private
-  CL.pmove = new Pmove();
-  CL.pmove.movevars = new MoveVars();
-};
-
-CL.InitGame = function() { // private
-  // always assume legacy game code first
-  CL.gameCapabilities = PR.capabilities;
-
-  if (!PR.QuakeJS?.identification) {
-    document.title = `${Def.productName} (${Def.productVersion})`;
-    return;
-  }
-
-  document.title = `${PR.QuakeJS.identification.name} (${PR.QuakeJS.identification.version.join('.')}) on ${Def.productName} (${Def.productVersion})`;
-
-  if (PR.QuakeJS.ClientGameAPI) {
-    PR.QuakeJS.ClientGameAPI.Init(ClientEngineAPI);
-  }
-
-  CL.gameCapabilities = PR.QuakeJS.identification.capabilities;
-};
-
-// TODO: CL.Shutdown, CL.ShutdownGame, etc.
-
-CL.Init = async function() { // public, by Host.js
-  CL.ClearState();
-  ClientInput.Init();
-  CL.InitTEnts();
-  CL.InitPmove();
-  CL.name = new Cvar('_cl_name', 'player', Cvar.FLAG.ARCHIVE);
-  CL.color = new Cvar('_cl_color', '0', Cvar.FLAG.ARCHIVE);
-  CL.upspeed = new Cvar('cl_upspeed', '200');
-  CL.forwardspeed = new Cvar('cl_forwardspeed', '400', Cvar.FLAG.ARCHIVE);
-  CL.backspeed = new Cvar('cl_backspeed', '400', Cvar.FLAG.ARCHIVE);
-  CL.sidespeed = new Cvar('cl_sidespeed', '350');
-  CL.movespeedkey = new Cvar('cl_movespeedkey', '2.0');
-  CL.yawspeed = new Cvar('cl_yawspeed', '140');
-  CL.pitchspeed = new Cvar('cl_pitchspeed', '150');
-  CL.anglespeedkey = new Cvar('cl_anglespeedkey', '1.5');
-  CL.shownet = new Cvar('cl_shownet', '0');
-  CL.nolerp = new Cvar('cl_nolerp', '0', Cvar.FLAG.ARCHIVE);
-  CL.lookspring = new Cvar('lookspring', '0', Cvar.FLAG.ARCHIVE);
-  CL.lookstrafe = new Cvar('lookstrafe', '0', Cvar.FLAG.ARCHIVE);
-  CL.sensitivity = new Cvar('sensitivity', '3', Cvar.FLAG.ARCHIVE);
-  CL.m_pitch = new Cvar('m_pitch', '0.022', Cvar.FLAG.ARCHIVE);
-  CL.m_yaw = new Cvar('m_yaw', '0.022', Cvar.FLAG.ARCHIVE);
-  CL.m_forward = new Cvar('m_forward', '1', Cvar.FLAG.ARCHIVE);
-  CL.m_side = new Cvar('m_side', '0.8', Cvar.FLAG.ARCHIVE);
-  CL.rcon_password = new Cvar('rcon_password', '');
-  CL.nopred = new Cvar('cl_nopred', '0', Cvar.FLAG.NONE, 'Enables/disables client-side prediction');
-  CL.nohud = new Cvar('cl_nohud', '0', Cvar.FLAG.NONE, 'Disables all HUD elements');
-  Cmd.AddCommand('entities', CL.PrintEntities_f);
-  Cmd.AddCommand('disconnect', CL.Disconnect);
-  Cmd.AddCommand('record', CL.Record_f);
-  Cmd.AddCommand('stop', CL.Stop_f);
-  Cmd.AddCommand('playdemo', CL.PlayDemo_f);
-  Cmd.AddCommand('timedemo', CL.TimeDemo_f);
-  Cmd.AddCommand('startdemos', CL.StartDemos_f);
-  Cmd.AddCommand('demos', CL.Demos_f);
-  Cmd.AddCommand('stopdemo', CL.StopDemo_f);
-  Cmd.AddCommand('rcon', CL.Rcon_f);
-  Cmd.AddCommand('serverinfo', CL.ServerInfo_f);
-  Cmd.AddCommand('movearound', CL.MoveAround_f);
-  CL.svc_strings = Object.keys(Protocol.svc); // FIXME: turn into a map
-
-  CL.sfx_talk = S.PrecacheSound('misc/talk.wav');
-
-  CL.InitGame();
-
-  CL.sbarDisabled = this.gameCapabilities.includes(gameCapabilities.CAP_HUD_INCLUDES_SBAR);
-};
-
-// parse
-
-CL.svc_strings = [];
-
-CL.ParseStartSoundPacket = function() { // private
-  const field_mask = MSG.ReadByte();
-  const volume = ((field_mask & 1) !== 0) ? MSG.ReadByte() : 255;
-  const attenuation = ((field_mask & 2) !== 0) ? MSG.ReadByte() * 0.015625 : 1.0;
-  const entchannel = MSG.ReadShort();
-  const sound_num = MSG.ReadByte();
-  const ent = entchannel >> 3;
-  const channel = entchannel & 7;
-  const pos = MSG.ReadCoordVector();
-  S.StartSound(ent, channel, CL.state.sound_precache[sound_num], pos, volume / 255.0, attenuation);
-};
-
-CL.ParsePmovevars = function() { // private
-  CL.pmove.movevars.gravity = MSG.ReadFloat();
-  CL.pmove.movevars.stopspeed = MSG.ReadFloat();
-  CL.pmove.movevars.maxspeed = MSG.ReadFloat();
-  CL.pmove.movevars.spectatormaxspeed = MSG.ReadFloat();
-  CL.pmove.movevars.accelerate = MSG.ReadFloat();
-  CL.pmove.movevars.airaccelerate = MSG.ReadFloat();
-  CL.pmove.movevars.wateraccelerate = MSG.ReadFloat();
-  CL.pmove.movevars.friction = MSG.ReadFloat();
-  CL.pmove.movevars.waterfriction = MSG.ReadFloat();
-  CL.pmove.movevars.entgravity = MSG.ReadFloat();
-
-  Con.DPrint('Reconfigured Pmovevars.\n');
 };
 
 class ClientScoreSlot {
@@ -1249,6 +738,35 @@ CL.ParseServerData = function() { // private
   });
 };
 
+CL.ParsePmovevars = function() { // private
+  const movevars = CL.pmove.movevars;
+  movevars.gravity = MSG.ReadFloat();
+  movevars.stopspeed = MSG.ReadFloat();
+  movevars.maxspeed = MSG.ReadFloat();
+  movevars.spectatormaxspeed = MSG.ReadFloat();
+  movevars.accelerate = MSG.ReadFloat();
+  movevars.airaccelerate = MSG.ReadFloat();
+  movevars.wateraccelerate = MSG.ReadFloat();
+  movevars.friction = MSG.ReadFloat();
+  movevars.waterfriction = MSG.ReadFloat();
+  movevars.entgravity = MSG.ReadFloat();
+
+  Con.DPrint('Reconfigured Pmovevars.\n');
+};
+
+CL.ParseStartSoundPacket = function() { // private
+  const fieldMask = MSG.ReadByte();
+  const volume = ((fieldMask & 1) !== 0) ? MSG.ReadByte() : 255;
+  const attenuation = ((fieldMask & 2) !== 0) ? MSG.ReadByte() * 0.015625 : 1.0;
+  const entchannel = MSG.ReadShort();
+  const soundNum = MSG.ReadByte();
+  const ent = entchannel >> 3;
+  const channel = entchannel & 7;
+  const pos = MSG.ReadCoordVector();
+
+  S.StartSound(ent, channel, CL.state.sound_precache[soundNum], pos, volume / 255.0, attenuation);
+};
+
 CL.nullcmd = new Protocol.UserCmd();
 
 CL.ParseStaticEntity = function() { // private
@@ -1330,270 +848,7 @@ CL._processingServerDataState = 0;
 CL._lastServerMessages = [];
 
 CL.ParseServerMessage = function() { // private
-  if (CL.shownet.value === 1) {
-    Con.Print(NET.message.cursize + ' ');
-  } else if (CL.shownet.value === 2) {
-    Con.Print('------------------\n');
-  }
-
-  let entitiesReceived = 0;
-
-  CL.state.onground = false;
-
-  if (CL._processingServerDataState === 1) {
-    return;
-  }
-
-  if (CL._processingServerDataState === 3) {
-    CL._processingServerDataState = 0;
-  } else {
-    CL._lastServerMessages = [];
-    MSG.BeginReading();
-    // Con.DPrint('CL.ParseServerMessage: reading server message\n' + NET.message.toHexString() + '\n');
-  }
-
-  let i;
-  while (CL.cls.state > CL.active.disconnected) {
-    if (CL._processingServerDataState > 0) {
-      break;
-    }
-
-    if (MSG.badread === true) {
-      CL.PrintLastServerMessages();
-      MSG.PrintLastRead();
-      throw new HostError('CL.ParseServerMessage: Bad server message');
-    }
-
-    const cmd = MSG.ReadByte();
-
-    if (cmd === -1) {
-      // End of message
-      break;
-    }
-
-    CL._lastServerMessages.push(CL.svc_strings[cmd]);
-    if (CL._lastServerMessages.length > 10) {
-      CL._lastServerMessages.shift();
-    }
-
-    // Con.DPrint('CL.ParseServerMessage: parsing ' + CL.svc_strings[cmd] + ' ' + cmd + '\n');
-
-    const parser = CL.state.clientMessages;
-
-    switch (cmd) {
-      case Protocol.svc.nop:
-        continue;
-      case Protocol.svc.time:
-        parser.parseTime();
-        continue;
-      case Protocol.svc.clientdata:
-        parser.parseClient();
-        continue;
-      case Protocol.svc.version:
-        i = MSG.ReadLong();
-        if (i !== Protocol.version) {
-          throw new HostError('CL.ParseServerMessage: Server is protocol ' + i + ' instead of ' + Protocol.version + '\n');
-        }
-        continue;
-      case Protocol.svc.disconnect:
-        Host.EndGame(`Server disconnected: ${MSG.ReadString()}`);
-        continue;
-      case Protocol.svc.print:
-        Con.Print(MSG.ReadString());
-        continue;
-      case Protocol.svc.centerprint: {
-          const string = MSG.ReadString();
-          SCR.CenterPrint(string);
-          Con.Print(string + '\n'); // TODO: make it more stand out
-        }
-        continue;
-      case Protocol.svc.chatmsg: // TODO: Client
-        CL.AppendChatMessage(MSG.ReadString(), MSG.ReadString(), MSG.ReadByte() === 1);
-        continue;
-      case Protocol.svc.stufftext:
-        Cmd.text += MSG.ReadString();
-        continue;
-      case Protocol.svc.damage: // TODO: Client
-        V.ParseDamage();
-        continue;
-      case Protocol.svc.serverdata:
-        CL.ParseServerData();
-        SCR.recalc_refdef = true;
-        continue;
-      case Protocol.svc.changelevel: {
-          const mapname = MSG.ReadString();
-          CL.SetConnectingStep(5, 'Changing level to ' + mapname);
-          CL.cls.signon = 0;
-          CL.cls.changelevel = true;
-        }
-        continue;
-      case Protocol.svc.setangle:
-        CL.state.viewangles.set(MSG.ReadAngleVector());
-        continue;
-      case Protocol.svc.setview: // TODO: Client
-        CL.state.viewentity = MSG.ReadShort();
-        continue;
-      case Protocol.svc.lightstyle:
-        CL.ParseLightstylePacket();
-        continue;
-      case Protocol.svc.sound:
-        CL.ParseStartSoundPacket();
-        continue;
-      case Protocol.svc.stopsound:
-        i = MSG.ReadShort(); // first couple of bits are entnum, last 4 bits are channel
-        S.StopSound(i >> 3, i & 7);
-        continue;
-      case Protocol.svc.loadsound:
-        i = MSG.ReadByte();
-        CL.state.sound_precache[i] = S.PrecacheSound(MSG.ReadString());
-        Con.DPrint(`CL.ParseServerMessage: load sound "${CL.state.sound_precache[i].name}" (${CL.state.sound_precache[i].state}) on slot ${i}\n`);
-        continue;
-      case Protocol.svc.updatename: { // TODO: Client
-          i = MSG.ReadByte();
-          if (i >= CL.state.maxclients) {
-            throw new HostError('CL.ParseServerMessage: svc_updatename > MAX_SCOREBOARD');
-          }
-          const newName = MSG.ReadString();
-          // make sure the current player is aware of name changes
-          if (CL.state.scores[i].name !== '' && newName !== '' && newName !== CL.state.scores[i].name) {
-            Con.Print(`${CL.state.scores[i].name} renamed to ${newName}\n`);
-            eventBus.publish('client.players.name-changed', i, CL.state.scores[i].name, newName);
-          }
-          CL.state.scores[i].name = newName;
-        }
-        continue;
-      case Protocol.svc.updatefrags: // TODO: Client Legacy
-        i = MSG.ReadByte();
-        if (i >= CL.state.maxclients) {
-          throw new HostError('CL.ParseServerMessage: svc_updatefrags > MAX_SCOREBOARD');
-        }
-        CL.state.scores[i].frags = MSG.ReadShort();
-        eventBus.publish('client.players.frags-updated', i, CL.state.scores[i].frags);
-        continue;
-      case Protocol.svc.updatecolors: // TODO: Client
-        i = MSG.ReadByte();
-        if (i >= CL.state.maxclients) {
-          throw new HostError('CL.ParseServerMessage: svc_updatecolors > MAX_SCOREBOARD');
-        }
-        CL.state.scores[i].colors = MSG.ReadByte();
-        eventBus.publish('client.players.colors-updated', i, CL.state.scores[i].colors);
-        continue;
-      case Protocol.svc.updatepings:
-        i = MSG.ReadByte();
-        if (i >= CL.state.maxclients) {
-          throw new HostError('CL.ParseServerMessage: svc_updatepings > MAX_SCOREBOARD');
-        }
-        CL.state.scores[i].ping = MSG.ReadShort() / 10;
-        continue;
-      case Protocol.svc.particle: // TODO: Client
-        R.ParseParticleEffect();
-        continue;
-      case Protocol.svc.spawnbaseline:
-        console.assert(false, 'spawnbaseline is not implemented');
-        continue;
-      case Protocol.svc.spawnstatic:
-        CL.ParseStaticEntity();
-        continue;
-      case Protocol.svc.temp_entity: // TODO: Client Legacy
-        CL.ParseTemporaryEntity();
-        continue;
-      case Protocol.svc.setpause:
-        CL.state.paused = MSG.ReadByte() !== 0;
-        if (CL.state.paused) {
-          eventBus.publish('client.paused');
-        } else {
-          eventBus.publish('client.unpaused');
-        }
-        continue;
-      case Protocol.svc.signonnum:
-        i = MSG.ReadByte();
-        if (i <= CL.cls.signon) {
-          throw new HostError('Received signon ' + i + ' when at ' + CL.cls.signon);
-        }
-        console.assert(i >= 0 && i <= 4, 'signon must be in range 0-4');
-        CL.cls.signon = /** @type {0|1|2|3|4} */(i);
-        Con.DPrint(`Received signon ${i}\n`);
-        CL.SignonReply();
-        continue;
-      case Protocol.svc.killedmonster:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'killedmonster requires CAP_LEGACY_UPDATESTAT');
-        CL.state.stats[Def.stat.monsters]++;
-        continue;
-      case Protocol.svc.foundsecret:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'foundsecret requires CAP_LEGACY_UPDATESTAT');
-        CL.state.stats[Def.stat.secrets]++;
-        continue;
-      case Protocol.svc.updatestat:
-        console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'updatestat requires CAP_LEGACY_UPDATESTAT');
-        i = MSG.ReadByte();
-        console.assert(i >= 0 && i < CL.state.stats.length, 'updatestat must be in range');
-        CL.state.stats[i] = MSG.ReadLong();
-        continue;
-      case Protocol.svc.spawnstaticsound: // TODO: Client
-        CL.ParseStaticSound();
-        continue;
-      case Protocol.svc.cdtrack:
-        CL.state.cdtrack = MSG.ReadByte();
-        MSG.ReadByte();
-        if (((CL.cls.demoplayback === true) || (CL.cls.demorecording === true)) && (CL.cls.forcetrack !== -1)) {
-          eventBus.publish('client.cdtrack', CL.cls.forcetrack);
-        } else {
-          eventBus.publish('client.cdtrack', CL.state.cdtrack);
-        }
-        continue;
-      case Protocol.svc.intermission: // TODO: Client
-        CL.state.intermission = 1;
-        CL.state.completed_time = CL.state.time;
-        SCR.recalc_refdef = true;
-        continue;
-      case Protocol.svc.finale: // TODO: Client
-        CL.state.intermission = 2;
-        CL.state.completed_time = CL.state.time;
-        SCR.recalc_refdef = true;
-        SCR.CenterPrint(MSG.ReadString());
-        continue;
-      case Protocol.svc.cutscene:
-        CL.state.intermission = 3;
-        CL.state.completed_time = CL.state.time;
-        SCR.recalc_refdef = true;
-        SCR.CenterPrint(MSG.ReadString());
-        continue;
-      case Protocol.svc.sellscreen: // TODO: Client
-        Cmd.ExecuteString('help');
-        continue;
-      case Protocol.svc.pmovevars:
-        CL.ParsePmovevars();
-        continue;
-      case Protocol.svc.playerinfo:
-        parser.parsePlayer();
-        continue;
-      case Protocol.svc.deltapacketentities:
-        entitiesReceived++;
-        CL.ParsePacketEntities();
-        continue;
-      case Protocol.svc.cvar:
-        CL.ParseServerCvars();
-        continue;
-      case Protocol.svc.clientevent:
-        console.assert(CL.state.gameAPI !== null, 'ClientGameAPI required');
-        CL.state.clientMessages.parseClientEvent();
-        continue;
-    }
-    CL._lastServerMessages.pop(); // discard the last added command as it was invalid anyway
-    CL.PrintLastServerMessages();
-    throw new HostError('CL.ParseServerMessage: Illegible server message\n');
-  }
-
-  // CR: this is a hack to make sure we don't get stuck in the signon state
-  // TODO: rewrite this signon nonsense
-  if (entitiesReceived > 0) {
-    if (CL.cls.signon === 3) {
-      CL.cls.signon = 4;
-      CL.SignonReply();
-    }
-  }
-
-  CL.SetSolidEntities();
+  parseServerCommandMessage(CL);
 };
 
 // tent
@@ -1810,12 +1065,9 @@ CL.PredictUsercmd = function(pmove, from, to, u) { // private
  * Players are predicted twice, first without clipping other players,
  * then with clipping against them.
  * This sets up the first phase.
- * @param {boolean} dopred full prediction, if true
  */
-CL.SetUpPlayerPrediction = function (dopred) { // public, by Host.js
-  const playerEntity = CL.state.playerentity;
-
-
+CL.SetUpPlayerPrediction = function() { // public, by Host.js
+  // TODO: implement prediction setup once client prediction is refactored.
 };
 
 CL.ParsePacketEntities = function() { // private
