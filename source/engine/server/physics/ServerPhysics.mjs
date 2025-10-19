@@ -35,9 +35,9 @@ export class ServerPhysics {
       }
 
       switch (check.entity.movetype) {
-        case SV.movetype.push:
-        case SV.movetype.none:
-        case SV.movetype.noclip:
+        case Defs.moveType.MOVETYPE_PUSH:
+        case Defs.moveType.MOVETYPE_NONE:
+        case Defs.moveType.MOVETYPE_NOCLIP:
           continue;
         default:
       }
@@ -120,10 +120,10 @@ export class ServerPhysics {
     const ent1 = /** @type {*} */ (e1.entity);
     const ent2 = /** @type {*} */ (e2.entity);
 
-    if (ent1.touch && ent1.solid !== SV.solid.not) {
+    if (ent1.touch && ent1.solid !== Defs.solid.SOLID_NOT) {
       ent1.touch(ent2);
     }
-    if (ent2.touch && ent2.solid !== SV.solid.not) {
+    if (ent2.touch && ent2.solid !== Defs.solid.SOLID_NOT) {
       ent2.touch(ent1);
     }
   }
@@ -195,8 +195,8 @@ export class ServerPhysics {
 
       if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
         blocked |= BlockedFlags.FLOOR;
-        if (trace.ent.entity.solid === SV.solid.bsp) {
-          ent.entity.flags |= SV.fl.onground;
+        if (trace.ent.entity.solid === Defs.solid.SOLID_BSP) {
+          ent.entity.flags |= Defs.flags.FL_ONGROUND;
           ent.entity.groundentity = trace.ent.entity;
         }
       } else if (trace.plane.normal[2] === 0.0) {
@@ -288,12 +288,12 @@ export class ServerPhysics {
     const solid = ent.entity.solid;
 
     let nomonsters;
-    if (ent.entity.movetype === SV.movetype.flymissile) {
-      nomonsters = SV.move.missile;
-    } else if (solid === SV.solid.trigger || solid === SV.solid.not) {
-      nomonsters = SV.move.nomonsters;
+    if (ent.entity.movetype === Defs.moveType.MOVETYPE_FLYMISSILE) {
+      nomonsters = Defs.moveTypes.MOVE_MISSILE;
+    } else if (solid === Defs.solid.SOLID_TRIGGER || solid === Defs.solid.SOLID_NOT) {
+      nomonsters = Defs.moveTypes.MOVE_NOMONSTERS;
     } else {
-      nomonsters = SV.move.normal;
+      nomonsters = Defs.moveTypes.MOVE_NORMAL;
     }
 
     const trace = SV.collision.move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, nomonsters, ent);
@@ -339,11 +339,11 @@ export class ServerPhysics {
       }
 
       const movetype = check.entity.movetype;
-      if (movetype === SV.movetype.push || movetype === SV.movetype.none || movetype === SV.movetype.noclip) {
+      if (movetype === Defs.moveType.MOVETYPE_PUSH || movetype === Defs.moveType.MOVETYPE_NONE || movetype === Defs.moveType.MOVETYPE_NOCLIP) {
         continue;
       }
 
-      if (((check.entity.flags & SV.fl.onground) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher)) {
+      if (((check.entity.flags & Defs.flags.FL_ONGROUND) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher)) {
         if (!check.entity.absmin.lt(maxs) || !check.entity.absmax.gt(mins)) {
           continue;
         }
@@ -353,14 +353,14 @@ export class ServerPhysics {
         }
       }
 
-      if (movetype !== SV.movetype.walk) {
-        check.entity.flags &= ~SV.fl.onground;
+      if (movetype !== Defs.moveType.MOVETYPE_WALK) {
+        check.entity.flags &= ~Defs.flags.FL_ONGROUND;
       }
 
       const entorig = check.entity.origin.copy();
       const entangles = check.entity.angles.copy();
       moved[moved.length] = [entorig, entangles, check];
-      pusher.entity.solid = SV.solid.not;
+      pusher.entity.solid = Defs.solid.SOLID_NOT;
 
       let finalMove = move.copy();
 
@@ -378,7 +378,7 @@ export class ServerPhysics {
       }
 
       this.pushEntity(check, finalMove);
-      pusher.entity.solid = SV.solid.bsp;
+      pusher.entity.solid = Defs.solid.SOLID_BSP;
 
       if (SV.collision.testEntityPosition(check)) {
         const cmins = check.entity.mins;
@@ -386,7 +386,7 @@ export class ServerPhysics {
         if (cmins[0] === cmaxs[0]) {
           continue;
         }
-        if (check.entity.solid === SV.solid.not || check.entity.solid === SV.solid.trigger) {
+        if (check.entity.solid === Defs.solid.SOLID_NOT || check.entity.solid === Defs.solid.SOLID_TRIGGER) {
           cmins[0] = cmaxs[0] = 0.0;
           cmins[1] = cmaxs[1] = 0.0;
           cmaxs[2] = cmins[2];
@@ -600,13 +600,13 @@ export class ServerPhysics {
     if (!this.runThink(ent)) {
       return;
     }
-    if ((ent.entity.flags & SV.fl.onground) !== 0) {
+    if ((ent.entity.flags & Defs.flags.FL_ONGROUND) !== 0) {
       return;
     }
 
     this.checkVelocity(ent);
     const movetype = ent.entity.movetype;
-    if (movetype !== SV.movetype.fly && movetype !== SV.movetype.flymissile) {
+    if (movetype !== Defs.moveType.MOVETYPE_FLY && movetype !== Defs.moveType.MOVETYPE_FLYMISSILE) {
       this.addGravity(ent);
     }
 
@@ -617,12 +617,12 @@ export class ServerPhysics {
     }
 
     const velocity = new Vector();
-    this.clipVelocity(ent.entity.velocity, trace.plane.normal, velocity, movetype === SV.movetype.bounce ? 1.5 : 1.0);
+    this.clipVelocity(ent.entity.velocity, trace.plane.normal, velocity, movetype === Defs.moveType.MOVETYPE_BOUNCE ? 1.5 : 1.0);
     ent.entity.velocity = velocity;
 
     if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
-      if (ent.entity.velocity[2] < 60.0 || movetype !== SV.movetype.bounce) {
-        ent.entity.flags |= SV.fl.onground;
+      if (ent.entity.velocity[2] < 60.0 || movetype !== Defs.moveType.MOVETYPE_BOUNCE) {
+        ent.entity.flags |= Defs.flags.FL_ONGROUND;
         ent.entity.groundentity = trace.ent.entity;
         ent.entity.velocity = new Vector();
         ent.entity.avelocity = new Vector();
@@ -638,13 +638,13 @@ export class ServerPhysics {
    */
   physicsStep(ent) {
     const entity = ent.entity;
-    if ((entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
+    if ((entity.flags & (Defs.flags.FL_ONGROUND | Defs.flags.FL_FLY | Defs.flags.FL_SWIM)) === 0) {
       const hitsound = (ent.entity.velocity[2] < (SV.gravity.value * -VELOCITY_EPSILON));
       this.addGravity(ent);
       this.checkVelocity(ent);
       this.flyMove(ent, Host.frametime);
       SV.area.linkEdict(ent, true);
-      if ((entity.flags & SV.fl.onground) !== 0 && hitsound) {
+      if ((entity.flags & Defs.flags.FL_ONGROUND) !== 0 && hitsound) {
         SV.messages.startSound(ent, 0, 'demon/dland2.wav', 255, 1.0);
       }
     }
@@ -672,22 +672,22 @@ export class ServerPhysics {
         continue;
       }
       switch (ent.entity.movetype) {
-        case SV.movetype.push:
+        case Defs.moveType.MOVETYPE_PUSH:
           this.physicsPusher(ent);
           continue;
-        case SV.movetype.none:
+        case Defs.moveType.MOVETYPE_NONE:
           this.runThink(ent);
           continue;
-        case SV.movetype.noclip:
+        case Defs.moveType.MOVETYPE_NOCLIP:
           this.runThink(ent);
           continue;
-        case SV.movetype.step:
+        case Defs.moveType.MOVETYPE_STEP:
           this.physicsStep(ent);
           continue;
-        case SV.movetype.toss:
-        case SV.movetype.bounce:
-        case SV.movetype.fly:
-        case SV.movetype.flymissile:
+        case Defs.moveType.MOVETYPE_TOSS:
+        case Defs.moveType.MOVETYPE_BOUNCE:
+        case Defs.moveType.MOVETYPE_FLY:
+        case Defs.moveType.MOVETYPE_FLYMISSILE:
           this.physicsToss(ent);
           continue;
         default:

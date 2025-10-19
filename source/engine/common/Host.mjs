@@ -12,6 +12,7 @@ import Chase from '../client/Chase.mjs';
 import VID from '../client/VID.mjs';
 import { HostError } from './Errors.mjs';
 import CDAudio from '../client/CDAudio.mjs';
+import * as Defs from '../../shared/Defs.mjs';
 import { content, gameCapabilities } from '../../shared/Defs.mjs';
 import ClientLifecycle from '../client/ClientLifecycle.mjs';
 
@@ -603,8 +604,8 @@ Host.God_f = class extends HostConsoleCommand {
       return;
     }
     const client = this.client;
-    client.edict.entity.flags ^= SV.fl.godmode;
-    if ((client.edict.entity.flags & SV.fl.godmode) === 0) {
+    client.edict.entity.flags ^= Defs.flags.FL_GODMODE;
+    if ((client.edict.entity.flags & Defs.flags.FL_GODMODE) === 0) {
       Host.ClientPrint('godmode OFF\n');
     } else {
       Host.ClientPrint('godmode ON\n');
@@ -621,8 +622,8 @@ Host.Notarget_f = class extends HostConsoleCommand {
       return;
     }
     const client = this.client;
-    client.edict.entity.flags ^= SV.fl.notarget;
-    if ((client.edict.entity.flags & SV.fl.notarget) === 0) {
+    client.edict.entity.flags ^= Defs.flags.FL_NOTARGET;
+    if ((client.edict.entity.flags & Defs.flags.FL_NOTARGET) === 0) {
       Host.ClientPrint('notarget OFF\n');
     } else {
       Host.ClientPrint('notarget ON\n');
@@ -639,14 +640,14 @@ Host.Noclip_f = class extends HostConsoleCommand {
       return;
     }
     const client = this.client;
-    if (client.edict.entity.movetype !== SV.movetype.noclip) {
+    if (client.edict.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
       Host.noclip_anglehack = true;
-      client.edict.entity.movetype = SV.movetype.noclip;
+      client.edict.entity.movetype = Defs.moveType.MOVETYPE_NOCLIP;
       Host.ClientPrint('noclip ON\n');
       return;
     }
     Host.noclip_anglehack = false;
-    client.edict.entity.movetype = SV.movetype.walk;
+    client.edict.entity.movetype = Defs.moveType.MOVETYPE_WALK;
     Host.ClientPrint('noclip OFF\n');
   }
 };
@@ -660,12 +661,12 @@ Host.Fly_f = class extends HostConsoleCommand {
       return;
     }
     const client = this.client;
-    if (client.edict.entity.movetype !== SV.movetype.fly) {
-      client.edict.entity.movetype = SV.movetype.fly;
+    if (client.edict.entity.movetype !== Defs.moveType.MOVETYPE_FLY) {
+      client.edict.entity.movetype = Defs.moveType.MOVETYPE_FLY;
       Host.ClientPrint('flymode ON\n');
       return;
     }
-    client.edict.entity.movetype = SV.movetype.walk;
+    client.edict.entity.movetype = Defs.moveType.MOVETYPE_WALK;
     Host.ClientPrint('flymode OFF\n');
   }
 };

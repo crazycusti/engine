@@ -9,11 +9,7 @@ eventBus.subscribe('registry.frozen', () => {
   SV = registry.SV;
 });
 
-export const moveTypes = Object.freeze({
-  normal: 0,
-  nomonsters: 1,
-  missile: 2,
-});
+// DEPRECATED: moveTypes was moved to Defs.moveTypes
 
 /**
  * Manages spatial partitioning and entity linking for efficient collision detection.
@@ -67,7 +63,7 @@ export class ServerArea {
    */
   hullForEntity(ent, mins, maxs, out_offset) {
     const origin = ent.entity.origin;
-    if (ent.entity.solid !== SV.solid.bsp) {
+    if (ent.entity.solid !== Defs.solid.SOLID_BSP) {
       const emaxs = ent.entity.maxs;
       const emins = ent.entity.mins;
       SV.box_planes[0].dist = emaxs[0] - mins[0];
@@ -80,7 +76,7 @@ export class ServerArea {
       return SV.box_hull;
     }
 
-    console.assert(ent.entity.movetype !== SV.movetype.none,
+    console.assert(ent.entity.movetype !== Defs.moveType.MOVETYPE_NONE,
       'requires SOLID_BSP with MOVETYPE_NONE, use MOVETYPE_PUSH instead');
 
     const model = SV.server.models[ent.entity.modelindex];
@@ -172,7 +168,7 @@ export class ServerArea {
         continue;
       }
 
-      if (!touch.entity.touch || touch.entity.solid !== SV.solid.trigger) {
+      if (!touch.entity.touch || touch.entity.solid !== Defs.solid.SOLID_TRIGGER) {
         continue;
       }
 
@@ -247,7 +243,7 @@ export class ServerArea {
     absmin.add(ent.entity.mins).add(new Vector(-1.0, -1.0, -1.0));
     absmax.add(ent.entity.maxs).add(new Vector(1.0, 1.0, 1.0));
 
-    if ((ent.entity.flags & SV.fl.item) !== 0) {
+    if ((ent.entity.flags & Defs.flags.FL_ITEM) !== 0) {
       absmin.add(new Vector(-14.0, -14.0, 1.0));
       absmax.add(new Vector(14.0, 14.0, -1.0));
     }
@@ -260,7 +256,7 @@ export class ServerArea {
       this.findTouchedLeafs(ent, SV.server.worldmodel.nodes[0]);
     }
 
-    if (ent.entity.solid === SV.solid.not) {
+    if (ent.entity.solid === Defs.solid.SOLID_NOT) {
       return;
     }
 
@@ -275,14 +271,14 @@ export class ServerArea {
       }
     }
 
-    const before = (ent.entity.solid === SV.solid.trigger) ? node.trigger_edicts : node.solid_edicts;
+    const before = (ent.entity.solid === Defs.solid.SOLID_TRIGGER) ? node.trigger_edicts : node.solid_edicts;
     ent.area.next = before;
     ent.area.prev = before.prev;
     ent.area.prev.next = ent.area;
     ent.area.next.prev = ent.area;
     ent.area.ent = ent;
 
-    if (ent.entity.movetype !== SV.movetype.noclip && touchTriggers) {
+    if (ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP && touchTriggers) {
       this.touchLinks(ent, SV.areanodes[0]);
     }
   }

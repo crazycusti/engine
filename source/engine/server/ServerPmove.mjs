@@ -1,5 +1,6 @@
 import { Pmove, Trace } from '../common/Pmove.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import * as Defs from '../../shared/Defs.mjs';
 
 let { SV } = registry;
 
@@ -29,7 +30,7 @@ export class ServerPmove extends Pmove {
     }
 
     const edict = this._currentEdict;
-    const trace = SV.collision.move(start, edict.entity.mins, edict.entity.maxs, end, SV.move.nomonsters, edict);
+    const trace = SV.collision.move(start, edict.entity.mins, edict.entity.maxs, end, Defs.moveTypes.MOVE_NOMONSTERS, edict);
 
     const result = new Trace();
     result.allsolid = !!trace.allsolid;
@@ -57,7 +58,7 @@ export class ServerPmove extends Pmove {
     }
 
     const edict = this._currentEdict;
-    const trace = SV.collision.move(position, edict.entity.mins, edict.entity.maxs, position, SV.move.nomonsters, edict);
+    const trace = SV.collision.move(position, edict.entity.mins, edict.entity.maxs, position, Defs.moveTypes.MOVE_NOMONSTERS, edict);
     return !trace.startsolid;
   }
 };

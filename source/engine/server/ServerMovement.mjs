@@ -40,7 +40,7 @@ export class ServerMovement {
     const start = ent.entity.origin.copy().add(new Vector(0.0, 0.0, ent.entity.mins[2] + 1.0));
     const stop = start.copy().add(new Vector(0.0, 0.0, -2.0 * STEPSIZE));
 
-    let trace = SV.collision.move(start, Vector.origin, Vector.origin, stop, SV.move.nomonsters, ent);
+    let trace = SV.collision.move(start, Vector.origin, Vector.origin, stop, Defs.moveTypes.MOVE_NOMONSTERS, ent);
     if (trace.fraction === 1.0) {
       return false;
     }
@@ -50,7 +50,7 @@ export class ServerMovement {
       for (let y = 0; y <= 1; y++) {
         start[0] = stop[0] = (x !== 0) ? maxs[0] : mins[0];
         start[1] = stop[1] = (y !== 0) ? maxs[1] : mins[1];
-        trace = SV.collision.move(start, Vector.origin, Vector.origin, stop, SV.move.nomonsters, ent);
+        trace = SV.collision.move(start, Vector.origin, Vector.origin, stop, Defs.moveTypes.MOVE_NOMONSTERS, ent);
         if ((trace.fraction !== 1.0) && (trace.endpos[2] > bottom)) {
           bottom = trace.endpos[2];
         }
@@ -66,7 +66,7 @@ export class ServerMovement {
     const oldorg = ent.entity.origin.copy();
     const mins = ent.entity.mins;
     const maxs = ent.entity.maxs;
-    if ((ent.entity.flags & (SV.fl.swim | SV.fl.fly)) !== 0) {
+    if ((ent.entity.flags & (Defs.flags.FL_SWIM | Defs.flags.FL_FLY)) !== 0) {
       const enemy = ent.entity.enemy;
       const neworg = new Vector();
       for (let i = 0; i <= 1; i++) {
@@ -83,9 +83,9 @@ export class ServerMovement {
             neworg[2] += 8.0;
           }
         }
-        const trace = SV.collision.move(ent.entity.origin, mins, maxs, neworg, SV.move.normal, ent);
+        const trace = SV.collision.move(ent.entity.origin, mins, maxs, neworg, Defs.moveTypes.MOVE_NORMAL, ent);
         if (trace.fraction === 1.0) {
-          if (((ent.entity.flags & SV.fl.swim) !== 0) && (SV.collision.pointContents(trace.endpos) === Defs.content.CONTENT_EMPTY)) {
+          if (((ent.entity.flags & Defs.flags.FL_SWIM) !== 0) && (SV.collision.pointContents(trace.endpos) === Defs.content.CONTENT_EMPTY)) {
             return false;
           }
           ent.entity.origin = trace.endpos.copy();
@@ -106,19 +106,19 @@ export class ServerMovement {
     neworg[2] += STEPSIZE;
     const end = neworg.copy();
     end[2] -= STEPSIZE * 2.0;
-    let trace = SV.collision.move(neworg, mins, maxs, end, SV.move.normal, ent);
+    let trace = SV.collision.move(neworg, mins, maxs, end, Defs.moveTypes.MOVE_NORMAL, ent);
     if (trace.allsolid === true) {
       return false;
     }
     if (trace.startsolid === true) {
       neworg[2] -= STEPSIZE;
-      trace = SV.collision.move(neworg, mins, maxs, end, SV.move.normal, ent);
+      trace = SV.collision.move(neworg, mins, maxs, end, Defs.moveTypes.MOVE_NORMAL, ent);
       if ((trace.allsolid === true) || (trace.startsolid === true)) {
         return false;
       }
     }
     if (trace.fraction === 1.0) {
-      if ((ent.entity.flags & SV.fl.partialground) !== 0) {
+      if ((ent.entity.flags & Defs.flags.FL_PARTIALGROUND) !== 0) {
         const fallback = ent.entity.origin.copy();
         fallback[0] += move[0];
         fallback[1] += move[1];
@@ -126,14 +126,14 @@ export class ServerMovement {
         if (relink) {
           SV.area.linkEdict(ent, true);
         }
-        ent.entity.flags &= (~SV.fl.onground);
+        ent.entity.flags &= (~Defs.flags.FL_ONGROUND);
         return true;
       }
       return false;
     }
     ent.entity.origin = trace.endpos.copy();
     if (!this.checkBottom(ent)) {
-      if ((ent.entity.flags & SV.fl.partialground) !== 0) {
+      if ((ent.entity.flags & Defs.flags.FL_PARTIALGROUND) !== 0) {
         if (relink) {
           SV.area.linkEdict(ent, true);
         }
@@ -142,7 +142,7 @@ export class ServerMovement {
       ent.entity.origin = ent.entity.origin.set(oldorg);
       return false;
     }
-    ent.entity.flags &= ~SV.fl.partialground;
+    ent.entity.flags &= ~Defs.flags.FL_PARTIALGROUND;
     ent.entity.groundentity = trace.ent.entity;
     if (relink) {
       SV.area.linkEdict(ent, true);
@@ -151,7 +151,7 @@ export class ServerMovement {
   }
 
   walkMove(ent, yaw, dist) {
-    if ((ent.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
+    if ((ent.entity.flags & (Defs.flags.FL_ONGROUND | Defs.flags.FL_FLY | Defs.flags.FL_SWIM)) === 0) {
       return false;
     }
 
@@ -161,7 +161,7 @@ export class ServerMovement {
 
   moveToGoal(ent, dist, target = null) {
 
-    if ((ent.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
+    if ((ent.entity.flags & (Defs.flags.FL_ONGROUND | Defs.flags.FL_FLY | Defs.flags.FL_SWIM)) === 0) {
       return false;
     }
 
@@ -308,7 +308,7 @@ export class ServerMovement {
     }
     actor.entity.ideal_yaw = olddir;
     if (!this.checkBottom(actor)) {
-      actor.entity.flags |= SV.fl.partialground;
+      actor.entity.flags |= Defs.flags.FL_PARTIALGROUND;
     }
   }
 

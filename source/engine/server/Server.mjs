@@ -9,13 +9,12 @@ import { ED, ServerEdict } from './Edict.mjs';
 import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import * as Defs from '../../shared/Defs.mjs';
-import { QSocket } from '../network/NetworkDrivers.mjs';
 import { Navigation } from './Navigation.mjs';
 import { ServerPhysics } from './physics/ServerPhysics.mjs';
 import { ServerClientPhysics } from './physics/ServerClientPhysics.mjs';
 import { ServerMessages } from './ServerMessages.mjs';
 import { ServerMovement } from './ServerMovement.mjs';
-import { ServerArea, moveTypes } from './ServerArea.mjs';
+import { ServerArea } from './ServerArea.mjs';
 import { ServerCollision } from './ServerCollision.mjs';
 
 let { COM, Con, Host, Mod, NET, PR } = registry;
@@ -30,54 +29,6 @@ eventBus.subscribe('registry.frozen', () => {
 });
 
 /** @typedef {import('./Client.mjs').ServerClient} ServerClient */
-
-const SV = {};
-
-export default SV;
-
-SV.movetype = {
-  none: 0,
-  anglenoclip: 1,
-  angleclip: 2,
-  walk: 3,
-  step: 4,
-  fly: 5,
-  toss: 6,
-  push: 7,
-  noclip: 8,
-  flymissile: 9,
-  bounce: 10,
-};
-
-SV.solid = {
-  not: 0,
-  trigger: 1,
-  bbox: 2,
-  slidebox: 3,
-  bsp: 4,
-};
-
-SV.damage = {
-  no: 0,
-  yes: 1,
-  aim: 2,
-};
-
-SV.fl = {
-  fly: 1,
-  swim: 2,
-  conveyor: 4,
-  client: 8,
-  inwater: 16,
-  monster: 32,
-  godmode: 64,
-  notarget: 128,
-  item: 256,
-  onground: 512,
-  partialground: 1024,
-  waterjump: 2048,
-  jumpreleased: 4096,
-};
 
 /**
  * @typedef {{
@@ -96,40 +47,6 @@ SV.fl = {
  */
 
 /** @typedef {import('../../shared/GameInterfaces').SerializableType} SerializableType */
-
-// main
-
-SV.server = {
-  time: 0,
-  num_edicts: 0,
-  datagram: new SzBuffer(16384, 'SV.server.datagram'),
-  expedited_datagram: new SzBuffer(16384, 'SV.server.expedited_datagram'),
-  reliable_datagram: new SzBuffer(16384, 'SV.server.reliable_datagram'),
-  /** sent during client prespawn */
-  signon: new SzBuffer(16384, 'SV.server.signon'),
-  /** @type {ServerEdict[]} */
-  edicts: [],
-  mapname: null,
-  worldmodel: null,
-  /** server game event bus, will be reset on every map load */
-  eventBus: new EventBus('server-game'),
-  /** @type {Navigation} navigation graph management */
-  navigation: null,
-  /** @type {import('../../shared/GameInterfaces').ServerGameInterface} */
-  gameAPI: null,
-  /** @type {string?} game version string */
-  gameVersion: null,
-  /** @type {string?} game identification (e.g. Quake) */
-  gameName: null,
-  /** @type {Defs.gameCapabilities[]} game capability flags */
-  gameCapabilities: [],
-  /** @type {string[]} clientdata field names */
-  clientdataFields: [],
-  /** @type {MSG.WriteByte|MSG.WriteShort|MSG.WriteLong} */
-  clientdataFieldsBitsWriter: null,
-  /** @type {Record<string, { fields: string[], bitsWriter: MSG.WriteByte|MSG.WriteShort|MSG.WriteLong}>} maps classname to its fields and the apropriate bits writer  */
-  clientEntityFields: {},
-};
 
 export class ServerEntityState {
   constructor(num = null) {
@@ -193,24 +110,856 @@ export class ServerEntityState {
     this.solid = 0;
     this.classname = null;
   }
-};
+}
 
-SV.EntityState = ServerEntityState;
+/**
+ * Main server class with all server-related functionality.
+ * All properties and methods are static.
+ */
+export default class SV {
+  /** Core server state */
+  static server = {
+    time: 0,
+    num_edicts: 0,
+    datagram: new SzBuffer(16384, 'SV.server.datagram'),
+    expedited_datagram: new SzBuffer(16384, 'SV.server.expedited_datagram'),
+    reliable_datagram: new SzBuffer(16384, 'SV.server.reliable_datagram'),
+    /** sent during client prespawn */
+    signon: new SzBuffer(16384, 'SV.server.signon'),
+    /** @type {ServerEdict[]} */
+    edicts: [],
+    mapname: null,
+    worldmodel: null,
+    /** server game event bus, will be reset on every map load */
+    eventBus: new EventBus('server-game'),
+    /** @type {Navigation} navigation graph management */
+    navigation: null,
+    /** @type {import('../../shared/GameInterfaces').ServerGameInterface} */
+    gameAPI: null,
+    /** @type {string?} game version string */
+    gameVersion: null,
+    /** @type {string?} game identification (e.g. Quake) */
+    gameName: null,
+    /** @type {Defs.gameCapabilities[]} game capability flags */
+    gameCapabilities: [],
+    /** @type {string[]} clientdata field names */
+    clientdataFields: [],
+    /** @type {MSG.WriteByte|MSG.WriteShort|MSG.WriteLong} */
+    clientdataFieldsBitsWriter: null,
+    /** @type {Record<string, { fields: string[], bitsWriter: MSG.WriteByte|MSG.WriteShort|MSG.WriteLong}>} maps classname to its fields and the apropriate bits writer  */
+    clientEntityFields: {},
+  };
 
-SV.physics = new ServerPhysics();
-SV.clientPhysics = new ServerClientPhysics();
-SV.messages = new ServerMessages();
-SV.movement = new ServerMovement();
-SV.area = new ServerArea();
-SV.collision = new ServerCollision();
+  /** state across maps */
+  static svs = {
+    changelevel_issued: false,
+    clients: [],
+    maxclients: 0,
+    maxclientslimit: 32,
+    /** gamestate across maps */
+    gamestate: null,
+  };
 
-SV.svs = {
-  changelevel_issued: false,
-  clients: [],
-  maxclients: 0,
-  maxclientslimit: 32,
-  /** gamestate across maps */
-  gamestate: null,
+  static areanodes = [];
+
+  // Physics box hull (used for collision detection)
+  static box_clipnodes = null;
+  static box_planes = null;
+  static box_hull = null;
+
+  // Class instances for modular functionality
+  static physics = new ServerPhysics();
+  static clientPhysics = new ServerClientPhysics();
+  static messages = new ServerMessages();
+  static movement = new ServerMovement();
+  static area = new ServerArea();
+  static collision = new ServerCollision();
+
+  // Player movement
+  static pmove = null;
+
+  // Entity state class
+  static EntityState = ServerEntityState;
+
+  // Cvars (initialized in Init())
+  static maxvelocity = null;
+  static edgefriction = null;
+  static stopspeed = null;
+  static accelerate = null;
+  static idealpitchscale = null;
+  static aim = null;
+  static nostep = null;
+  static cheats = null;
+  static gravity = null;
+  static friction = null;
+  static maxspeed = null;
+  static airaccelerate = null;
+  static wateraccelerate = null;
+  static spectatormaxspeed = null;
+  static waterfriction = null;
+  static rcon_password = null;
+
+  /** Scheduled game commands */
+  static _scheduledGameCommands = [];
+
+  // ===== STATIC METHODS =====
+
+  static InitPmove() {
+    SV.pmove = new Pmove();
+    SV.pmove.movevars = new PlayerMoveCvars();
+  }
+
+  static Init() {
+    SV.maxvelocity = new Cvar('sv_maxvelocity', '2000');
+    SV.edgefriction = new Cvar('edgefriction', '2');
+    SV.stopspeed = new Cvar('sv_stopspeed', '100');
+    SV.accelerate = new Cvar('sv_accelerate', '10');
+    SV.idealpitchscale = new Cvar('sv_idealpitchscale', '0.8');
+    SV.aim = new Cvar('sv_aim', '0.93');
+    SV.nostep = new Cvar('sv_nostep', '0');
+    SV.cheats = new Cvar('sv_cheats', '0', Cvar.FLAG.SERVER);
+    SV.gravity = new Cvar('sv_gravity', '800', Cvar.FLAG.SERVER);
+    SV.friction = new Cvar('sv_friction', '4', Cvar.FLAG.SERVER);
+    SV.maxspeed = new Cvar('sv_maxspeed', '320', Cvar.FLAG.SERVER);
+    SV.airaccelerate = new Cvar('sv_airaccelerate', '0.7');
+    SV.wateraccelerate = new Cvar('sv_wateraccelerate', '10');
+    SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
+    SV.waterfriction = new Cvar('sv_waterfriction', '4');
+    SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
+
+    Navigation.Init();
+
+    Cmd.AddCommand('nav', class extends ConsoleCommand {
+      run() {
+        if (!SV.server.navigation) {
+          Con.Print('navigation not initialized, you have to spawn a server first\n');
+          return;
+        }
+
+        SV.server.navigation.build();
+      }
+    });
+
+    eventBus.subscribe('cvar.changed', (name) => {
+      const cvar = Cvar.FindVar(name);
+
+      if ((cvar.flags & Cvar.FLAG.SERVER) && SV.server.active) {
+        SV.CvarChanged(cvar);
+      }
+    });
+
+    // TODO: we need to observe changes to those pmove vars and resend them to all clients when changed
+
+    SV.InitPmove();
+
+    // SV.nop = new SzBuffer(4);
+    // SV.cursize = 1;
+    // MSG.WriteByte(SV.nop, Protocol.svc.nop);
+
+    SV.area.initBoxHull(); // pmove, remove
+  }
+
+  // =============================================================================
+  // GAME COMMANDS & SCHEDULING
+  // Schedule and run commands from the game logic
+  // =============================================================================
+
+  static RunScheduledGameCommands() {
+    while (SV._scheduledGameCommands.length > 0) {
+      const command = SV._scheduledGameCommands.shift();
+
+      command();
+    }
+  }
+
+  static ScheduleGameCommand(command) {
+    SV._scheduledGameCommands.push(command);
+  }
+
+  static ConnectClient(client, netconnection) {
+    Con.DPrint('Client ' + netconnection.address + ' connected\n');
+
+    const old_spawn_parms = SV.server.loadgame ? client.spawn_parms : null;
+
+    client.clear();
+    client.name = 'unconnected';
+    client.netconnection = netconnection;
+    client.active = true;
+
+    client.old_frags = Infinity; // trigger a update frags
+
+    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_DYNAMIC)) {
+      client.entity.restoreSpawnParameters(old_spawn_parms);
+    } else if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
+      if (SV.server.loadgame) {
+        console.assert(old_spawn_parms instanceof Array, 'old_spawn_parms is an array');
+
+        for (let i = 0; i < client.spawn_parms.length; i++) {
+          client.spawn_parms[i] = old_spawn_parms[i];
+        }
+      } else {
+        SV.server.gameAPI.SetNewParms();
+        for (let i = 0; i < client.spawn_parms.length; i++) {
+          client.spawn_parms[i] = SV.server.gameAPI[`parm${i + 1}`];
+        }
+      }
+    }
+
+    SV.messages.sendServerData(client);
+  }
+
+  static CheckForNewClients() {
+    let i;
+    for (; ;) {
+      const ret = NET.CheckNewConnections();
+      if (!ret) {
+        return;
+      }
+      for (i = 0; i < SV.svs.maxclients; i++) {
+        if (!SV.svs.clients[i].active) {
+          break;
+        }
+      }
+      if (i === SV.svs.maxclients) {
+        Con.Print('SV.CheckForNewClients: Server is full\n');
+        const message = new SzBuffer(32);
+        MSG.WriteByte(message, Protocol.svc.disconnect);
+        MSG.WriteString(message, 'Server is full');
+        NET.SendUnreliableMessage(ret, message);
+        NET.Close(ret);
+        return;
+      }
+      SV.ConnectClient(SV.svs.clients[i], ret);
+      NET.activeconnections++;
+    }
+  }
+
+  // =============================================================================
+  // UTILITIES & HELPERS
+  // Miscellaneous helper functions for models, spawn parameters, etc.
+  // =============================================================================
+
+  static ModelIndex(name) {
+    if (!name) {
+      return 0;
+    }
+    for (let i = 0; i < SV.server.model_precache.length; i++) {
+      if (SV.server.model_precache[i] === name) {
+        return i;
+      }
+    }
+    console.assert(false, 'model must be precached', name);
+    return null;
+  }
+
+  static SaveSpawnparms() {
+    SV.svs.serverflags = SV.server.gameAPI.serverflags;
+
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      /** @type {ServerClient} */
+      const client = SV.svs.clients[i];
+
+      if (!client.active) {
+        continue;
+      }
+
+      client.saveSpawnparms();
+    }
+  }
+
+  static HasMap(mapname) {
+    return Mod.ForName('maps/' + mapname + '.bsp') !== null;
+  }
+
+  static SpawnServer(mapname) {
+    // Ensure hostname is set
+    if (NET.hostname.string.trim() === '') {
+      NET.hostname.set('UNNAMED');
+    }
+
+    eventBus.publish('server.spawning', { mapname });
+    Con.DPrint('SpawnServer: ' + mapname + '\n');
+
+    SV.svs.changelevel_issued = false;
+
+    // If server is already active, notify clients about map change
+    if (SV.server.active) {
+      SV.#notifyClientsOfMapChange(mapname);
+    }
+
+    // Clear memory and load game progs
+    Con.DPrint('Clearing memory\n');
+    Mod.ClearAll();
+    SV.#loadGameProgs();
+
+    // Initialize edicts and server state
+    SV.#initializeEdicts();
+
+    // Load world model
+    if (!SV.#loadWorldModel(mapname)) {
+      return false;
+    }
+
+    // Setup area nodes for spatial partitioning
+    SV.areanodes = [];
+    SV.area.createAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
+
+    // Setup model and sound precache
+    SV.#setupModelPrecache();
+
+    // Setup player entities
+    if (!SV.#setupPlayerEntities()) {
+      return false;
+    }
+
+    // Initialize light styles
+    SV.#initializeLightStyles();
+
+    // Setup dynamic field compression
+    SV.#setupClientDataFields();
+    SV.#setupExtendedEntityFields();
+
+    // Reset event bus subscriptions
+    SV.server.eventBus.unsubscribeAll();
+
+    // Initialize navigation graph
+    SV.server.navigation = new Navigation(SV.server.worldmodel);
+
+    // Initialize the game
+    SV.server.gameAPI.init(mapname, SV.svs.serverflags);
+
+    // Spawn worldspawn entity
+    if (!SV.#spawnWorldspawnEntity()) {
+      return false;
+    }
+
+    // Finalize and notify clients
+    SV.#finalizeServerSpawn(mapname);
+
+    return true;
+  }
+
+  static ShutdownServer(isCrashShutdown) {
+    // tell the game we are shutting down the game
+    SV.server.gameAPI.shutdown(isCrashShutdown);
+
+    // make sure all references are dropped
+    SV.server.active = false;
+    SV.server.loading = false;
+    SV.server.worldmodel = null;
+    SV.server.gameAPI = null;
+
+    // unlink all edicts from client structures, reset data
+    for (const client of SV.svs.clients) {
+      client.clear();
+    }
+
+    // purge out all edicts
+    for (const edict of SV.server.edicts) {
+      // explicitly tell entities to free memory
+      edict.clear();
+      edict.freeEdict();
+    }
+
+    SV.server.edicts = [];
+    SV.server.num_edicts = 0;
+
+    SV.server.navigation.shutdown();
+    SV.server.navigation = null;
+
+    if (isCrashShutdown) {
+      Con.Print('Server shut down due to a crash!\n');
+      return;
+    }
+
+    Con.Print('Server shut down.\n');
+  }
+
+  /**
+   * Writes a cvar to a message stream.
+   * @param {SzBuffer} msg message stream
+   * @param {Cvar} cvar cvar to write
+   */
+  static WriteCvar(msg, cvar) {
+    if (cvar.flags & Cvar.FLAG.SECRET) {
+      MSG.WriteString(msg, cvar.name);
+      MSG.WriteString(msg, cvar.string ? 'REDACTED' : '');
+    } else {
+      MSG.WriteString(msg, cvar.name);
+      MSG.WriteString(msg, cvar.string);
+    }
+  }
+
+  /**
+   * Called when a cvar changes.
+   * @param {Cvar} cvar cvar that changed
+   */
+  static CvarChanged(cvar) {
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      const client = SV.svs.clients[i];
+      if (!client.active || !client.spawned) {
+        continue;
+      }
+
+      MSG.WriteByte(client.message, Protocol.svc.cvar);
+      MSG.WriteByte(client.message, 1);
+      SV.WriteCvar(client.message, cvar);
+    }
+  }
+
+  // =============================================================================
+  // CLIENT COMMUNICATION
+  // Functions for reading client input and handling client messages
+  // =============================================================================
+
+  /**
+   * Reads the movement command from a client.
+   * @param {ServerClient} client client
+   */
+  static ReadClientMove(client) {
+    client.cmd.msec = MSG.ReadByte();
+    client.cmd.angles = MSG.ReadAngleVector();
+    client.cmd.forwardmove = MSG.ReadShort();
+    client.cmd.sidemove = MSG.ReadShort();
+    client.cmd.upmove = MSG.ReadShort();
+    // CR: we could restructure this a bit and let the ServerGameAPI handle the rest
+    client.cmd.buttons = MSG.ReadByte();
+    client.edict.entity.button0 = (client.cmd.buttons & Protocol.button.attack) === 1; // QuakeC
+    client.edict.entity.button1 = ((client.cmd.buttons & Protocol.button.use) >> 2) === 1; // QuakeC
+    client.edict.entity.button2 = ((client.cmd.buttons & Protocol.button.jump) >> 1) === 1; // QuakeC
+    client.edict.entity.v_angle = client.cmd.angles;
+    client.cmd.impulse = MSG.ReadByte();
+    if (client.cmd.impulse !== 0) {
+      client.edict.entity.impulse = client.cmd.impulse; // QuakeC
+    }
+    // console.log('client.cmd', client.cmd);
+  }
+
+  /**
+   * Handles a rcon request from a client.
+   * @param {ServerClient} client client
+   */
+  static HandleRconRequest(client) {
+    const message = client.message;
+
+    const password = MSG.ReadString();
+    const cmd = MSG.ReadString();
+
+    const rconPassword = SV.rcon_password.string;
+
+    if (rconPassword === '' || rconPassword !== password) {
+      MSG.WriteByte(message, Protocol.svc.print);
+      MSG.WriteString(message, 'Wrong rcon password!\n');
+      if (rconPassword === '') {
+        Con.Print(`SV.HandleRconRequest: rcon attempted by ${client.name} from ${client.netconnection.address}: ${cmd}\n`);
+      }
+      return;
+    }
+
+    Con.Print(`[${client.name}@${client.netconnection.address}] ${cmd}\n`);
+
+    Con.StartCapturing();
+    Cmd.ExecuteString(cmd);
+
+    const response = Con.StopCapturing();
+    MSG.WriteByte(message, Protocol.svc.print);
+    MSG.WriteString(message, response);
+  }
+
+  /**
+   * Reads the movement command from a client.
+   * @param {ServerClient} client client
+   * @returns {boolean} true if successful, false if failed
+   */
+  static ReadClientMessage(client) {
+    // Process all pending network messages
+    while (true) {
+      const ret = NET.GetMessage(client.netconnection);
+
+      if (ret === -1) {
+        Con.Print('SV.ReadClientMessage: NET.GetMessage failed\n');
+        return false;
+      }
+
+      if (ret === 0) {
+        return true; // No more messages
+      }
+
+      MSG.BeginReading();
+
+      // Process all commands in this message
+      while (true) {
+        if (!client.active) {
+          return false;
+        }
+
+        if (MSG.badread) {
+          Con.Print('SV.ReadClientMessage: badread\n');
+          return false;
+        }
+
+        // Update client ping time
+        client.ping_times[client.num_pings++ % client.ping_times.length] = SV.server.time - client.sync_time;
+
+        const cmd = MSG.ReadChar();
+
+        if (cmd === -1) {
+          break; // End of message
+        }
+
+        if (!SV.#processClientCommand(client, cmd)) {
+          return false; // Client should disconnect
+        }
+      }
+    }
+  }
+
+  static RunClients() {
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      const client = SV.svs.clients[i];
+      if (!client.active) {
+        continue;
+      }
+      if (!SV.ReadClientMessage(client)) {
+        Host.DropClient(client, false, 'Connectivity issues, failed to read message');
+        continue;
+      }
+      if (!client.spawned) {
+        client.cmd.reset();
+        continue;
+      }
+      // TODO: drop clients without an update
+      SV.clientPhysics.clientThink(client.edict, client);
+    }
+  }
+
+  /**
+   * Finds a client by name.
+   * @param {string} name name of the client
+   * @returns {ServerClient|null} the client if found, null otherwise
+   */
+  static FindClientByName(name) {
+    return SV.svs.clients
+      .filter((client) => client.active)
+      .find((client) => client.name === name) || null;
+  }
+
+  /**
+   * Notifies all connected clients about a map change and resets their state.
+   * @param {string} mapname name of the new map
+   */
+  static #notifyClientsOfMapChange(mapname) {
+    const reconnect = new SzBuffer(128);
+    reconnect.writeByte(Protocol.svc.changelevel);
+    reconnect.writeString(mapname);
+    NET.SendToAll(reconnect);
+
+    // Make sure that all client states are partially reset and ready for a new map
+    for (const client of SV.svs.clients) {
+      client.changelevel();
+    }
+
+    // Shut down navigation, since map has changed
+    if (SV.server.navigation) {
+      SV.server.navigation.shutdown();
+      SV.server.navigation = null;
+    }
+  }
+
+  /**
+   * Loads the game progs and initializes game API.
+   * Sets up gameAPI, gameVersion, gameName, and gameCapabilities.
+   */
+  static #loadGameProgs() {
+    SV.server.gameAPI = PR.QuakeJS ? new PR.QuakeJS.ServerGameAPI(ServerEngineAPI) : PR.LoadProgs();
+    SV.server.gameVersion = `${(PR.QuakeJS ? `${PR.QuakeJS.identification.version.join('.')} QuakeJS` : `${PR.crc} CRC`)}`;
+    SV.server.gameName = PR.QuakeJS ? PR.QuakeJS.identification.name : COM.game;
+    SV.server.gameCapabilities = PR.QuakeJS ? PR.QuakeJS.identification.capabilities : PR.capabilities;
+  }
+
+  /**
+   * Initializes the edict array and server state.
+   * Preallocates edicts and resets server state variables.
+   */
+  static #initializeEdicts() {
+    SV.server.edicts = [];
+
+    // Preallocating up to Def.limits.edicts, we can extend that later during runtime
+    for (let i = 0; i < Def.limits.edicts; i++) {
+      SV.server.edicts[i] = new ServerEdict(i);
+    }
+
+    // Clear message buffers
+    SV.server.datagram.clear();
+    SV.server.reliable_datagram.clear();
+    SV.server.signon.clear();
+
+    // Hooking up the edicts reserved for clients
+    SV.server.num_edicts = SV.svs.maxclients + 1;
+
+    // Reset server state
+    SV.server.loading = true;
+    SV.server.paused = false;
+    SV.server.loadgame = false;
+    SV.server.time = 1.0;
+    SV.server.lastcheck = 0;
+    SV.server.lastchecktime = 0.0;
+  }
+
+  /**
+   * Loads and initializes the world model for the given map.
+   * @param {string} mapname name of the map to load
+   * @returns {boolean} true if successful, false if map couldn't be loaded
+   */
+  static #loadWorldModel(mapname) {
+    SV.server.mapname = mapname;
+    SV.server.worldmodel = Mod.ForName('maps/' + mapname + '.bsp');
+
+    if (SV.server.worldmodel === null) {
+      Con.PrintWarning('SV.SpawnServer: Cannot start server, unable to load map ' + mapname + '\n');
+      SV.server.active = false;
+      return false;
+    }
+
+    SV.pmove.setWorldmodel(SV.server.worldmodel);
+    return true;
+  }
+
+  /**
+   * Sets up model precache array including world model and submodels.
+   */
+  static #setupModelPrecache() {
+    SV.server.models = [];
+    SV.server.models[1] = SV.server.worldmodel;
+
+    SV.server.sound_precache = [''];
+    SV.server.model_precache = ['', SV.server.worldmodel.name];
+
+    // Precache all submodels (brushes connected to entities like doors)
+    for (let i = 1; i <= SV.server.worldmodel.submodels.length; i++) {
+      SV.server.model_precache[i + 1] = '*' + i;
+      SV.server.models[i + 1] = Mod.ForName('*' + i);
+    }
+  }
+
+  /**
+   * Prepares player entities in the client edict slots.
+   * @returns {boolean} true if successful, false if game doesn't support player entities
+   */
+  static #setupPlayerEntities() {
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      const ent = SV.server.edicts[i + 1];
+
+      // We need to spawn the player entity in those client edict slots
+      if (!SV.server.gameAPI.prepareEntity(ent, 'player')) {
+        Con.PrintWarning('SV.SpawnServer: Cannot start server, because game does not know what a player entity is.\n');
+        SV.server.active = false;
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Initializes light styles array.
+   */
+  static #initializeLightStyles() {
+    SV.server.lightstyles = [];
+    for (let i = 0; i <= Def.limits.lightstyles; i++) {
+      SV.server.lightstyles[i] = '';
+    }
+  }
+
+  /**
+   * Configures clientdata compression fields for dynamic entity serialization.
+   */
+  static #setupClientDataFields() {
+    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
+      const fields = SV.server.edicts[1].entity.clientdataFields;
+
+      // Configure clientdata fields
+      SV.server.clientdataFields.length = 0;
+      SV.server.clientdataFields.push(...fields);
+      console.assert(SV.server.clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
+
+      // Select appropriate bits writer based on field count
+      if (fields.length <= 8) {
+        SV.server.clientdataFieldsBitsWriter = MSG.WriteByte;
+      } else if (fields.length <= 16) {
+        SV.server.clientdataFieldsBitsWriter = MSG.WriteShort;
+      } else if (fields.length <= 32) {
+        SV.server.clientdataFieldsBitsWriter = MSG.WriteLong;
+      }
+
+      // Double check that all fields are actually defined
+      for (const field of fields) {
+        console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
+      }
+    }
+  }
+
+  /**
+   * Configures extended entity field compression for client-side entities.
+   */
+  static #setupExtendedEntityFields() {
+    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
+      const fields = SV.server.gameAPI.getClientEntityFields();
+
+      for (const [classname, extendedFields] of Object.entries(fields)) {
+        const clientEntityField = {
+          fields: [],
+          bitsWriter: null,
+        };
+
+        clientEntityField.fields.push(...extendedFields);
+
+        // Select appropriate bits writer based on field count
+        if (extendedFields.length <= 8) {
+          clientEntityField.bitsWriter = MSG.WriteByte;
+        } else if (extendedFields.length <= 16) {
+          clientEntityField.bitsWriter = MSG.WriteShort;
+        } else if (extendedFields.length <= 32) {
+          clientEntityField.bitsWriter = MSG.WriteLong;
+        }
+
+        SV.server.clientEntityFields[classname] = clientEntityField;
+      }
+    }
+  }
+
+  /**
+   * Spawns the worldspawn entity (edict 0).
+   * @returns {boolean} true if successful, false if worldspawn couldn't be created
+   */
+  static #spawnWorldspawnEntity() {
+    const ent = SV.server.edicts[0];
+
+    if (!SV.server.gameAPI.prepareEntity(ent, 'worldspawn', {
+      model: SV.server.worldmodel.name,
+      modelindex: 1,
+      solid: Defs.solid.SOLID_BSP,
+      movetype: Defs.moveType.MOVETYPE_PUSH,
+    })) {
+      Con.PrintWarning('SV.SpawnServer: Cannot start server, because the game does not know what a worldspawn entity is.\n');
+      SV.server.active = false;
+      return false;
+    }
+
+    // Invoke the spawn function for the worldspawn
+    SV.server.gameAPI.spawnPreparedEntity(ent);
+    return true;
+  }
+
+  /**
+   * Finalizes server spawn by loading entities and notifying clients.
+   * @param {string} mapname name of the spawned map
+   */
+  static #finalizeServerSpawn(mapname) {
+    // Populate all edicts by the entities file
+    ED.LoadFromFile(SV.server.worldmodel.entities);
+
+    SV.server.active = true;
+    SV.server.loading = false;
+
+    // Run physics twice to settle entities
+    Host.frametime = 0.1;
+    SV.physics.physics();
+    SV.physics.physics();
+
+    // Notify all active clients about the new map
+    for (let i = 0; i < SV.svs.maxclients; i++) {
+      const client = SV.svs.clients[i];
+      if (client.active) {
+        SV.messages.sendServerData(client);
+      }
+    }
+
+    // Initialize navigation
+    SV.server.navigation.init();
+
+    eventBus.publish('server.spawned', { mapname });
+    Con.PrintSuccess('Server spawned.\n');
+    Cmd.ExecuteString('status\n');
+  }
+
+  /**
+   * Handles a string command from the client.
+   * @param {ServerClient} client client sending the command
+   * @param {string} input command string
+   */
+  static #handleClientStringCommand(client, input) {
+    const ALLOWED_CLIENT_COMMANDS = [
+      'status',
+      'god',
+      'notarget',
+      'fly',
+      'name',
+      'noclip',
+      'say',
+      'say_team',
+      'tell',
+      'color',
+      'kill',
+      'pause',
+      'spawn',
+      'begin',
+      'prespawn',
+      'kick',
+      'ping',
+      'give',
+      'ban',
+    ];
+
+    const matchedCommand = ALLOWED_CLIENT_COMMANDS.find((command) =>
+      input.toLowerCase().startsWith(command),
+    );
+
+    if (matchedCommand) {
+      Cmd.ExecuteString(input, client);
+    } else {
+      Con.Print(`${client.name} tried to ${input}!\n`);
+    }
+  }
+
+  /**
+   * Processes a single client command from the message buffer.
+   * @param {ServerClient} client client
+   * @param {number} cmd command type
+   * @returns {boolean} false if client should disconnect, true otherwise
+   */
+  static #processClientCommand(client, cmd) {
+    switch (cmd) {
+      case Protocol.clc.nop:
+        Con.DPrint(`${client.netconnection.address} sent a nop\n`);
+        return true;
+
+      case Protocol.clc.stringcmd: {
+        const input = MSG.ReadString();
+        SV.#handleClientStringCommand(client, input);
+        return true;
+      }
+
+      case Protocol.clc.sync:
+        client.sync_time = MSG.ReadFloat();
+        return true;
+
+      case Protocol.clc.rconcmd:
+        SV.HandleRconRequest(client);
+        return true;
+
+      case Protocol.clc.disconnect:
+        return false; // Client disconnect
+
+      case Protocol.clc.move:
+        SV.ReadClientMove(client);
+        return true;
+
+      default:
+        Con.Print(`SV.ReadClientMessage: unknown command ${cmd}\n`);
+        return false;
+    }
+  }
 };
 
 /**
@@ -248,7 +997,7 @@ class PlayerMoveCvars extends MoveVars {
 
   /**
    * Writes the movevars to the client.
-   * @param {*} message message stream
+   * @param {SzBuffer} message message stream
    */
   sendToClient(message) {
     MSG.WriteFloat(message, this.gravity);
@@ -263,835 +1012,5 @@ class PlayerMoveCvars extends MoveVars {
     MSG.WriteFloat(message, this.entgravity);
   }
 
-  // CR: leaving out entgravity, it’s entity specific
-};
-
-/** @type {?Pmove} */
-SV.pmove = null;
-
-SV.InitPmove = function() {
-  SV.pmove = new Pmove();
-  SV.pmove.movevars = new PlayerMoveCvars();
-};
-
-SV.Init = function() {
-  SV.maxvelocity = new Cvar('sv_maxvelocity', '2000');
-  SV.edgefriction = new Cvar('edgefriction', '2');
-  SV.stopspeed = new Cvar('sv_stopspeed', '100');
-  SV.accelerate = new Cvar('sv_accelerate', '10');
-  SV.idealpitchscale = new Cvar('sv_idealpitchscale', '0.8');
-  SV.aim = new Cvar('sv_aim', '0.93');
-  SV.nostep = new Cvar('sv_nostep', '0');
-  SV.cheats = new Cvar('sv_cheats', '0', Cvar.FLAG.SERVER);
-  SV.gravity = new Cvar('sv_gravity', '800', Cvar.FLAG.SERVER);
-  SV.friction = new Cvar('sv_friction', '4', Cvar.FLAG.SERVER);
-  SV.maxspeed = new Cvar('sv_maxspeed', '320', Cvar.FLAG.SERVER);
-  SV.airaccelerate = new Cvar('sv_airaccelerate', '0.7');
-  SV.wateraccelerate = new Cvar('sv_wateraccelerate', '10');
-  SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
-  SV.waterfriction = new Cvar('sv_waterfriction', '4');
-  SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
-
-  Navigation.Init();
-
-  Cmd.AddCommand('nav', class extends ConsoleCommand {
-    run() {
-      if (!SV.server.navigation) {
-        Con.Print('navigation not initialized, you have to spawn a server first\n');
-        return;
-      }
-
-      SV.server.navigation.build();
-    }
-  });
-
-  eventBus.subscribe('cvar.changed', (name) => {
-    const cvar = Cvar.FindVar(name);
-
-    if ((cvar.flags & Cvar.FLAG.SERVER) && SV.server.active) {
-      SV.CvarChanged(cvar);
-    }
-  });
-
-  // TODO: we need to observe changes to those pmove vars and resend them to all clients when changed
-
-  SV.InitPmove();
-
-  // SV.nop = new SzBuffer(4);
-  // SV.cursize = 1;
-  // MSG.WriteByte(SV.nop, Protocol.svc.nop);
-
-  SV.area.initBoxHull(); // pmove, remove
-};
-
-// =============================================================================
-// GAME COMMANDS & SCHEDULING
-// Schedule and run commands from the game logic
-// =============================================================================
-
-SV._scheduledGameCommands = [];
-
-SV.RunScheduledGameCommands = function() {
-  while (SV._scheduledGameCommands.length > 0) {
-    const command = SV._scheduledGameCommands.shift();
-
-    command();
-  }
-};
-
-/**
- * Schedules a command to be run during the next server frame.
- * @param {Function} command to be executed command
- */
-SV.ScheduleGameCommand = function(command) {
-  SV._scheduledGameCommands.push(command);
-};
-
-/**
- * @param {ServerClient} client client
- * @param {QSocket} netconnection connection
- */
-SV.ConnectClient = function(client, netconnection) {
-  Con.DPrint('Client ' + netconnection.address + ' connected\n');
-
-  const old_spawn_parms = SV.server.loadgame ? client.spawn_parms : null;
-
-  client.clear();
-  client.name = 'unconnected';
-  client.netconnection = netconnection;
-  client.active = true;
-
-  client.old_frags = Infinity; // trigger a update frags
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_DYNAMIC)) {
-    client.entity.restoreSpawnParameters(old_spawn_parms);
-  } else if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
-    if (SV.server.loadgame) {
-      console.assert(old_spawn_parms instanceof Array, 'old_spawn_parms is an array');
-
-      for (let i = 0; i < client.spawn_parms.length; i++) {
-        client.spawn_parms[i] = old_spawn_parms[i];
-      }
-    } else {
-      SV.server.gameAPI.SetNewParms();
-      for (let i = 0; i < client.spawn_parms.length; i++) {
-        client.spawn_parms[i] = SV.server.gameAPI[`parm${i + 1}`];
-      }
-    }
-  }
-
-  SV.messages.sendServerData(client);
-};
-
-SV.CheckForNewClients = function() {
-  let i;
-  for (;;) {
-    const ret = NET.CheckNewConnections();
-    if (!ret) {
-      return;
-    }
-    for (i = 0; i < SV.svs.maxclients; i++) {
-      if (!SV.svs.clients[i].active) {
-        break;
-      }
-    }
-    if (i === SV.svs.maxclients) {
-      Con.Print('SV.CheckForNewClients: Server is full\n');
-      const message = new SzBuffer(32);
-      MSG.WriteByte(message, Protocol.svc.disconnect);
-      MSG.WriteString(message, 'Server is full');
-      NET.SendUnreliableMessage(ret, message);
-      NET.Close(ret);
-      return;
-    }
-    SV.ConnectClient(SV.svs.clients[i], ret);
-    NET.activeconnections++;
-  }
-};
-
-// =============================================================================
-// UTILITIES & HELPERS
-// Miscellaneous helper functions for models, spawn parameters, etc.
-// =============================================================================
-
-/**
- * Returns the model index of the given model name when precached.
- * @param {string} name model name
- * @returns {number} model index
- */
-SV.ModelIndex = function(name) {
-  if (!name) {
-    return 0;
-  }
-  for (let i = 0; i < SV.server.model_precache.length; i++) {
-    if (SV.server.model_precache[i] === name) {
-      return i;
-    }
-  }
-  console.assert(false, 'model must be precached', name);
-  return null;
-};
-
-SV.SaveSpawnparms = function() {
-  SV.svs.serverflags = SV.server.gameAPI.serverflags;
-
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    /** @type {ServerClient} */
-    const client = SV.svs.clients[i];
-
-    if (!client.active) {
-      continue;
-    }
-
-    client.saveSpawnparms();
-  }
-};
-
-SV.HasMap = function(mapname) {
-  return Mod.ForName('maps/' + mapname + '.bsp') !== null;
-};
-
-// =============================================================================
-// SERVER LIFECYCLE & MAP MANAGEMENT
-// Core server spawning, shutdown, and map loading functionality
-// =============================================================================
-
-/**
- * Notifies all connected clients about a map change and resets their state.
- * @param {string} mapname name of the new map
- */
-function notifyClientsOfMapChange(mapname) {
-  const reconnect = new SzBuffer(128);
-  reconnect.writeByte(Protocol.svc.changelevel);
-  reconnect.writeString(mapname);
-  NET.SendToAll(reconnect);
-
-  // Make sure that all client states are partially reset and ready for a new map
-  for (const client of SV.svs.clients) {
-    client.changelevel();
-  }
-
-  // Shut down navigation, since map has changed
-  if (SV.server.navigation) {
-    SV.server.navigation.shutdown();
-    SV.server.navigation = null;
-  }
+  // CR: leaving out entgravity, it's entity specific
 }
-
-/**
- * Loads the game progs and initializes game API.
- * Sets up gameAPI, gameVersion, gameName, and gameCapabilities.
- */
-function loadGameProgs() {
-  SV.server.gameAPI = PR.QuakeJS ? new PR.QuakeJS.ServerGameAPI(ServerEngineAPI) : PR.LoadProgs();
-  SV.server.gameVersion = `${(PR.QuakeJS ? `${PR.QuakeJS.identification.version.join('.')} QuakeJS` : `${PR.crc} CRC`)}`;
-  SV.server.gameName = PR.QuakeJS ? PR.QuakeJS.identification.name : COM.game;
-  SV.server.gameCapabilities = PR.QuakeJS ? PR.QuakeJS.identification.capabilities : PR.capabilities;
-}
-
-/**
- * Initializes the edict array and server state.
- * Preallocates edicts and resets server state variables.
- */
-function initializeEdicts() {
-  SV.server.edicts = [];
-
-  // Preallocating up to Def.limits.edicts, we can extend that later during runtime
-  for (let i = 0; i < Def.limits.edicts; i++) {
-    SV.server.edicts[i] = new ServerEdict(i);
-  }
-
-  // Clear message buffers
-  SV.server.datagram.clear();
-  SV.server.reliable_datagram.clear();
-  SV.server.signon.clear();
-
-  // Hooking up the edicts reserved for clients
-  SV.server.num_edicts = SV.svs.maxclients + 1;
-
-  // Reset server state
-  SV.server.loading = true;
-  SV.server.paused = false;
-  SV.server.loadgame = false;
-  SV.server.time = 1.0;
-  SV.server.lastcheck = 0;
-  SV.server.lastchecktime = 0.0;
-}
-
-/**
- * Loads and initializes the world model for the given map.
- * @param {string} mapname name of the map to load
- * @returns {boolean} true if successful, false if map couldn't be loaded
- */
-function loadWorldModel(mapname) {
-  SV.server.mapname = mapname;
-  SV.server.worldmodel = Mod.ForName('maps/' + mapname + '.bsp');
-
-  if (SV.server.worldmodel === null) {
-    Con.PrintWarning('SV.SpawnServer: Cannot start server, unable to load map ' + mapname + '\n');
-    SV.server.active = false;
-    return false;
-  }
-
-  SV.pmove.setWorldmodel(SV.server.worldmodel);
-  return true;
-}
-
-/**
- * Sets up model precache array including world model and submodels.
- */
-function setupModelPrecache() {
-  SV.server.models = [];
-  SV.server.models[1] = SV.server.worldmodel;
-
-  SV.server.sound_precache = [''];
-  SV.server.model_precache = ['', SV.server.worldmodel.name];
-
-  // Precache all submodels (brushes connected to entities like doors)
-  for (let i = 1; i <= SV.server.worldmodel.submodels.length; i++) {
-    SV.server.model_precache[i + 1] = '*' + i;
-    SV.server.models[i + 1] = Mod.ForName('*' + i);
-  }
-}
-
-/**
- * Prepares player entities in the client edict slots.
- * @returns {boolean} true if successful, false if game doesn't support player entities
- */
-function setupPlayerEntities() {
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const ent = SV.server.edicts[i + 1];
-
-    // We need to spawn the player entity in those client edict slots
-    if (!SV.server.gameAPI.prepareEntity(ent, 'player')) {
-      Con.PrintWarning('SV.SpawnServer: Cannot start server, because game does not know what a player entity is.\n');
-      SV.server.active = false;
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Initializes light styles array.
- */
-function initializeLightStyles() {
-  SV.server.lightstyles = [];
-  for (let i = 0; i <= Def.limits.lightstyles; i++) {
-    SV.server.lightstyles[i] = '';
-  }
-}
-
-/**
- * Configures clientdata compression fields for dynamic entity serialization.
- */
-function setupClientDataFields() {
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
-    const fields = SV.server.edicts[1].entity.clientdataFields;
-
-    // Configure clientdata fields
-    SV.server.clientdataFields.length = 0;
-    SV.server.clientdataFields.push(...fields);
-    console.assert(SV.server.clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
-
-    // Select appropriate bits writer based on field count
-    if (fields.length <= 8) {
-      SV.server.clientdataFieldsBitsWriter = MSG.WriteByte;
-    } else if (fields.length <= 16) {
-      SV.server.clientdataFieldsBitsWriter = MSG.WriteShort;
-    } else if (fields.length <= 32) {
-      SV.server.clientdataFieldsBitsWriter = MSG.WriteLong;
-    }
-
-    // Double check that all fields are actually defined
-    for (const field of fields) {
-      console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
-    }
-  }
-}
-
-/**
- * Configures extended entity field compression for client-side entities.
- */
-function setupExtendedEntityFields() {
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
-    const fields = SV.server.gameAPI.getClientEntityFields();
-
-    for (const [classname, extendedFields] of Object.entries(fields)) {
-      const clientEntityField = {
-        fields: [],
-        bitsWriter: null,
-      };
-
-      clientEntityField.fields.push(...extendedFields);
-
-      // Select appropriate bits writer based on field count
-      if (extendedFields.length <= 8) {
-        clientEntityField.bitsWriter = MSG.WriteByte;
-      } else if (extendedFields.length <= 16) {
-        clientEntityField.bitsWriter = MSG.WriteShort;
-      } else if (extendedFields.length <= 32) {
-        clientEntityField.bitsWriter = MSG.WriteLong;
-      }
-
-      SV.server.clientEntityFields[classname] = clientEntityField;
-    }
-  }
-}
-
-/**
- * Spawns the worldspawn entity (edict 0).
- * @returns {boolean} true if successful, false if worldspawn couldn't be created
- */
-function spawnWorldspawnEntity() {
-  const ent = SV.server.edicts[0];
-
-  if (!SV.server.gameAPI.prepareEntity(ent, 'worldspawn', {
-    model: SV.server.worldmodel.name,
-    modelindex: 1,
-    solid: SV.solid.bsp,
-    movetype: SV.movetype.push,
-  })) {
-    Con.PrintWarning('SV.SpawnServer: Cannot start server, because the game does not know what a worldspawn entity is.\n');
-    SV.server.active = false;
-    return false;
-  }
-
-  // Invoke the spawn function for the worldspawn
-  SV.server.gameAPI.spawnPreparedEntity(ent);
-  return true;
-}
-
-/**
- * Finalizes server spawn by loading entities and notifying clients.
- * @param {string} mapname name of the spawned map
- */
-function finalizeServerSpawn(mapname) {
-  // Populate all edicts by the entities file
-  ED.LoadFromFile(SV.server.worldmodel.entities);
-
-  SV.server.active = true;
-  SV.server.loading = false;
-
-  // Run physics twice to settle entities
-  Host.frametime = 0.1;
-  SV.physics.physics();
-  SV.physics.physics();
-
-  // Notify all active clients about the new map
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const client = SV.svs.clients[i];
-    if (client.active) {
-      SV.SendServerData(client);
-    }
-  }
-
-  // Initialize navigation
-  SV.server.navigation.init();
-
-  eventBus.publish('server.spawned', { mapname });
-  Con.PrintSuccess('Server spawned.\n');
-  Cmd.ExecuteString('status\n');
-}
-
-/**
- * Resets the server and spawns a new map.
- * This will clear all memory, load the map and spawn the player entities.
- * @param {string} mapname map name
- * @returns {boolean} true when the server was spawned successfully
- */
-/**
- * Resets the server and spawns a new map.
- * This will clear all memory, load the map and spawn the player entities.
- * @param {string} mapname map name
- * @returns {boolean} true when the server was spawned successfully
- */
-SV.SpawnServer = function(mapname) {
-  // Ensure hostname is set
-  if (NET.hostname.string.trim() === '') {
-    NET.hostname.set('UNNAMED');
-  }
-
-  eventBus.publish('server.spawning', { mapname });
-  Con.DPrint('SpawnServer: ' + mapname + '\n');
-
-  SV.svs.changelevel_issued = false;
-
-  // If server is already active, notify clients about map change
-  if (SV.server.active) {
-    notifyClientsOfMapChange(mapname);
-  }
-
-  // Clear memory and load game progs
-  Con.DPrint('Clearing memory\n');
-  Mod.ClearAll();
-  loadGameProgs();
-
-  // Initialize edicts and server state
-  initializeEdicts();
-
-  // Load world model
-  if (!loadWorldModel(mapname)) {
-    return false;
-  }
-
-  // Setup area nodes for spatial partitioning
-  SV.areanodes = [];
-  SV.area.createAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
-
-  // Setup model and sound precache
-  setupModelPrecache();
-
-  // Setup player entities
-  if (!setupPlayerEntities()) {
-    return false;
-  }
-
-  // Initialize light styles
-  initializeLightStyles();
-
-  // Setup dynamic field compression
-  setupClientDataFields();
-  setupExtendedEntityFields();
-
-  // Reset event bus subscriptions
-  SV.server.eventBus.unsubscribeAll();
-
-  // Initialize navigation graph
-  SV.server.navigation = new Navigation(SV.server.worldmodel);
-
-  // Initialize the game
-  SV.server.gameAPI.init(mapname, SV.svs.serverflags);
-
-  // Spawn worldspawn entity
-  if (!spawnWorldspawnEntity()) {
-    return false;
-  }
-
-  // Finalize and notify clients
-  finalizeServerSpawn(mapname);
-
-  return true;
-};
-
-SV.ShutdownServer = function (isCrashShutdown) {
-  // tell the game we are shutting down the game
-  SV.server.gameAPI.shutdown(isCrashShutdown);
-
-  // make sure all references are dropped
-  SV.server.active = false;
-  SV.server.loading = false;
-  SV.server.worldmodel = null;
-  SV.server.gameAPI = null;
-
-  // unlink all edicts from client structures, reset data
-  for (const client of SV.svs.clients) {
-    client.clear();
-  }
-
-  // purge out all edicts
-  for (const edict of SV.server.edicts) {
-    // explicitly tell entities to free memory
-    edict.clear();
-    edict.freeEdict();
-  }
-
-  SV.server.edicts = [];
-  SV.server.num_edicts = 0;
-
-  SV.server.navigation.shutdown();
-  SV.server.navigation = null;
-
-  if (isCrashShutdown) {
-    Con.Print('Server shut down due to a crash!\n');
-    return;
-  }
-
-  Con.Print('Server shut down.\n');
-};
-
-/**
- * Sends a cvar update to the message stream.
- * It won’t send the cvar value if it is marked as secret.
- * @param {SzBuffer} msg message stream
- * @param {Cvar} cvar cvar to write
- */
-SV.WriteCvar = function(msg, cvar) {
-  if (cvar.flags & Cvar.FLAG.SECRET) {
-    MSG.WriteString(msg, cvar.name);
-    MSG.WriteString(msg, cvar.string ? 'REDACTED' : '');
-  } else {
-    MSG.WriteString(msg, cvar.name);
-    MSG.WriteString(msg, cvar.string);
-  }
-};
-
-/**
- * Sends a cvar change to all clients.
- * This is used to notify clients about cvar changes.
- * It will write the cvar name and value to the message stream.
- * If the cvar is marked as secret, it will write 'REDACTED' instead of the value.
- * @param {Cvar} cvar cvar change to write
- */
-SV.CvarChanged = function(cvar) {
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const client = SV.svs.clients[i];
-    if (!client.active || !client.spawned) {
-      continue;
-    }
-
-    MSG.WriteByte(client.message, Protocol.svc.cvar);
-    MSG.WriteByte(client.message, 1);
-    SV.WriteCvar(client.message, cvar);
-  }
-};
-
-// =============================================================================
-// CLIENT COMMUNICATION
-// Functions for reading client input and handling client messages
-// =============================================================================
-
-/**
- * @param {ServerClient} client client
- */
-SV.ReadClientMove = function(client) {
-  client.cmd.msec = MSG.ReadByte();
-  client.cmd.angles = MSG.ReadAngleVector();
-  client.cmd.forwardmove = MSG.ReadShort();
-  client.cmd.sidemove = MSG.ReadShort();
-  client.cmd.upmove = MSG.ReadShort();
-  // CR: we could restructure this a bit and let the ServerGameAPI handle the rest
-  client.cmd.buttons = MSG.ReadByte();
-  client.edict.entity.button0 = (client.cmd.buttons & Protocol.button.attack) === 1; // QuakeC
-  client.edict.entity.button1 = ((client.cmd.buttons & Protocol.button.use) >> 2) === 1; // QuakeC
-  client.edict.entity.button2 = ((client.cmd.buttons & Protocol.button.jump) >> 1) === 1; // QuakeC
-  client.edict.entity.v_angle = client.cmd.angles;
-  client.cmd.impulse = MSG.ReadByte();
-  if (client.cmd.impulse !== 0) {
-    client.edict.entity.impulse = client.cmd.impulse; // QuakeC
-  }
-  // console.log('client.cmd', client.cmd);
-};
-
-// eslint-disable-next-line no-unused-vars
-SV.ReadClientMoveQW = function(client) {
-  // TODO
-
-  // TODO: 3x MSG_ReadDeltaUsercmd
-
-  // TODO: break if not spawned
-
-  // TODO: SV.PreRunCmd, SV.RunCmd (a few times), SV.PostRunCmd
-
-  // TODO: client.lastcmd = newcmd, client.lastcmd.buttons = 0
-};
-
-SV.HandleRconRequest = function(client) {
-  const message = client.message;
-
-  const password = MSG.ReadString();
-  const cmd = MSG.ReadString();
-
-  const rconPassword = SV.rcon_password.string;
-
-  if (rconPassword === '' || rconPassword !== password) {
-    MSG.WriteByte(message, Protocol.svc.print);
-    MSG.WriteString(message, 'Wrong rcon password!\n');
-    if (rconPassword === '') {
-      Con.Print(`SV.HandleRconRequest: rcon attempted by ${client.name} from ${client.netconnection.address}: ${cmd}\n`);
-    }
-    return;
-  }
-
-  Con.Print(`[${client.name}@${client.netconnection.address}] ${cmd}\n`);
-
-  Con.StartCapturing();
-  Cmd.ExecuteString(cmd);
-  const response = Con.StopCapturing();
-  MSG.WriteByte(message, Protocol.svc.print);
-  MSG.WriteString(message, response);
-};
-
-/**
- * Reads client message.
- * @param {ServerClient} client client
- * @returns {boolean} true, if everything was processed successfully
- */
-/**
- * List of commands that clients are allowed to execute via clc.stringcmd.
- * These commands can be sent by the client using Cmd.ForwardToServer.
- * @type {string[]}
- */
-const ALLOWED_CLIENT_COMMANDS = [
-  'status',
-  'god',
-  'notarget',
-  'fly',
-  'name',
-  'noclip',
-  'say',
-  'say_team',
-  'tell',
-  'color',
-  'kill',
-  'pause',
-  'spawn',
-  'begin',
-  'prespawn',
-  'kick',
-  'ping',
-  'give',
-  'ban',
-];
-
-/**
- * Handles a string command from the client.
- * @param {ServerClient} client client sending the command
- * @param {string} input command string
- */
-function handleClientStringCommand(client, input) {
-  const matchedCommand = ALLOWED_CLIENT_COMMANDS.find((command) =>
-    input.toLowerCase().startsWith(command),
-  );
-
-  if (matchedCommand) {
-    Cmd.ExecuteString(input, client);
-  } else {
-    Con.Print(`${client.name} tried to ${input}!\n`);
-  }
-}
-
-/**
- * Processes a single client command from the message buffer.
- * @param {ServerClient} client client
- * @param {number} cmd command type
- * @param {object} state shared state object
- * @returns {boolean} false if client should disconnect, true otherwise
- */
-function processClientCommand(client, cmd, state) {
-  switch (cmd) {
-    case Protocol.clc.nop:
-      Con.DPrint(`${client.netconnection.address} sent a nop\n`);
-      return true;
-
-    case Protocol.clc.stringcmd: {
-      const input = MSG.ReadString();
-      handleClientStringCommand(client, input);
-      return true;
-    }
-
-    case Protocol.clc.sync:
-      client.sync_time = MSG.ReadFloat();
-      return true;
-
-    case Protocol.clc.rconcmd:
-      SV.HandleRconRequest(client);
-      return true;
-
-    case Protocol.clc.disconnect:
-      return false; // Client disconnect
-
-    case Protocol.clc.move:
-      SV.ReadClientMove(client);
-      return true;
-
-    case Protocol.clc.qwmove:
-      if (state.qwmove_issued) {
-        return false;
-      }
-      state.qwmove_issued = true;
-      SV.ReadClientMoveQW(client);
-      return true;
-
-    default:
-      Con.Print(`SV.ReadClientMessage: unknown command ${cmd}\n`);
-      return false;
-  }
-}
-
-/**
- * Reads and processes all pending messages from a client.
- * Continues processing until all messages are consumed or an error occurs.
- * @param {ServerClient} client client to read messages from
- * @returns {boolean} false if client should be disconnected, true otherwise
- */
-SV.ReadClientMessage = function(client) {
-  const state = {
-    qwmove_issued: false,
-  };
-
-  // Process all pending network messages
-  while (true) {
-    const ret = NET.GetMessage(client.netconnection);
-
-    if (ret === -1) {
-      Con.Print('SV.ReadClientMessage: NET.GetMessage failed\n');
-      return false;
-    }
-
-    if (ret === 0) {
-      return true; // No more messages
-    }
-
-    MSG.BeginReading();
-
-    // Process all commands in this message
-    while (true) {
-      if (!client.active) {
-        return false;
-      }
-
-      if (MSG.badread) {
-        Con.Print('SV.ReadClientMessage: badread\n');
-        return false;
-      }
-
-      // Update client ping time
-      client.ping_times[client.num_pings++ % client.ping_times.length] = SV.server.time - client.sync_time;
-
-      const cmd = MSG.ReadChar();
-
-      if (cmd === -1) {
-        break; // End of message
-      }
-
-      if (!processClientCommand(client, cmd, state)) {
-        return false; // Client should disconnect
-      }
-    }
-  }
-};
-
-SV.RunClients = function() {
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const client = SV.svs.clients[i];
-    if (!client.active) {
-      continue;
-    }
-    if (!SV.ReadClientMessage(client)) {
-      Host.DropClient(client, false, 'Connectivity issues, failed to read message');
-      continue;
-    }
-    if (!client.spawned) {
-      client.cmd.reset();
-      continue;
-    }
-    // TODO: drop clients without an update
-    SV.clientPhysics.clientThink(client.edict, client);
-  }
-};
-
-SV.FindClientByName = function(name) {
-  return SV.svs.clients
-      .filter((client) => client.active)
-      .find((client) => client.name === name);
-};
-
-// =============================================================================
-// WORLD & SPATIAL PARTITIONING
-// Functions for collision detection, spatial queries, and entity linking.
-// These handle the BSP tree traversal and entity-world interactions.
-// =============================================================================
-
-SV.move = moveTypes;

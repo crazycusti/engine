@@ -622,7 +622,7 @@ export class ServerMessages {
       items = (clientEdict.entity.items >> 0) + ((serverflags << 28) >>> 0);
     }
 
-    if (clientEdict.entity.flags & SV.fl.onground) {
+    if (clientEdict.entity.flags & Defs.flags.FL_ONGROUND) {
       bits += Protocol.su.onground;
     }
     if (clientEdict.entity.waterlevel >= 2.0) {

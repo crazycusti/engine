@@ -204,13 +204,13 @@ export class ServerCollision {
       const touch = l.ent;
       const solid = touch.entity.solid;
 
-      if ((solid === SV.solid.not) || (touch === clip.passedict)) {
+      if ((solid === Defs.solid.SOLID_NOT) || (touch === clip.passedict)) {
         continue;
       }
 
-      console.assert(solid !== SV.solid.trigger, 'trigger not in clipping list');
+      console.assert(solid !== Defs.solid.SOLID_TRIGGER, 'trigger not in clipping list');
 
-      if (clip.type === SV.move.nomonsters && solid !== SV.solid.bsp) {
+      if (clip.type === Defs.moveTypes.MOVE_NOMONSTERS && solid !== Defs.solid.SOLID_BSP) {
         continue;
       }
 
@@ -241,7 +241,7 @@ export class ServerCollision {
         continue;
       }
 
-      const trace = (touch.entity.flags & SV.fl.monster) !== 0
+      const trace = (touch.entity.flags & Defs.flags.FL_MONSTER) !== 0
         ? this.clipMoveToEntity(touch, clip.start, clip.mins2, clip.maxs2, clip.end)
         : this.clipMoveToEntity(touch, clip.start, clip.mins, clip.maxs, clip.end);
 
@@ -273,7 +273,7 @@ export class ServerCollision {
    * @param {Vector} mins minimum extents of the moving box
    * @param {Vector} maxs maximum extents of the moving box
    * @param {Vector} end end position
-   * @param {number} type move type constant from SV.move
+   * @param {number} type move type constant from Defs.moveTypes
    * @param {import('./Edict.mjs').ServerEdict} passedict entity to skip
    * @param {(import('./Edict.mjs').ServerEdict|number)[]} ignoreedicts additional entities to ignore
    * @returns {Trace} collision result
@@ -284,9 +284,9 @@ export class ServerCollision {
       start,
       end,
       mins,
-      mins2: type === SV.move.missile ? new Vector(-15.0, -15.0, -15.0) : mins,
+      mins2: type === Defs.moveTypes.MOVE_MISSILE ? new Vector(-15.0, -15.0, -15.0) : mins,
       maxs,
-      maxs2: type === SV.move.missile ? new Vector(15.0, 15.0, 15.0) : maxs,
+      maxs2: type === Defs.moveTypes.MOVE_MISSILE ? new Vector(15.0, 15.0, 15.0) : maxs,
       type,
       passedict,
       ignoreedicts,

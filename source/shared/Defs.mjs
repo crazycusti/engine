@@ -80,6 +80,34 @@ export const flags = Object.freeze({
 });
 
 /**
+ * damage types
+ * @readonly
+ * @enum {number}
+ */
+export const damage = Object.freeze({
+  /** no damage */
+  DAMAGE_NO: 0,
+  /** damage is applied */
+  DAMAGE_YES: 1,
+  /** damage aims at entities */
+  DAMAGE_AIM: 2,
+});
+
+/**
+ * collision trace move types
+ * @readonly
+ * @enum {number}
+ */
+export const moveTypes = Object.freeze({
+  /** normal trace */
+  MOVE_NORMAL: 0,
+  /** don't clip against monsters */
+  MOVE_NOMONSTERS: 1,
+  /** expand for missile size */
+  MOVE_MISSILE: 2,
+});
+
+/**
  * entity effects
  * @readonly
  * @enum {number}

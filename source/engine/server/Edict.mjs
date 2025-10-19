@@ -2,6 +2,7 @@ import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
+import * as Defs from '../../shared/Defs.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
@@ -27,7 +28,7 @@ import { ClientEdict } from '../client/ClientEntities.mjs';
  * @property {number} [colormap] Player-specific color map index for rendering.
  * @property {?BaseEntity} [chain] Linked entity used by legacy chaining logic.
  * @property {number} [health] Current health value used by server-side selection logic.
- * @property {number} [takedamage] Damage reaction mode (`SV.damage.*`).
+ * @property {number} [takedamage] Damage reaction mode (`Defs.damage.*`).
  * @property {number} [sounds] Legacy ambient sound channel index.
  * @property {number} [serverflags] Level progression bitmask forwarded by the game API.
  * @property {string[]} [clientdataFields] Dynamic clientdata descriptor list for this entity.
@@ -159,7 +160,7 @@ export class ED {
       if (ent.entity.model) {
         models++;
       }
-      if (ent.entity.movetype === SV.movetype.step) {
+      if (ent.entity.movetype === Defs.moveType.MOVETYPE_STEP) {
         step++;
       }
     }
@@ -439,7 +440,7 @@ export class ServerEdict {
     }
 
     this.setOrigin(trace.endpos);
-    this.entity.flags |= SV.fl.onground;
+    this.entity.flags |= Defs.flags.FL_ONGROUND;
     this.entity.groundentity = trace.ent.entity;
 
     return true;
@@ -502,7 +503,7 @@ export class ServerEdict {
         if (ent.isFree()) {
           continue;
         }
-        if (ent.entity.health <= 0.0 || (ent.entity.flags & SV.fl.notarget) !== 0) {
+        if (ent.entity.health <= 0.0 || (ent.entity.flags & Defs.flags.FL_NOTARGET) !== 0) {
           continue;
         }
         break;
@@ -569,7 +570,7 @@ export class ServerEdict {
     const end = new Vector(start[0] + 2048.0 * dir[0], start[1] + 2048.0 * dir[1], start[2] + 2048.0 * dir[2]);
     const tr = SV.collision.move(start, Vector.origin, Vector.origin, end, 0, this);
     if (tr.ent !== null) {
-      if ((tr.ent.entity.takedamage === SV.damage.aim) && (!Host.teamplay.value || this.entity.team <= 0 || this.entity.team !== tr.ent.entity.team)) { // Legacy cvars
+      if ((tr.ent.entity.takedamage === Defs.damage.DAMAGE_AIM) && (!Host.teamplay.value || this.entity.team <= 0 || this.entity.team !== tr.ent.entity.team)) { // Legacy cvars
         return dir;
       }
     }
@@ -581,7 +582,7 @@ export class ServerEdict {
       if (check.isFree()) {
         continue;
       }
-      if (check.entity.takedamage !== SV.damage.aim) {
+      if (check.entity.takedamage !== Defs.damage.DAMAGE_AIM) {
         continue;
       }
       if (check.equals(this)) {

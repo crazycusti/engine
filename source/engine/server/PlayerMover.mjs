@@ -74,11 +74,11 @@ export class PlayerMover {
     pmPlayer.dead = health <= 0;
 
     const isSpectator = ('spectator' in client) ? client.spectator : false;
-    pmPlayer.spectator = !!isSpectator || edict.entity.movetype === SV.movetype.noclip;
+    pmPlayer.spectator = !!isSpectator || edict.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP;
     pmPlayer.waterlevel = edict.entity.waterlevel ?? 0;
     pmPlayer.watertype = edict.entity.watertype ?? Defs.content.CONTENT_EMPTY;
 
-    if ((edict.entity.flags & SV.fl.waterjump) !== 0) {
+    if ((edict.entity.flags & Defs.flags.FL_WATERJUMP) !== 0) {
       pmPlayer.waterjumptime = Math.max(pmPlayer.waterjumptime, Math.max(0, edict.entity.teleport_time - SV.server.time));
     } else if (edict.entity.teleport_time > SV.server.time) {
       pmPlayer.waterjumptime = edict.entity.teleport_time - SV.server.time;
@@ -99,19 +99,19 @@ export class PlayerMover {
     }
 
     if (pmPlayer.onground !== null) {
-      edict.entity.flags |= SV.fl.onground;
+      edict.entity.flags |= Defs.flags.FL_ONGROUND;
       const groundEdict = SV.server.edicts[pmPlayer.onground];
       edict.entity.groundentity = groundEdict ? groundEdict.entity : null;
     } else {
-      edict.entity.flags &= ~SV.fl.onground;
+      edict.entity.flags &= ~Defs.flags.FL_ONGROUND;
       edict.entity.groundentity = null;
     }
 
     if (pmPlayer.waterjumptime > 0) {
-      edict.entity.flags |= SV.fl.waterjump;
+      edict.entity.flags |= Defs.flags.FL_WATERJUMP;
       edict.entity.teleport_time = SV.server.time + pmPlayer.waterjumptime;
     } else if (edict.entity.teleport_time <= SV.server.time) {
-      edict.entity.flags &= ~SV.fl.waterjump;
+      edict.entity.flags &= ~Defs.flags.FL_WATERJUMP;
       edict.entity.teleport_time = 0;
     }
 

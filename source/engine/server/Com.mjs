@@ -205,7 +205,7 @@ export default class NodeCOM extends COM {
     }
   }
 
-  static WriteFile(filename, data, len) {
+  static WriteFile(filename, data, len) { // FIXME: len is actually required
     const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
 
     try {

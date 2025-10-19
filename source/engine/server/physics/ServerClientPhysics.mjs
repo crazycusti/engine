@@ -1,4 +1,5 @@
 import Vector from '../../../shared/Vector.mjs';
+import * as Defs from '../../../shared/Defs.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import {
   GROUND_ANGLE_THRESHOLD,
@@ -26,7 +27,7 @@ export class ServerClientPhysics {
    * @param {import('../Edict.mjs').ServerEdict} ent edict
    */
   walkMove(ent) {
-    const oldonground = ent.entity.flags & SV.fl.onground;
+    const oldonground = ent.entity.flags & Defs.flags.FL_ONGROUND;
     ent.entity.flags ^= oldonground;
     const oldorg = ent.entity.origin.copy();
     const oldvel = ent.entity.velocity.copy();
@@ -38,7 +39,7 @@ export class ServerClientPhysics {
     if ((oldonground === 0) && (ent.entity.waterlevel === 0.0)) {
       return;
     }
-    if (ent.entity.movetype !== SV.movetype.walk) {
+    if (ent.entity.movetype !== Defs.moveType.MOVETYPE_WALK) {
       return;
     }
     if (ent.entity.waterjump_time) {
@@ -68,8 +69,8 @@ export class ServerClientPhysics {
     }
     const downtrace = SV.physics.pushEntity(ent, new Vector(0.0, 0.0, oldvel[2] * Host.frametime - STEP_HEIGHT));
     if (downtrace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
-      if (ent.entity.solid === SV.solid.bsp) {
-        ent.entity.flags |= SV.fl.onground;
+      if (ent.entity.solid === Defs.solid.SOLID_BSP) {
+        ent.entity.flags |= Defs.flags.FL_ONGROUND;
         ent.entity.groundentity = downtrace.ent.entity;
       }
       return;
@@ -102,7 +103,7 @@ export class ServerClientPhysics {
    * @param {import('../Edict.mjs').ServerEdict} ent player entity
    */
   setIdealPitch(ent) {
-    if (!ent || (ent.entity.flags & SV.fl.onground) === 0) {
+    if (!ent || (ent.entity.flags & Defs.flags.FL_ONGROUND) === 0) {
       return;
     }
 
@@ -291,7 +292,7 @@ export class ServerClientPhysics {
     }
 
     if ((SV.server.time > ent.entity.teleport_time) || (ent.entity.waterlevel === 0.0)) {
-      ent.entity.flags &= (~SV.fl.waterjump >>> 0);
+      ent.entity.flags &= (~Defs.flags.FL_WATERJUMP >>> 0);
       ent.entity.teleport_time = 0.0;
     }
 
@@ -322,7 +323,7 @@ export class ServerClientPhysics {
     const wishvel = new Vector(
       forward[0] * fmove + right[0] * smove,
       forward[1] * fmove + right[1] * smove,
-      ent.entity.movetype !== SV.movetype.walk ? cmd.upmove : 0.0,
+      ent.entity.movetype !== Defs.moveType.MOVETYPE_WALK ? cmd.upmove : 0.0,
     );
 
     const wishdir = wishvel.copy();
@@ -333,9 +334,9 @@ export class ServerClientPhysics {
       wishvel[2] = wishdir[2] * SV.maxspeed.value;
     }
 
-    if (ent.entity.movetype === SV.movetype.noclip) {
+    if (ent.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
       ent.entity.velocity = wishvel;
-    } else if ((ent.entity.flags & SV.fl.onground) !== 0) {
+    } else if ((ent.entity.flags & Defs.flags.FL_ONGROUND) !== 0) {
       this.userFriction(ent);
       this.accelerate(ent, wishvel);
     } else {
@@ -349,7 +350,7 @@ export class ServerClientPhysics {
    * @param {import('../Client.mjs').ServerClient} client client connection
    */
   clientThink(ent, client) {
-    if (!ent || ent.entity.movetype === SV.movetype.none) {
+    if (!ent || ent.entity.movetype === Defs.moveType.MOVETYPE_NONE) {
       return;
     }
 
@@ -379,11 +380,11 @@ export class ServerClientPhysics {
 
     ent.entity.angles = angles;
 
-    if (ent.entity.flags & SV.fl.waterjump) {
+    if (ent.entity.flags & Defs.flags.FL_WATERJUMP) {
       this.waterJump(ent);
-    } else if (ent.entity.waterlevel >= 2.0 && ent.entity.movetype !== SV.movetype.noclip) {
+    } else if (ent.entity.waterlevel >= 2.0 && ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
       this.waterMove(ent, client);
-    } else if (ent.entity.movetype === SV.movetype.noclip) {
+    } else if (ent.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
       this.noclipMove(ent, client);
     } else {
       this.airMove(ent, client);
@@ -403,26 +404,26 @@ export class ServerClientPhysics {
     SV.server.gameAPI.PlayerPreThink(ent);
     SV.physics.checkVelocity(ent);
     const movetype = ent.entity.movetype >> 0;
-    if ((movetype === SV.movetype.toss) || (movetype === SV.movetype.bounce)) {
+    if ((movetype === Defs.moveType.MOVETYPE_TOSS) || (movetype === Defs.moveType.MOVETYPE_BOUNCE)) {
       SV.physics.physicsToss(ent);
     } else {
       if (!SV.physics.runThink(ent)) {
         return; // thinking might have freed the edict
       }
       switch (movetype) {
-        case SV.movetype.none:
+        case Defs.moveType.MOVETYPE_NONE:
           break;
-        case SV.movetype.walk:
-          if (!SV.physics.checkWater(ent) && (ent.entity.flags & SV.fl.waterjump) === 0) {
+        case Defs.moveType.MOVETYPE_WALK:
+          if (!SV.physics.checkWater(ent) && (ent.entity.flags & Defs.flags.FL_WATERJUMP) === 0) {
             SV.physics.addGravity(ent);
           }
           SV.physics.checkStuck(ent);
           this.walkMove(ent);
           break;
-        case SV.movetype.fly:
+        case Defs.moveType.MOVETYPE_FLY:
           SV.physics.flyMove(ent, Host.frametime);
           break;
-        case SV.movetype.noclip:
+        case Defs.moveType.MOVETYPE_NOCLIP:
           ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
           ent.entity.origin = ent.entity.origin.add(ent.entity.velocity.copy().multiply(Host.frametime));
           break;
