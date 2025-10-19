@@ -246,10 +246,10 @@ Host.ServerFrame = function() { // TODO: move to SV.ServerFrame
   SV.CheckForNewClients();
   SV.RunClients();
   if ((SV.server.paused !== true) && ((SV.svs.maxclients >= 2) || (!registry.isDedicatedServer && Key.dest.value === Key.dest.game))) {
-    SV.Physics();
+    SV.physics.physics();
   }
   SV.RunScheduledGameCommands();
-  SV.SendClientMessages();
+  SV.messages.sendClientMessages();
 };
 
 Host._scheduledForNextFrame = [];
@@ -602,8 +602,9 @@ Host.God_f = class extends HostConsoleCommand {
     if (this.cheat()) {
       return;
     }
-    SV.player.entity.flags ^= SV.fl.godmode;
-    if ((SV.player.entity.flags & SV.fl.godmode) === 0) {
+    const client = this.client;
+    client.edict.entity.flags ^= SV.fl.godmode;
+    if ((client.edict.entity.flags & SV.fl.godmode) === 0) {
       Host.ClientPrint('godmode OFF\n');
     } else {
       Host.ClientPrint('godmode ON\n');
@@ -619,8 +620,9 @@ Host.Notarget_f = class extends HostConsoleCommand {
     if (this.cheat()) {
       return;
     }
-    SV.player.entity.flags ^= SV.fl.notarget;
-    if ((SV.player.entity.flags & SV.fl.notarget) === 0) {
+    const client = this.client;
+    client.edict.entity.flags ^= SV.fl.notarget;
+    if ((client.edict.entity.flags & SV.fl.notarget) === 0) {
       Host.ClientPrint('notarget OFF\n');
     } else {
       Host.ClientPrint('notarget ON\n');
@@ -636,14 +638,15 @@ Host.Noclip_f = class extends HostConsoleCommand {
     if (this.cheat()) {
       return;
     }
-    if (SV.player.entity.movetype !== SV.movetype.noclip) {
+    const client = this.client;
+    if (client.edict.entity.movetype !== SV.movetype.noclip) {
       Host.noclip_anglehack = true;
-      SV.player.entity.movetype = SV.movetype.noclip;
+      client.edict.entity.movetype = SV.movetype.noclip;
       Host.ClientPrint('noclip ON\n');
       return;
     }
     Host.noclip_anglehack = false;
-    SV.player.entity.movetype = SV.movetype.walk;
+    client.edict.entity.movetype = SV.movetype.walk;
     Host.ClientPrint('noclip OFF\n');
   }
 };
@@ -656,12 +659,13 @@ Host.Fly_f = class extends HostConsoleCommand {
     if (this.cheat()) {
       return;
     }
-    if (SV.player.entity.movetype !== SV.movetype.fly) {
-      SV.player.entity.movetype = SV.movetype.fly;
+    const client = this.client;
+    if (client.edict.entity.movetype !== SV.movetype.fly) {
+      client.edict.entity.movetype = SV.movetype.fly;
       Host.ClientPrint('flymode ON\n');
       return;
     }
-    SV.player.entity.movetype = SV.movetype.walk;
+    client.edict.entity.movetype = SV.movetype.walk;
     Host.ClientPrint('flymode OFF\n');
   }
 };
@@ -1155,13 +1159,14 @@ Host.Kill_f = function() {
     return;
   }
 
-  if (SV.player.entity.health <= 0.0) {
+  const client = this.client;
+  if (client.edict.entity.health <= 0.0) {
     Host.ClientPrint('Can\'t suicide -- already dead!\n');
     return;
   }
 
   SV.server.gameAPI.time = SV.server.time;
-  SV.server.gameAPI.ClientKill(SV.player);
+  SV.server.gameAPI.ClientKill(client.edict);
 };
 
 Host.Pause_f = function() {
@@ -1185,7 +1190,7 @@ Host.PreSpawn_f = function() { // signon 1, step 1
     return;
   }
   Con.DPrint(`Host.PreSpawn_f: ${this.client}\n`);
-  const client = Host.client;
+  const client = this.client;
   if (client.spawned) {
     Con.Print('prespawn not valid -- already spawned\n');
     return;
@@ -1203,7 +1208,7 @@ Host.Spawn_f = function() { // signon 2, step 3
     Con.Print('spawn is not valid from the console\n');
     return;
   }
-  let client = Host.client;
+  let client = this.client;
   if (client.spawned) {
     Con.Print('Spawn not valid -- already spawned\n');
     return;
@@ -1287,7 +1292,7 @@ Host.Spawn_f = function() { // signon 2, step 3
   MSG.WriteAngle(message, angles[1]);
   MSG.WriteAngle(message, 0.0);
 
-  SV.WriteClientdataToMessage(ent, message);
+  SV.messages.writeClientdataToMessage(ent, message);
 
   MSG.WriteByte(message, Protocol.svc.signonnum);
   MSG.WriteByte(message, 3);

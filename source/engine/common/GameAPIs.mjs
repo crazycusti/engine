@@ -139,7 +139,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   static StartParticles(origin, direction, color, count) {
-    SV.StartParticle(origin, direction, color, count);
+    SV.messages.startParticle(origin, direction, color, count);
   }
 
   static SpawnAmbientSound(origin, sfxName, volume, attenuation) {
@@ -167,14 +167,14 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   static StartSound(edict, channel, sfxName, volume, attenuation) {
-    SV.StartSound(edict, channel, sfxName, volume * 255.0, attenuation);
+    SV.messages.startSound(edict, channel, sfxName, volume * 255.0, attenuation);
 
     return true;
   }
 
   static Traceline(start, end, noMonsters, passEdict, mins = null, maxs = null) {
     const nullVec = Vector.origin;
-    const trace = SV.Move(start, mins ? mins : nullVec, maxs ? maxs : nullVec, end, noMonsters, passEdict);
+    const trace = SV.collision.move(start, mins ? mins : nullVec, maxs ? maxs : nullVec, end, noMonsters, passEdict);
 
     return {
       solid: {
@@ -206,7 +206,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
   static TracelineLegacy(start, end, noMonsters, passEdict, mins = null, maxs = null) {
     const nullVec = Vector.origin;
-    return SV.Move(start, mins ? mins : nullVec, maxs ? maxs : nullVec, end, noMonsters, passEdict);
+    return SV.collision.move(start, mins ? mins : nullVec, maxs ? maxs : nullVec, end, noMonsters, passEdict);
   }
 
   /**
@@ -241,7 +241,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @returns contents
    */
   static DeterminePointContents(origin) {
-    return SV.PointContents(origin);
+    return SV.collision.pointContents(origin);
   }
 
   static ChangeLevel(mapname) {
@@ -317,7 +317,12 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return edicts; // used to be a generator, but we need to return an array due to changing linked lists in between
   }
 
-  /** @deprecated use FindAllByFieldAndValue instead */
+  /**
+   * @param field
+   * @param value
+   * @param startEdictId
+   * @deprecated use FindAllByFieldAndValue instead
+   */
   static FindByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
     for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
       /** @type {ServerEdict} */
@@ -437,14 +442,24 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return SV.server.loading;
   }
 
-  /** @deprecated use client events instead */
+  /**
+   * @param tempEntityId
+   * @param origin
+   * @deprecated use client events instead
+   */
   static DispatchTempEntityEvent(tempEntityId, origin) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity);
     MSG.WriteByte(SV.server.datagram, tempEntityId);
     MSG.WriteCoordVector(SV.server.datagram, origin);
   }
 
-  /** @deprecated use client events instead */
+  /**
+   * @param beamId
+   * @param edictId
+   * @param startOrigin
+   * @param endOrigin
+   * @deprecated use client events instead
+   */
   static DispatchBeamEvent(beamId, edictId, startOrigin, endOrigin) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity); // FIXME: unhappy about this
     MSG.WriteByte(SV.server.datagram, beamId);

@@ -7,6 +7,35 @@ import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
 
+/** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} Id1BaseEntity */
+/** @typedef {Id1BaseEntity} BaseEntity */
+
+/**
+ * @typedef {object} LegacyQuakeEntityFields
+ * @property {?BaseEntity} [enemy] Active combat target chosen by the entity AI.
+ * @property {?BaseEntity} [goalentity] Navigation or goal entity currently pursued.
+ * @property {?BaseEntity} [groundentity] Entity the actor is resting on.
+ * @property {number} [gravity] Per-entity gravity scaling factor.
+ * @property {Vector} [v_angle] View angles used for input-derived directions.
+ * @property {number} [impulse] Latest Quake impulse command applied to the entity.
+ * @property {boolean} [button0] Primary action button state forwarded from the client.
+ * @property {boolean} [button1] Secondary action button state forwarded from the client.
+ * @property {boolean} [button2] Tertiary action button state forwarded from the client.
+ * @property {Vector} [view_ofs] Camera/viewpoint offset relative to origin.
+ * @property {number} [ideal_yaw] Desired yaw used by AI steering helpers.
+ * @property {number} [team] Team identifier for teamplay rules.
+ * @property {number} [colormap] Player-specific color map index for rendering.
+ * @property {?BaseEntity} [chain] Linked entity used by legacy chaining logic.
+ * @property {number} [health] Current health value used by server-side selection logic.
+ * @property {number} [takedamage] Damage reaction mode (`SV.damage.*`).
+ * @property {number} [sounds] Legacy ambient sound channel index.
+ * @property {number} [serverflags] Level progression bitmask forwarded by the game API.
+ * @property {string[]} [clientdataFields] Dynamic clientdata descriptor list for this entity.
+ * @property {(data: string) => void} [restoreSpawnParameters] Restores cached spawn parameters from server strings.
+ */
+
+/** @typedef {BaseEntity & LegacyQuakeEntityFields} ServerEntity */
+
 let { CL, COM, Con, Host, Mod, PR, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
@@ -58,7 +87,7 @@ export class ED {
 
   /** @param {ServerEdict} ed edict */
   static Free(ed) { // TODO: move to SV.Edict
-    SV.UnlinkEdict(ed);
+    SV.area.unlinkEdict(ed);
     // mark as free, it will be cleared later
     ed.free = true;
     if (ed.entity) {
@@ -284,8 +313,8 @@ export class ServerEdict {
     };
     this.leafnums = [];
     this.freetime = 0.0;
-    /** @type {import('../../game/id1/entity/BaseEntity.mjs').default} */
-    this.entity = null;
+  /** @type {?ServerEntity} */
+  this.entity = null;
   }
 
   clear() {
@@ -352,7 +381,7 @@ export class ServerEdict {
   }
 
   linkEdict(touchTriggers = false) {
-    SV.LinkEdict(this, touchTriggers);
+    SV.area.linkEdict(this, touchTriggers);
   }
 
   /**
@@ -393,13 +422,7 @@ export class ServerEdict {
    * @returns {boolean} true, when walking was successful
    */
   walkMove(yaw, dist) {
-    if ((this.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
-      return false;
-    }
-
-    yaw *= (Math.PI / 180.0);
-
-    return SV.movestep(this, new Vector(Math.cos(yaw) * dist, Math.sin(yaw) * dist, 0.0), true);
+    return SV.movement.walkMove(this, yaw, dist);
   }
 
   /**
@@ -409,7 +432,7 @@ export class ServerEdict {
    */
   dropToFloor(z = -2048.0) {
     const end = this.entity.origin.copy().add(new Vector(0.0, 0.0, z));
-    const trace = SV.Move(this.entity.origin, this.entity.mins, this.entity.maxs, end, 0, this);
+    const trace = SV.collision.move(this.entity.origin, this.entity.mins, this.entity.maxs, end, 0, this);
 
     if (trace.fraction === 1.0 || trace.allsolid) {
       return false;
@@ -427,7 +450,7 @@ export class ServerEdict {
    * @returns {boolean} true, when edict touches the ground
    */
   isOnTheFloor() {
-    return SV.CheckBottom(this);
+  return SV.movement.checkBottom(this);
   }
 
   /**
@@ -528,49 +551,7 @@ export class ServerEdict {
    * @returns {boolean} true, when successful
    */
   moveToGoal(dist, target = null) {
-    if ((this.entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
-      return false;
-    }
-
-    // FIXME: interfaces, edict, entity
-    const goal = this.entity.goalentity?.edict ? this.entity.goalentity.edict : this.entity.goalentity;
-    const enemy = this.entity.enemy?.edict ? this.entity.enemy.edict : this.entity.enemy;
-
-    console.assert(goal !== null, 'must have goal for moveToGoal');
-
-    if (target === null) {
-      target = goal.entity.origin;
-    }
-
-    if (enemy !== null && !enemy.isWorld() && SV.CloseEnough(this, goal, dist)) {
-      return false;
-    }
-
-    // if (target !== null) { // trying to avoid this weird glitchiness when there is a goal, but NewChaseDir makes them pingpong
-    //   SV.NewChaseDir(this, target, dist);
-    //   const oldorg = this.entity.origin.copy();
-    //   const dir = target.copy().subtract(this.entity.origin);
-    //   const res = SV.movestep(this, dir.copy(), false);
-    //   this.entity.origin.set(oldorg);
-    //   if (!res) { // try to slide along wall
-    //     const { right } = dir.angleVectors();
-    //     const res = SV.movestep(this, oldorg.add(right.multiply((Math.random() > .5 ? 1 : -1) * 2.0)), false);
-    //     if (!res) { // okay, new chase dir it is
-    //       SV.NewChaseDir(this, target, dist);
-    //       return true;
-    //     }
-    //     return true;
-    //   }
-    //   return res;
-    // }
-
-    if (Math.random() >= 0.75 || !SV.StepDirection(this, this.entity.ideal_yaw, dist)) {
-      SV.NewChaseDir(this, target, dist);
-
-      return true;
-    }
-
-    return false;
+    return SV.movement.moveToGoal(this, dist, target);
   }
 
   /**
@@ -586,7 +567,7 @@ export class ServerEdict {
     const start = origin.add(new Vector(0.0, 0.0, 20.0));
 
     const end = new Vector(start[0] + 2048.0 * dir[0], start[1] + 2048.0 * dir[1], start[2] + 2048.0 * dir[2]);
-    const tr = SV.Move(start, Vector.origin, Vector.origin, end, 0, this);
+    const tr = SV.collision.move(start, Vector.origin, Vector.origin, end, 0, this);
     if (tr.ent !== null) {
       if ((tr.ent.entity.takedamage === SV.damage.aim) && (!Host.teamplay.value || this.entity.team <= 0 || this.entity.team !== tr.ent.entity.team)) { // Legacy cvars
         return dir;
@@ -617,7 +598,7 @@ export class ServerEdict {
       if (dist < bestdist) {
         continue;
       }
-      const tr = SV.Move(start, Vector.origin, Vector.origin, end, 0, this);
+      const tr = SV.collision.move(start, Vector.origin, Vector.origin, end, 0, this);
       if (tr.ent === check) {
         bestdist = dist;
         bestent = check;
@@ -656,7 +637,7 @@ export class ServerEdict {
    */
   changeYaw() {
     const angles = this.entity.angles;
-    angles[1] = SV.ChangeYaw(this);
+  angles[1] = SV.movement.changeYaw(this);
     this.entity.angles = angles;
 
     return angles[1];

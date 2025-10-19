@@ -1,20 +1,24 @@
 import Cvar from '../common/Cvar.mjs';
-import { DIST_EPSILON, MoveVars, Pmove, STEPSIZE } from '../common/Pmove.mjs';
+import { MoveVars, Pmove } from '../common/Pmove.mjs';
 import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from './../common/Def.mjs';
 import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
-import Q from '../../shared/Q.mjs';
 import { ED, ServerEdict } from './Edict.mjs';
 import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
-import { HostError } from '../common/Errors.mjs';
 import { Navigation } from './Navigation.mjs';
+import { ServerPhysics } from './physics/ServerPhysics.mjs';
+import { ServerClientPhysics } from './physics/ServerClientPhysics.mjs';
+import { ServerMessages } from './ServerMessages.mjs';
+import { ServerMovement } from './ServerMovement.mjs';
+import { ServerArea, moveTypes } from './ServerArea.mjs';
+import { ServerCollision } from './ServerCollision.mjs';
 
-let { COM, Con, Host, Mod, NET, PR, V } = registry;
+let { COM, Con, Host, Mod, NET, PR } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
@@ -23,7 +27,6 @@ eventBus.subscribe('registry.frozen', () => {
   Mod = registry.Mod;
   NET = registry.NET;
   PR = registry.PR;
-  V = registry.V;
 });
 
 /** @typedef {import('./Client.mjs').ServerClient} ServerClient */
@@ -194,6 +197,13 @@ export class ServerEntityState {
 
 SV.EntityState = ServerEntityState;
 
+SV.physics = new ServerPhysics();
+SV.clientPhysics = new ServerClientPhysics();
+SV.messages = new ServerMessages();
+SV.movement = new ServerMovement();
+SV.area = new ServerArea();
+SV.collision = new ServerCollision();
+
 SV.svs = {
   changelevel_issued: false,
   clients: [],
@@ -311,8 +321,13 @@ SV.Init = function() {
   // SV.cursize = 1;
   // MSG.WriteByte(SV.nop, Protocol.svc.nop);
 
-  SV.InitBoxHull(); // pmove, remove
+  SV.area.initBoxHull(); // pmove, remove
 };
+
+// =============================================================================
+// GAME COMMANDS & SCHEDULING
+// Schedule and run commands from the game logic
+// =============================================================================
 
 SV._scheduledGameCommands = [];
 
@@ -330,158 +345,6 @@ SV.RunScheduledGameCommands = function() {
  */
 SV.ScheduleGameCommand = function(command) {
   SV._scheduledGameCommands.push(command);
-};
-
-SV.StartParticle = function(org, dir, color, count) {
-  const datagram = SV.server.datagram;
-  if (datagram.cursize >= 1009) {
-    return;
-  }
-  MSG.WriteByte(datagram, Protocol.svc.particle);
-  MSG.WriteCoord(datagram, org[0]);
-  MSG.WriteCoord(datagram, org[1]);
-  MSG.WriteCoord(datagram, org[2]);
-  for (let i = 0; i <= 2; i++) {
-    let v = (dir[i] * 16.0) >> 0;
-    if (v > 127) {
-      v = 127;
-    } else if (v < -128) {
-      v = -128;
-    }
-    MSG.WriteChar(datagram, v);
-  }
-  MSG.WriteByte(datagram, Math.min(count, 255));
-  MSG.WriteByte(datagram, color);
-};
-
-SV.StartSound = function(edict, channel, sample, volume, attenuation) {
-  console.assert(volume >= 0 && volume <= 255, 'volume out of range', volume);
-  console.assert(attenuation >= 0.0 && attenuation <= 4.0, 'attenuation out of range', attenuation);
-  console.assert(channel >= 0 && channel <= 7, 'channel out of range', channel);
-
-  const datagram = SV.server.datagram;
-  if (datagram.cursize >= 1009) {
-    return;
-  }
-
-  let i;
-  for (i = 1; i < SV.server.sound_precache.length; i++) {
-    if (sample === SV.server.sound_precache[i]) {
-      break;
-    }
-  }
-  if (i >= SV.server.sound_precache.length) {
-    Con.Print('SV.StartSound: ' + sample + ' was not precached\n');
-    SV.server.sound_precache.push(sample);
-    MSG.WriteByte(datagram, Protocol.svc.loadsound);
-    MSG.WriteByte(datagram, i);
-    MSG.WriteString(datagram, sample);
-  }
-
-  let field_mask = 0;
-  if (volume !== 255) {
-    field_mask += 1;
-  }
-  if (attenuation !== 1.0) {
-    field_mask += 2;
-  }
-
-  MSG.WriteByte(datagram, Protocol.svc.sound);
-  MSG.WriteByte(datagram, field_mask);
-  if ((field_mask & 1) !== 0) {
-    MSG.WriteByte(datagram, volume);
-  }
-  if ((field_mask & 2) !== 0) {
-    MSG.WriteByte(datagram, Math.floor(attenuation * 64.0));
-  }
-  MSG.WriteShort(datagram, (edict.num << 3) + channel);
-  MSG.WriteByte(datagram, i);
-  MSG.WriteCoordVector(datagram, edict.entity.origin.copy().add(edict.entity.mins.copy().add(edict.entity.maxs).multiply(0.5)));
-};
-
-/**
- * Sends the server info to the client when connecting.
- * @param {ServerClient} client client
- */
-SV.SendServerData = function(client) {
-  const message = client.message;
-
-  // first message is always a print message, this is safe to do no matter what version is running
-  MSG.WriteByte(message, Protocol.svc.print);
-  MSG.WriteString(message, `\x02\nVERSION ${Def.productVersion} SERVER (${SV.server.gameVersion})\n`);
-
-  MSG.WriteByte(message, Protocol.svc.serverdata);
-  MSG.WriteByte(message, Protocol.version);
-
-  // if QuakeJS is providing a client game API, we need to send the identification
-  if (PR.QuakeJS?.ClientGameAPI) {
-    const { author, name, version } = PR.QuakeJS.identification;
-    MSG.WriteByte(message, 1);
-    MSG.WriteString(message, name);
-    MSG.WriteString(message, author);
-    MSG.WriteByte(message, version[0]);
-    MSG.WriteByte(message, version[1]);
-    MSG.WriteByte(message, version[2]);
-  } else {
-    // if we are in legacy mode, we do not need to send much here
-    MSG.WriteByte(message, 0);
-    MSG.WriteString(message, COM.game);
-  }
-
-  MSG.WriteByte(message, SV.svs.maxclients);
-  MSG.WriteString(message, SV.server.edicts[0].entity.message || SV.server.mapname); // levelname
-  // @ts-ignore
-  SV.pmove.movevars.sendToClient(message);
-  for (let i = 1; i < SV.server.model_precache.length; i++) {
-    MSG.WriteString(message, SV.server.model_precache[i]);
-  }
-  MSG.WriteByte(message, 0);
-  for (let i = 1; i < SV.server.sound_precache.length; i++) {
-    MSG.WriteString(message, SV.server.sound_precache[i]);
-  }
-  MSG.WriteByte(message, 0);
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
-    // write the clientdata fields to the client, so it can build the compression table
-    for (const field of SV.server.clientdataFields) {
-      MSG.WriteString(message, field);
-    }
-    MSG.WriteByte(message, 0);
-  }
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
-    // write the client entity fields to the client, so it can build the compression table
-    for (const [classname, { fields }] of Object.entries(SV.server.clientEntityFields)) {
-      MSG.WriteString(message, classname);
-      for (const field of fields) {
-        MSG.WriteString(message, field);
-      }
-      MSG.WriteByte(message, 0); // end of fields for this classname
-    }
-    MSG.WriteByte(message, 0);
-  }
-
-  MSG.WriteByte(message, Protocol.svc.cdtrack);
-  MSG.WriteByte(message, SV.server.edicts[0].entity.sounds);
-  MSG.WriteByte(message, SV.server.edicts[0].entity.sounds);
-
-  MSG.WriteByte(message, Protocol.svc.setview);
-  MSG.WriteShort(message, client.edict.num);
-
-  const serverCvars = Array.from(Cvar.Filter((cvar) => (cvar.flags & Cvar.FLAG.SERVER) !== 0));
-  if (serverCvars.length > 0) {
-    MSG.WriteByte(client.message, Protocol.svc.cvar);
-    MSG.WriteByte(client.message, serverCvars.length);
-    for (const serverCvar of serverCvars) {
-      SV.WriteCvar(client.message, serverCvar);
-    }
-  }
-
-  MSG.WriteByte(message, Protocol.svc.signonnum);
-  MSG.WriteByte(message, 1);
-
-  client.sendsignon = true;
-  client.spawned = false;
 };
 
 /**
@@ -517,10 +380,8 @@ SV.ConnectClient = function(client, netconnection) {
     }
   }
 
-  SV.SendServerData(client);
+  SV.messages.sendServerData(client);
 };
-
-SV.fatpvs = [];
 
 SV.CheckForNewClients = function() {
   let i;
@@ -548,731 +409,10 @@ SV.CheckForNewClients = function() {
   }
 };
 
-SV.AddToFatPVS = function(org, node) {
-  let pvs; let i; let normal; let d;
-  for (;;) {
-    if (node.contents < 0) {
-      if (node.contents !== Defs.content.CONTENT_SOLID) {
-        pvs = Mod.LeafPVS(node, SV.server.worldmodel);
-        for (i = 0; i < SV.fatbytes; i++) {
-          SV.fatpvs[i] |= pvs[i];
-        }
-      }
-      return;
-    }
-    normal = node.plane.normal;
-    d = org.dot(normal) - node.plane.dist;
-    if (d > 8.0) {
-      node = node.children[0];
-    } else {
-      if (d >= -8.0) {
-        SV.AddToFatPVS(org, node.children[0]);
-      }
-      node = node.children[1];
-    }
-  }
-};
-
-SV.FatPVS = function(org) {
-  SV.fatbytes = (SV.server.worldmodel.leafs.length + 31) >> 3;
-  let i;
-  for (i = 0; i < SV.fatbytes; i++) {
-    SV.fatpvs[i] = 0;
-  }
-  SV.AddToFatPVS(org, SV.server.worldmodel.nodes[0]);
-  return SV.fatpvs;
-};
-
-/**
- * Traverses all entities in the PVS of the given origin.
- * @param {number[]} pvs PVS to check against
- * @param {number[]} ignoreEdictIds edict ids to ignore
- * @param {number[]} alwaysIncludeEdictIds edict ids to always yield
- * @param {boolean} includeFree whether to include free edicts
- * @yields {ServerEdict} edict
- */
-SV.TraversePVS = function*(pvs, ignoreEdictIds = [], alwaysIncludeEdictIds = [], includeFree = false) {
-  for (let e = 1; e < SV.server.num_edicts; e++) {
-    /** @type {ServerEdict} */
-    const ent = SV.server.edicts[e];
-
-    // requested to always include this edict
-    if (alwaysIncludeEdictIds.includes(e)) {
-      yield ent;
-      continue;
-    }
-
-    // not active
-    if (!includeFree && ent.isFree()) {
-      continue;
-    }
-
-    // ignore this
-    if (ignoreEdictIds.includes(e)) {
-      continue;
-    }
-
-    // ignore if not touching a PV leaf
-    if (!ent.isInPVS(pvs)) {
-      continue;
-    }
-
-    yield ent;
-  }
-};
-
-SV.nullcmd = new Protocol.UserCmd();
-
-SV.WritePlayersToClient = function(clent, pvs, msg) {
-  let changes = false;
-
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    /** @type {ServerClient} */
-    const cl = SV.svs.clients[i];
-    const playerEntity = cl.edict.entity;
-
-    // ignore unspawned clients
-    if (!cl.spawned) {
-      continue;
-    }
-
-    // only write players that are visible to the client right now
-    if (!clent.equals(cl.edict) && !clent.isInPVS(pvs)) {
-      continue;
-    }
-
-    let pflags = Protocol.pf.PF_MSEC | Protocol.pf.PF_COMMAND;
-
-    // FIXME: we should have this more flexible?
-    if (playerEntity.model !== 'progs/player.mdl') {
-      pflags |= Protocol.pf.PF_MODEL;
-    }
-
-    if (!playerEntity.velocity.isOrigin()) {
-      pflags |= Protocol.pf.PF_VELOCITY;
-    }
-
-    if (playerEntity.effects) {
-      pflags |= Protocol.pf.PF_EFFECTS;
-    }
-
-    if (playerEntity.skin) {
-      pflags |= Protocol.pf.PF_SKINNUM;
-    }
-
-    if (playerEntity.health <= 0) {
-      pflags |= Protocol.pf.PF_DEAD;
-    }
-
-    if (clent.equals(cl.edict)) {
-      pflags &= ~(Protocol.pf.PF_MSEC | Protocol.pf.PF_COMMAND);
-
-      if (playerEntity.weaponframe) {
-        pflags |= Protocol.pf.PF_WEAPONFRAME;
-      }
-    }
-
-    MSG.WriteByte(msg, Protocol.svc.playerinfo);
-    MSG.WriteByte(msg, i);
-    MSG.WriteShort(msg, pflags);
-
-    MSG.WriteCoordVector(msg, playerEntity.origin);
-    MSG.WriteByte(msg, playerEntity.frame);
-
-    if (pflags & Protocol.pf.PF_MSEC) {
-      const msec = 1000 * (SV.server.time - cl.local_time);
-      MSG.WriteByte(msg, Math.max(0, Math.min(msec, 255))); // msec is capped at 255 (QW)
-    }
-
-    if (pflags & Protocol.pf.PF_COMMAND) {
-      /** @type {Protocol.UserCmd} */
-      const cmd = cl.cmd;
-
-      if (pflags & Protocol.pf.PF_DEAD) {
-        // don’t show the corpse looking around
-        cmd.angles.setTo(0, playerEntity.angles[1], 0);
-      }
-
-      cmd.buttons = 0; // never send buttons
-      cmd.impulse = 0; // never send impulses
-
-      MSG.WriteDeltaUsercmd(msg, SV.nullcmd, cmd);
-    }
-
-    if (pflags & Protocol.pf.PF_VELOCITY) {
-      MSG.WriteCoordVector(msg, playerEntity.velocity);
-    }
-
-    if (pflags & Protocol.pf.PF_MODEL) {
-      MSG.WriteByte(msg, playerEntity.modelindex);
-    }
-
-    if (pflags & Protocol.pf.PF_EFFECTS) {
-      MSG.WriteByte(msg, playerEntity.effects);
-    }
-
-    if (pflags & Protocol.pf.PF_SKINNUM) {
-      MSG.WriteByte(msg, playerEntity.skin);
-    }
-
-    if (pflags & Protocol.pf.PF_WEAPONFRAME) {
-      MSG.WriteByte(msg, playerEntity.weaponframe);
-    }
-
-    changes = true;
-  }
-
-  return changes;
-};
-
-/**
- * Writes a delta entity to the message stream.
- * @param {SzBuffer} msg message stream
- * @param {ServerEntityState} from last known state
- * @param {ServerEntityState} to new state
- * @returns {boolean} true, when to differs from from
- */
-SV.WriteDeltaEntity = function(msg, from, to) {
-  const EPSILON = 0.01;
-
-  let bits = 0;
-
-  // TODO: also ask the entity is it has a corresponding client entity
-  if (from.classname !== to.classname) {
-    bits |= Protocol.u.classname;
-  }
-
-  if (from.free !== to.free) {
-    bits |= Protocol.u.free;
-  }
-
-  if (from.modelindex !== to.modelindex) {
-    bits |= Protocol.u.model;
-  }
-
-  if (from.frame !== to.frame) {
-    bits |= Protocol.u.frame;
-  }
-
-  // not all entities have colormap as a property
-  if ((from.colormap || 0) !== (to.colormap || 0)) {
-    bits |= Protocol.u.colormap;
-  }
-
-  if (from.skin !== to.skin) {
-    bits |= Protocol.u.skin;
-  }
-
-  if (from.effects !== to.effects) {
-    bits |= Protocol.u.effects;
-  }
-
-  if (from.solid !== to.solid) {
-    bits |= Protocol.u.solid;
-  }
-
-  // transmit any valid nextthink
-  if (to.nextthink >= SV.server.time && (to.nextthink - from.nextthink) > 0.001) {
-    bits |= Protocol.u.nextthink;
-  }
-
-  for (let i = 0; i < 3; i++) {
-    if (isFinite(to.origin[i]) && Math.abs(from.origin[i] - to.origin[i]) > EPSILON) {
-      bits |= Protocol.u.origin1 << i;
-    }
-
-    if (isFinite(to.angles[i]) && Math.abs(from.angles[i] - to.angles[i]) > EPSILON) {
-      bits |= Protocol.u.angle1 << i;
-    }
-
-    if (isFinite(to.velocity[i]) && Math.abs(from.velocity[i] - to.velocity[i]) > EPSILON) {
-      bits |= Protocol.u.angle1 << i; // we smuggle velocity on angle bits
-    }
-  }
-
-  if (!from.maxs.equals(to.maxs)) {
-    bits |= Protocol.u.size;
-  }
-
-  if (!from.mins.equals(to.mins)) {
-    bits |= Protocol.u.size;
-  }
-
-  if (bits === 0) {
-    // nothing changed, no need to write anything
-    return false;
-  }
-
-  console.assert(to.num > 0, 'valid entity num', to.num);
-
-  MSG.WriteShort(msg, to.num);
-  MSG.WriteShort(msg, bits);
-
-  if (bits & Protocol.u.classname) {
-    MSG.WriteString(msg, to.classname);
-  }
-
-  if (bits & Protocol.u.free) {
-    MSG.WriteByte(msg, to.free ? 1 : 0);
-  }
-
-  if (bits & Protocol.u.frame) {
-    MSG.WriteByte(msg, to.frame);
-  }
-
-  if (bits & Protocol.u.model) {
-    MSG.WriteByte(msg, to.modelindex);
-  }
-
-  if (bits & Protocol.u.colormap) {
-    MSG.WriteByte(msg, to.colormap);
-  }
-
-  if (bits & Protocol.u.skin) {
-    MSG.WriteByte(msg, to.skin);
-  }
-
-  if (bits & Protocol.u.effects) {
-    MSG.WriteByte(msg, to.effects);
-  }
-
-  if (bits & Protocol.u.solid) {
-    MSG.WriteByte(msg, to.solid);
-  }
-
-  for (let i = 0; i < 3; i++) {
-    if (bits & (Protocol.u.origin1 << i)) {
-      MSG.WriteCoord(msg, to.origin[i]);
-    }
-
-    if (bits & (Protocol.u.angle1 << i)) {
-      MSG.WriteAngle(msg, to.angles[i]);
-      MSG.WriteCoord(msg, to.velocity[i]); // smuggle velocity on angle bits
-    }
-  }
-
-  if (bits & Protocol.u.size) {
-    MSG.WriteCoordVector(msg, to.maxs);
-    MSG.WriteCoordVector(msg, to.mins);
-  }
-
-  if (bits & Protocol.u.nextthink) {
-    if (from.nextthink <= 0) {
-      from.nextthink = SV.server.time;
-    }
-    // always make sure we are sending a valid nextthink less than 250ms, otherwise we force it to 0 to skip lerping on the client side
-    MSG.WriteByte(msg, to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0);
-  }
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
-    // check if this entity has fields to share with the client
-    if (SV.server.clientEntityFields[to.classname]) {
-      const entityFields = SV.server.clientEntityFields[to.classname];
-      const fields = entityFields.fields;
-      const bitsWriter = entityFields.bitsWriter;
-
-      let fieldbits = 0;
-      const values = [];
-
-      for (const field of fields) {
-        // is there a change?
-        if (from.extended[field] !== to.extended[field]) {
-          fieldbits |= 1 << fields.indexOf(field);
-          values.push(to.extended[field]);
-        }
-      }
-
-      bitsWriter(msg, fieldbits);
-
-      if (fieldbits > 0) {
-        MSG.WriteSerializables(msg, values);
-      }
-    }
-  }
-
-  return true;
-};
-
-/**
- * Encodes the current state of the world as
- * a svc_packetentities messages and possibly
- * a svc_nails message and
- * svc_playerinfo messages
- * @param {ServerEdict} clientEdict client edict
- * @param {SzBuffer} msg message stream
- * @returns {boolean} true, when there were changes written to the message
- */
-SV.WriteEntitiesToClient = function(clientEdict, msg) {
-  const origin = clientEdict.entity.origin.copy().add(clientEdict.entity.view_ofs);
-  const pvs = SV.FatPVS(origin);
-
-  let changes = SV.WritePlayersToClient(clientEdict, pvs, msg) ? 1 : 0;
-
-  /** @type {ServerClient} */
-  const cl = SV.svs.clients[clientEdict.num - 1];
-
-  MSG.WriteByte(msg, Protocol.svc.deltapacketentities);
-
-  const visedicts = [];
-
-  for (const ent of SV.TraversePVS(pvs, [], [clientEdict.num])) {
-    if ((msg.data.byteLength - msg.cursize) < 16) {
-      Con.PrintWarning('SV.WriteEntitiesToClient: packet overflow, not writing more entities\n');
-      break;
-    }
-
-    const toState = new SV.EntityState(ent.num);
-    toState.classname = ent.entity.classname;
-    toState.modelindex = ent.entity.model ? ent.entity.modelindex : 0;
-    toState.frame = ent.entity.frame;
-    toState.colormap = ent.entity?.colormap || 0;
-    toState.skin = ent.entity.skin;
-    toState.solid = ent.entity.solid;
-    toState.origin.set(ent.entity.origin);
-    toState.angles.set(ent.entity.angles);
-    toState.velocity.set(ent.entity.velocity);
-    toState.effects = ent.entity.effects;
-    toState.free = false;
-    toState.maxs.set(ent.entity.maxs);
-    toState.mins.set(ent.entity.mins);
-    toState.nextthink = ent.entity.nextthink || 0;
-
-    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
-      // check if this entity has fields to share with the client
-      if (SV.server.clientEntityFields[ent.entity.classname]) {
-        const entityFields = SV.server.clientEntityFields[ent.entity.classname];
-        const fields = entityFields.fields;
-
-        for (const field of fields) {
-          toState.extended[field] = ent.entity[field];
-        }
-      }
-    }
-
-    /** @type {ServerEntityState} */
-    const fromState = cl.getEntityState(ent.num);
-
-    changes |= SV.WriteDeltaEntity(msg, fromState, toState) ? 1 : 0;
-
-    // TODO: wait for a confirmation by the client
-    fromState.set(toState);
-
-    visedicts.push(ent.num);
-  }
-
-  // pretent all other entities are free
-  for (let i = 1; i < SV.server.num_edicts; i++) {
-    const ent = SV.server.edicts[i];
-
-    if (visedicts.includes(ent.num)) {
-      // visible and already written
-      continue;
-    }
-
-    /** @type {ServerEntityState} */
-    const fromState = cl.getEntityState(ent.num);
-    const toState = new SV.EntityState(ent.num);
-    toState.freeEdict();
-
-    changes |= SV.WriteDeltaEntity(msg, fromState, toState) ? 1 : 0;
-
-    // TODO: wait for a confirmation by the client
-    fromState.set(toState);
-  }
-
-  MSG.WriteShort(msg, 0); // end of list
-
-  return changes > 0;
-};
-
-/**
- * LEGACY
- * @param {ServerEdict} clientEdict client edict
- * @param {SzBuffer} msg message stream
- * @returns {boolean} true, when there were changes written to the message
- */
-SV.WriteClientdataToMessage = function(clientEdict, msg) {
-  // FIXME: there is too much hard wired stuff happening here
-  // FIXME: interfaces, edict, entity
-  // TODO: make this optional, client should take care of this
-  if ((clientEdict.entity.dmg_take || clientEdict.entity.dmg_save) && clientEdict.entity.dmg_inflictor) {
-    const other = clientEdict.entity.dmg_inflictor.edict ? clientEdict.entity.dmg_inflictor.edict : clientEdict.entity.dmg_inflictor; // FIXME: ServerEdict vs BaseEntity
-    const vec = !other.isFree() ? other.entity.origin.copy().add(other.entity.mins.copy().add(other.entity.maxs).multiply(0.5)) : clientEdict.entity.origin;
-    MSG.WriteByte(msg, Protocol.svc.damage);
-    MSG.WriteByte(msg, Math.min(255, clientEdict.entity.dmg_save));
-    MSG.WriteByte(msg, Math.min(255, clientEdict.entity.dmg_take));
-    MSG.WriteCoordVector(msg, vec);
-    clientEdict.entity.dmg_take = 0.0;
-    clientEdict.entity.dmg_save = 0.0;
-  }
-
-  // SV.SetIdealPitch(); // CR: remove this? QuakeWorld is not doing it
-
-  if (clientEdict.entity.fixangle) {
-    MSG.WriteByte(msg, Protocol.svc.setangle);
-    MSG.WriteAngleVector(msg, clientEdict.entity.angles);
-    clientEdict.entity.fixangle = false;
-  };
-
-  let bits = Protocol.su.items + Protocol.su.weapon;
-  if (clientEdict.entity.view_ofs[2] !== Protocol.default_viewheight) {
-    bits += Protocol.su.viewheight;
-  }
-  if (clientEdict.entity.idealpitch !== 0.0) {
-    bits += Protocol.su.idealpitch;
-  }
-
-  let items;
-  if (clientEdict.entity.items2 !== undefined) {
-    if (clientEdict.entity.items2 !== 0.0) {
-      items = (clientEdict.entity.items >> 0) + ((clientEdict.entity.items2 << 23) >>> 0);
-    } else {
-      items = (clientEdict.entity.items >> 0) + ((SV.server.gameAPI.serverflags << 28) >>> 0);
-    }
-  } else {
-    items = (clientEdict.entity.items >> 0) + ((SV.server.gameAPI.serverflags << 28) >>> 0);
-  }
-
-  if (clientEdict.entity.flags & SV.fl.onground) {
-    bits += Protocol.su.onground;
-  }
-  if (clientEdict.entity.waterlevel >= 2.0) {
-    bits += Protocol.su.inwater;
-  }
-
-  const punchangle = clientEdict.entity.punchangle;
-
-  if (punchangle[0] !== 0.0) {
-    bits += Protocol.su.punch1;
-  }
-  if (punchangle[1] !== 0.0) {
-    bits += Protocol.su.punch2;
-  }
-  if (punchangle[2] !== 0.0) {
-    bits += Protocol.su.punch3;
-  }
-
-  if (clientEdict.entity.weaponframe !== 0.0) {
-    bits += Protocol.su.weaponframe;
-  }
-  if (clientEdict.entity.armorvalue !== 0.0) {
-    bits += Protocol.su.armor;
-  }
-
-  MSG.WriteByte(msg, Protocol.svc.clientdata);
-  MSG.WriteShort(msg, bits);
-  if ((bits & Protocol.su.viewheight) !== 0) {
-    MSG.WriteChar(msg, clientEdict.entity.view_ofs[2]);
-  }
-  if ((bits & Protocol.su.idealpitch) !== 0) {
-    MSG.WriteChar(msg, clientEdict.entity.idealpitch);
-  }
-
-  if ((bits & Protocol.su.punch1) !== 0) {
-    MSG.WriteShort(msg, punchangle[0] * 90);
-  }
-  if ((bits & Protocol.su.punch2) !== 0) {
-    MSG.WriteShort(msg, punchangle[1] * 90.0);
-  }
-  if ((bits & Protocol.su.punch3) !== 0) {
-    MSG.WriteShort(msg, punchangle[2] * 90.0);
-  }
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
-    MSG.WriteLong(msg, items);
-    if ((bits & Protocol.su.weaponframe) !== 0) {
-      MSG.WriteByte(msg, clientEdict.entity.weaponframe);
-    }
-    if ((bits & Protocol.su.armor) !== 0) {
-      MSG.WriteByte(msg, clientEdict.entity.armorvalue);
-    }
-    MSG.WriteByte(msg, SV.ModelIndex(clientEdict.entity.weaponmodel));
-    MSG.WriteShort(msg, clientEdict.entity.health);
-    MSG.WriteByte(msg, clientEdict.entity.currentammo);
-    MSG.WriteByte(msg, clientEdict.entity.ammo_shells);
-    MSG.WriteByte(msg, clientEdict.entity.ammo_nails);
-    MSG.WriteByte(msg, clientEdict.entity.ammo_rockets);
-    MSG.WriteByte(msg, clientEdict.entity.ammo_cells);
-    if (COM.standard_quake === true) {
-      MSG.WriteByte(msg, clientEdict.entity.weapon & 0xff);
-    } else {
-      const weapon = clientEdict.entity.weapon;
-      for (let i = 0; i <= 31; i++) {
-        if ((weapon & (1 << i)) !== 0) {
-          MSG.WriteByte(msg, i);
-          break;
-        }
-      }
-    }
-  }
-
-  if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
-    const clientdataFields = SV.server.clientdataFields;
-    const destination = msg;
-
-    let fieldbits = 0;
-    const values = [];
-
-    for (let i = 0; i < clientdataFields.length; i++) {
-      const field = clientdataFields[i];
-      const value = clientEdict.entity[field];
-
-      if (!value) { // TODO: compare old value and new values
-        continue;
-      }
-
-      fieldbits |= (1 << i);
-      values.push(value);
-    }
-
-    SV.server.clientdataFieldsBitsWriter(destination, fieldbits);
-    MSG.WriteSerializables(destination, values);
-  }
-
-  return true; // TODO: changes
-};
-
-SV.SendClientDatagram = function() { // FIXME: Host.client
-  /** @type {ServerClient} */
-  const client = Host.client;
-  const msg = new SzBuffer(16000, 'SV.SendClientDatagram');
-  MSG.WriteByte(msg, Protocol.svc.time);
-  MSG.WriteFloat(msg, SV.server.time);
-
-  let changes = 0;
-
-  // Send ping times to all clients every second
-  if (Host.realtime - client.last_ping_update >= 1) {
-    for (let i = 0; i < SV.svs.clients.length; i++) {
-      /** @type {ServerClient} */
-      const pingClient = SV.svs.clients[i];
-
-      if (!pingClient.active) {
-        continue;
-      }
-
-      MSG.WriteByte(msg, Protocol.svc.updatepings);
-      MSG.WriteByte(msg, i);
-      MSG.WriteShort(msg, Math.max(0, Math.min(Math.round(pingClient.ping * 10), 30000)));
-
-      changes |= 1;
-    }
-
-    client.last_ping_update = Host.realtime;
-  }
-
-  // writing expedited messages first
-  if (client.expedited_message.cursize > 0 && (msg.cursize + client.expedited_message.cursize) < msg.data.byteLength) {
-    msg.write(new Uint8Array(client.expedited_message.data), client.expedited_message.cursize);
-    client.expedited_message.clear();
-    changes |= 1;
-  }
-
-  // writing expedited broadcast messages next
-  if ((msg.cursize + SV.server.expedited_datagram.cursize) < msg.data.byteLength) {
-    msg.write(new Uint8Array(SV.server.expedited_datagram.data), SV.server.expedited_datagram.cursize);
-    changes |= 1;
-  }
-
-  changes |= SV.WriteClientdataToMessage(client.edict, msg) ? 1 : 0;
-  changes |= SV.WriteEntitiesToClient(client.edict, msg) ? 1 : 0;
-
-  if (!client.spawned) {
-    Con.DPrint('SV.SendClientDatagram: not spawned\n');
-    return true;
-  }
-
-  if (!changes) {
-    Con.DPrint('SV.SendClientDatagram: no changes for client ' + client.num + '\n');
-    // TODO: what about changes?
-  }
-
-  client.last_update = SV.server.time;
-
-  if ((msg.cursize + SV.server.datagram.cursize) < msg.data.byteLength) {
-    msg.write(new Uint8Array(SV.server.datagram.data), SV.server.datagram.cursize);
-  }
-
-  // Con.DPrint('SV.SendClientDatagram: sending\n' + msg.toHexString() + '\n');
-  if (NET.SendUnreliableMessage(client.netconnection, msg) === -1) {
-    Host.DropClient(client, true, 'Connectivity issues');
-    return false;
-  }
-  return true;
-};
-
-SV.UpdateToReliableMessages = function() {
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    Host.client = SV.svs.clients[i];
-    const frags = Host.client.edict.entity ? Host.client.edict.entity.frags | 0 : 0; // force int
-    if (Host.client.old_frags === frags) {
-      continue;
-    }
-    for (let j = 0; j < SV.svs.maxclients; j++) {
-      const client = SV.svs.clients[j];
-      if (!client.active) {
-        continue;
-      }
-      MSG.WriteByte(client.message, Protocol.svc.updatefrags);
-      MSG.WriteByte(client.message, i);
-      MSG.WriteShort(client.message, frags);
-    }
-    Host.client.old_frags = frags;
-  }
-
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const client = SV.svs.clients[i];
-    if (client.active) {
-      client.message.write(new Uint8Array(SV.server.reliable_datagram.data), SV.server.reliable_datagram.cursize);
-    }
-  }
-
-  SV.server.reliable_datagram.clear();
-};
-
-SV.SendClientMessages = function() {
-  SV.UpdateToReliableMessages();
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    /** @type {ServerClient} */
-    const client = SV.svs.clients[i]; // FIXME: Host.client
-    Host.client = client;
-    if (!client.active) {
-      continue;
-    }
-    if (client.spawned) {
-      if (!SV.SendClientDatagram()) {
-        continue;
-      }
-    }
-    if (client.message.overflowed) {
-      Host.DropClient(client, true, 'Connectivity issues, too many messages');
-      client.message.overflowed = false;
-      continue;
-    }
-    if (client.dropasap) {
-      if (NET.CanSendMessage(client.netconnection)) {
-        Host.DropClient(client, false, 'Connectivity issues, ASAP drop requested');
-      }
-    } else if (client.message.cursize !== 0) {
-      if (!NET.CanSendMessage(client.netconnection)) {
-        continue;
-      }
-      if (NET.SendMessage(client.netconnection, client.message) === -1) {
-        Host.DropClient(client, true, 'Connectivity issues, failed to send message');
-      }
-      client.message.clear();
-      client.sendsignon = false;
-    }
-  }
-
-  for (let i = 1; i < SV.server.num_edicts; i++) {
-    if (SV.server.edicts[i].isFree()) {
-      continue;
-    }
-
-    SV.server.edicts[i].entity.effects &= ~Defs.effect.EF_MUZZLEFLASH;
-  }
-};
+// =============================================================================
+// UTILITIES & HELPERS
+// Miscellaneous helper functions for models, spawn parameters, etc.
+// =============================================================================
 
 /**
  * Returns the model index of the given model name when precached.
@@ -1311,71 +451,82 @@ SV.HasMap = function(mapname) {
   return Mod.ForName('maps/' + mapname + '.bsp') !== null;
 };
 
+// =============================================================================
+// SERVER LIFECYCLE & MAP MANAGEMENT
+// Core server spawning, shutdown, and map loading functionality
+// =============================================================================
+
 /**
- * Resets the server and spawns a new map.
- * This will clear all memory, load the map and spawn the player entities.
- * @param {string} mapname map name
- * @returns {boolean} true, when the server was spawned successfully
+ * Notifies all connected clients about a map change and resets their state.
+ * @param {string} mapname name of the new map
  */
-SV.SpawnServer = function(mapname) {
-  let i;
+function notifyClientsOfMapChange(mapname) {
+  const reconnect = new SzBuffer(128);
+  reconnect.writeByte(Protocol.svc.changelevel);
+  reconnect.writeString(mapname);
+  NET.SendToAll(reconnect);
 
-  if (NET.hostname.string.trim() === '') {
-    NET.hostname.set('UNNAMED');
+  // Make sure that all client states are partially reset and ready for a new map
+  for (const client of SV.svs.clients) {
+    client.changelevel();
   }
 
-  eventBus.publish('server.spawning', {
-    mapname,
-  });
-
-  Con.DPrint('SpawnServer: ' + mapname + '\n');
-  SV.svs.changelevel_issued = false;
-
-  if (SV.server.active) {
-    const reconnect = new SzBuffer(128);
-    reconnect.writeByte(Protocol.svc.changelevel);
-    reconnect.writeString(mapname);
-    NET.SendToAll(reconnect);
-    // make sure that all client states are partially reset and ready for a new map
-    for (const client of SV.svs.clients) {
-      client.changelevel();
-    }
-
-    // shut down navigation, since map has changed
-    if (SV.server.navigation) {
-      SV.server.navigation.shutdown();
-      SV.server.navigation = null;
-    }
+  // Shut down navigation, since map has changed
+  if (SV.server.navigation) {
+    SV.server.navigation.shutdown();
+    SV.server.navigation = null;
   }
+}
 
-  Con.DPrint('Clearing memory\n');
-  Mod.ClearAll();
-
+/**
+ * Loads the game progs and initializes game API.
+ * Sets up gameAPI, gameVersion, gameName, and gameCapabilities.
+ */
+function loadGameProgs() {
   SV.server.gameAPI = PR.QuakeJS ? new PR.QuakeJS.ServerGameAPI(ServerEngineAPI) : PR.LoadProgs();
   SV.server.gameVersion = `${(PR.QuakeJS ? `${PR.QuakeJS.identification.version.join('.')} QuakeJS` : `${PR.crc} CRC`)}`;
   SV.server.gameName = PR.QuakeJS ? PR.QuakeJS.identification.name : COM.game;
   SV.server.gameCapabilities = PR.QuakeJS ? PR.QuakeJS.identification.capabilities : PR.capabilities;
+}
 
+/**
+ * Initializes the edict array and server state.
+ * Preallocates edicts and resets server state variables.
+ */
+function initializeEdicts() {
   SV.server.edicts = [];
-  // preallocating up to Def.limits.edicts, we can extend that later during runtime
-  for (i = 0; i < Def.limits.edicts; i++) {
-    const ent = new ServerEdict(i);
 
-    SV.server.edicts[i] = ent;
+  // Preallocating up to Def.limits.edicts, we can extend that later during runtime
+  for (let i = 0; i < Def.limits.edicts; i++) {
+    SV.server.edicts[i] = new ServerEdict(i);
   }
+
+  // Clear message buffers
   SV.server.datagram.clear();
   SV.server.reliable_datagram.clear();
   SV.server.signon.clear();
-  // hooking up the edicts reserved for clients
+
+  // Hooking up the edicts reserved for clients
   SV.server.num_edicts = SV.svs.maxclients + 1;
+
+  // Reset server state
   SV.server.loading = true;
   SV.server.paused = false;
   SV.server.loadgame = false;
   SV.server.time = 1.0;
   SV.server.lastcheck = 0;
   SV.server.lastchecktime = 0.0;
+}
+
+/**
+ * Loads and initializes the world model for the given map.
+ * @param {string} mapname name of the map to load
+ * @returns {boolean} true if successful, false if map couldn't be loaded
+ */
+function loadWorldModel(mapname) {
   SV.server.mapname = mapname;
   SV.server.worldmodel = Mod.ForName('maps/' + mapname + '.bsp');
+
   if (SV.server.worldmodel === null) {
     Con.PrintWarning('SV.SpawnServer: Cannot start server, unable to load map ' + mapname + '\n');
     SV.server.active = false;
@@ -1383,27 +534,35 @@ SV.SpawnServer = function(mapname) {
   }
 
   SV.pmove.setWorldmodel(SV.server.worldmodel);
+  return true;
+}
 
+/**
+ * Sets up model precache array including world model and submodels.
+ */
+function setupModelPrecache() {
   SV.server.models = [];
   SV.server.models[1] = SV.server.worldmodel;
 
-  SV.areanodes = [];
-  SV.CreateAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
-
   SV.server.sound_precache = [''];
   SV.server.model_precache = ['', SV.server.worldmodel.name];
-  for (i = 1; i <= SV.server.worldmodel.submodels.length; i++) {
-    // TODO: do we really need this? (yes we do, PF, CL and Host etc. rely on it)
-    //       also each submodule is a brush connected to an entity (doors etc.)
+
+  // Precache all submodels (brushes connected to entities like doors)
+  for (let i = 1; i <= SV.server.worldmodel.submodels.length; i++) {
     SV.server.model_precache[i + 1] = '*' + i;
     SV.server.models[i + 1] = Mod.ForName('*' + i);
   }
+}
 
-  // boot up the players
-  for (i = 0; i < SV.svs.maxclients; i++) {
+/**
+ * Prepares player entities in the client edict slots.
+ * @returns {boolean} true if successful, false if game doesn't support player entities
+ */
+function setupPlayerEntities() {
+  for (let i = 0; i < SV.svs.maxclients; i++) {
     const ent = SV.server.edicts[i + 1];
 
-    // we need to spawn the player entity in those client edict slots
+    // We need to spawn the player entity in those client edict slots
     if (!SV.server.gameAPI.prepareEntity(ent, 'player')) {
       Con.PrintWarning('SV.SpawnServer: Cannot start server, because game does not know what a player entity is.\n');
       SV.server.active = false;
@@ -1411,19 +570,32 @@ SV.SpawnServer = function(mapname) {
     }
   }
 
+  return true;
+}
+
+/**
+ * Initializes light styles array.
+ */
+function initializeLightStyles() {
   SV.server.lightstyles = [];
-  for (i = 0; i <= Def.limits.lightstyles; i++) {
+  for (let i = 0; i <= Def.limits.lightstyles; i++) {
     SV.server.lightstyles[i] = '';
   }
+}
 
-  // build the clientdata compression fields for PlayerEntity
+/**
+ * Configures clientdata compression fields for dynamic entity serialization.
+ */
+function setupClientDataFields() {
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
     const fields = SV.server.edicts[1].entity.clientdataFields;
-    // configure clientdata fields
+
+    // Configure clientdata fields
     SV.server.clientdataFields.length = 0;
     SV.server.clientdataFields.push(...fields);
     console.assert(SV.server.clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
 
+    // Select appropriate bits writer based on field count
     if (fields.length <= 8) {
       SV.server.clientdataFieldsBitsWriter = MSG.WriteByte;
     } else if (fields.length <= 16) {
@@ -1432,15 +604,20 @@ SV.SpawnServer = function(mapname) {
       SV.server.clientdataFieldsBitsWriter = MSG.WriteLong;
     }
 
-    // double check that all fields are actually defined
+    // Double check that all fields are actually defined
     for (const field of fields) {
       console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
     }
   }
+}
 
-  // build the extended fields compression fields
+/**
+ * Configures extended entity field compression for client-side entities.
+ */
+function setupExtendedEntityFields() {
   if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
     const fields = SV.server.gameAPI.getClientEntityFields();
+
     for (const [classname, extendedFields] of Object.entries(fields)) {
       const clientEntityField = {
         fields: [],
@@ -1449,6 +626,7 @@ SV.SpawnServer = function(mapname) {
 
       clientEntityField.fields.push(...extendedFields);
 
+      // Select appropriate bits writer based on field count
       if (extendedFields.length <= 8) {
         clientEntityField.bitsWriter = MSG.WriteByte;
       } else if (extendedFields.length <= 16) {
@@ -1460,17 +638,13 @@ SV.SpawnServer = function(mapname) {
       SV.server.clientEntityFields[classname] = clientEntityField;
     }
   }
+}
 
-  // reset the event bus subscriptions
-  SV.server.eventBus.unsubscribeAll();
-
-  // init navigation graph
-  SV.server.navigation = new Navigation(SV.server.worldmodel);
-
-  // init the game
-  SV.server.gameAPI.init(mapname, SV.svs.serverflags);
-
-  // edict 0 is reserved for worldspawn
+/**
+ * Spawns the worldspawn entity (edict 0).
+ * @returns {boolean} true if successful, false if worldspawn couldn't be created
+ */
+function spawnWorldspawnEntity() {
   const ent = SV.server.edicts[0];
 
   if (!SV.server.gameAPI.prepareEntity(ent, 'worldspawn', {
@@ -1484,30 +658,120 @@ SV.SpawnServer = function(mapname) {
     return false;
   }
 
-  // invoke the spawn function for the worldspawn
+  // Invoke the spawn function for the worldspawn
   SV.server.gameAPI.spawnPreparedEntity(ent);
+  return true;
+}
 
-  // populate all edicts by the entities file
+/**
+ * Finalizes server spawn by loading entities and notifying clients.
+ * @param {string} mapname name of the spawned map
+ */
+function finalizeServerSpawn(mapname) {
+  // Populate all edicts by the entities file
   ED.LoadFromFile(SV.server.worldmodel.entities);
+
   SV.server.active = true;
   SV.server.loading = false;
+
+  // Run physics twice to settle entities
   Host.frametime = 0.1;
-  SV.Physics();
-  SV.Physics();
-  // sending to all clients that we are on a new map
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    Host.client = SV.svs.clients[i];
-    if (!Host.client.active) {
-      continue;
+  SV.physics.physics();
+  SV.physics.physics();
+
+  // Notify all active clients about the new map
+  for (let i = 0; i < SV.svs.maxclients; i++) {
+    const client = SV.svs.clients[i];
+    if (client.active) {
+      SV.SendServerData(client);
     }
-    SV.SendServerData(Host.client);
   }
+
+  // Initialize navigation
   SV.server.navigation.init();
-  eventBus.publish('server.spawned', {
-    mapname,
-  });
+
+  eventBus.publish('server.spawned', { mapname });
   Con.PrintSuccess('Server spawned.\n');
   Cmd.ExecuteString('status\n');
+}
+
+/**
+ * Resets the server and spawns a new map.
+ * This will clear all memory, load the map and spawn the player entities.
+ * @param {string} mapname map name
+ * @returns {boolean} true when the server was spawned successfully
+ */
+/**
+ * Resets the server and spawns a new map.
+ * This will clear all memory, load the map and spawn the player entities.
+ * @param {string} mapname map name
+ * @returns {boolean} true when the server was spawned successfully
+ */
+SV.SpawnServer = function(mapname) {
+  // Ensure hostname is set
+  if (NET.hostname.string.trim() === '') {
+    NET.hostname.set('UNNAMED');
+  }
+
+  eventBus.publish('server.spawning', { mapname });
+  Con.DPrint('SpawnServer: ' + mapname + '\n');
+
+  SV.svs.changelevel_issued = false;
+
+  // If server is already active, notify clients about map change
+  if (SV.server.active) {
+    notifyClientsOfMapChange(mapname);
+  }
+
+  // Clear memory and load game progs
+  Con.DPrint('Clearing memory\n');
+  Mod.ClearAll();
+  loadGameProgs();
+
+  // Initialize edicts and server state
+  initializeEdicts();
+
+  // Load world model
+  if (!loadWorldModel(mapname)) {
+    return false;
+  }
+
+  // Setup area nodes for spatial partitioning
+  SV.areanodes = [];
+  SV.area.createAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
+
+  // Setup model and sound precache
+  setupModelPrecache();
+
+  // Setup player entities
+  if (!setupPlayerEntities()) {
+    return false;
+  }
+
+  // Initialize light styles
+  initializeLightStyles();
+
+  // Setup dynamic field compression
+  setupClientDataFields();
+  setupExtendedEntityFields();
+
+  // Reset event bus subscriptions
+  SV.server.eventBus.unsubscribeAll();
+
+  // Initialize navigation graph
+  SV.server.navigation = new Navigation(SV.server.worldmodel);
+
+  // Initialize the game
+  SV.server.gameAPI.init(mapname, SV.svs.serverflags);
+
+  // Spawn worldspawn entity
+  if (!spawnWorldspawnEntity()) {
+    return false;
+  }
+
+  // Finalize and notify clients
+  finalizeServerSpawn(mapname);
+
   return true;
 };
 
@@ -1583,1206 +847,10 @@ SV.CvarChanged = function(cvar) {
   }
 };
 
-// move
-
-SV.CheckBottom = function(ent) {
-  const mins = ent.entity.origin.copy().add(ent.entity.mins);
-  const maxs = ent.entity.origin.copy().add(ent.entity.maxs);
-  // eslint-disable-next-line no-unreachable-loop
-  while (true) {
-    if (SV.PointContents(new Vector(mins[0], mins[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
-      break;
-    }
-    if (SV.PointContents(new Vector(mins[0], maxs[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
-      break;
-    }
-    if (SV.PointContents(new Vector(maxs[0], mins[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
-      break;
-    }
-    if (SV.PointContents(new Vector(maxs[0], maxs[1], mins[2] - 1.0)) !== Defs.content.CONTENT_SOLID) {
-      break;
-    }
-    return true;
-  }
-  const start = new Vector((mins[0] + maxs[0]) * 0.5, (mins[1] + maxs[1]) * 0.5, mins[2]);
-  const stop = new Vector(start[0], start[1], start[2] - 2.0 * STEPSIZE);
-  let trace = SV.Move(start, Vector.origin, Vector.origin, stop, SV.move.nomonsters, ent);
-  if (trace.fraction === 1.0) {
-    return false;
-  }
-  let bottom = trace.endpos[2];
-  const mid = bottom;
-  for (let x = 0; x <= 1; x++) {
-    for (let y = 0; y <= 1; y++) {
-      start[0] = stop[0] = (x !== 0) ? maxs[0] : mins[0];
-      start[1] = stop[1] = (y !== 0) ? maxs[1] : mins[1];
-      trace = SV.Move(start, Vector.origin, Vector.origin, stop, SV.move.nomonsters, ent);
-      if ((trace.fraction !== 1.0) && (trace.endpos[2] > bottom)) {
-        bottom = trace.endpos[2];
-      }
-      if ((trace.fraction === 1.0) || ((mid - trace.endpos[2]) > STEPSIZE)) {
-        return false;
-      }
-    }
-  }
-  return true;
-};
-
-/**
- * Called by monster program code.
- * The move will be adjusted for slopes and stairs, but if the move isn't
- * possible, no move is done, false is returned, and
- * pr_global_struct->trace_normal is set to the normal of the blocking wall
- * @param {ServerEdict} ent edict/entity trying to move
- * @param {Vector} move move direction
- * @param {boolean} relink if true, it will call SV.LinkEdict
- * @returns {boolean} false, if no move is done
- */
-SV.movestep = function(ent, move, relink) { // FIXME: return type = boolean
-  const oldorg = ent.entity.origin.copy();
-  const mins = ent.entity.mins;
-  const maxs = ent.entity.maxs;
-  // flying monsters don't step up
-  if ((ent.entity.flags & (SV.fl.swim | SV.fl.fly)) !== 0) {
-    const enemy = ent.entity.enemy;
-    const neworg = new Vector();
-    // try one move with vertical motion, then one without
-    for (let i = 0; i <= 1; i++) {
-      const origin = ent.entity.origin.copy();
-      neworg[0] = origin[0] + move[0];
-      neworg[1] = origin[1] + move[1];
-      neworg[2] = origin[2];
-      if (i === 0 && enemy) {
-        const enemyEntity = enemy instanceof ServerEdict ? enemy.entity : enemy;
-        const dz = ent.entity.origin[2] - enemyEntity.origin[2];
-        if (dz > 40.0) {
-          neworg[2] -= 8.0;
-        } else if (dz < 30.0) {
-          neworg[2] += 8.0;
-        }
-      }
-      const trace = SV.Move(ent.entity.origin, mins, maxs, neworg, SV.move.normal, ent);
-      if (trace.fraction === 1.0) {
-        if (((ent.entity.flags & SV.fl.swim) !== 0) && (SV.PointContents(trace.endpos) === Defs.content.CONTENT_EMPTY)) {
-          // console.log('not here 1');
-          return false; // swim monster left water
-        }
-        ent.entity.origin = trace.endpos.copy();
-        if (relink) {
-          SV.LinkEdict(ent, true);
-        }
-        return true;
-      }
-      if (!enemy) {
-        // console.log('not here 2');
-        return false;
-      }
-    }
-    // console.log('not here 3');
-    return false;
-  }
-  // push down from a step height above the wished position
-  const neworg = ent.entity.origin.copy();
-  neworg[0] += move[0];
-  neworg[1] += move[1];
-  neworg[2] += STEPSIZE;
-  const end = neworg.copy();
-  end[2] -= STEPSIZE * 2.0;
-  const trace = SV.Move(neworg, mins, maxs, end, SV.move.normal, ent);
-  if (trace.allsolid === true) {
-    // console.log('all solid', neworg.toString(), mins, maxs, end);
-    return false;
-  }
-  if (trace.startsolid === true) {
-    neworg[2] -= STEPSIZE;
-    const trace = SV.Move(neworg, mins, maxs, end, SV.move.normal, ent);
-    if ((trace.allsolid === true) || (trace.startsolid === true)) {
-      // console.log('start solid', neworg.toString());
-
-      return false;
-    }
-  }
-  // CR: FIXME: there’s a significant difference from WinQuake’s SV_movestep
-  if (trace.fraction === 1.0) {
-    // if monster had the ground pulled out, go ahead and fall
-    if ((ent.entity.flags & SV.fl.partialground) !== 0) {
-      const neworg = ent.entity.origin.copy();
-      neworg[0] += move[0];
-      neworg[1] += move[1];
-      ent.entity.origin = neworg;
-      if (relink) {
-        SV.LinkEdict(ent, true);
-      }
-      ent.entity.flags &= (~SV.fl.onground);
-      return true;
-    }
-    // console.log('edge', move.toString());
-
-    return false; // walked off an edge
-  }
-  ent.entity.origin = trace.endpos.copy();
-  if (!SV.CheckBottom(ent)) {
-    if ((ent.entity.flags & SV.fl.partialground) !== 0) {
-      if (relink) {
-        SV.LinkEdict(ent, true);
-      }
-      return true;
-    }
-    ent.entity.origin = ent.entity.origin.set(oldorg);
-    // console.log('no step here', move.toString());
-    return false;
-  }
-  ent.entity.flags &= ~SV.fl.partialground;
-  ent.entity.groundentity = trace.ent.entity;
-  if (relink) {
-    SV.LinkEdict(ent, true);
-  }
-  return true;
-};
-
-SV.ChangeYaw = function (ent) { // Edict
-  const angle1 = ent.entity.angles[1];
-  const current = Vector.anglemod(angle1);
-  const ideal = ent.entity.ideal_yaw;
-
-  if (current === ideal) {
-    return angle1;
-  }
-
-  let move = ideal - current;
-
-  if (ideal > current) {
-    if (move >= 180.0) {
-      move -= 360.0;
-    }
-  } else if (move <= -180.0) {
-    move += 360.0;
-  }
-
-  const speed = ent.entity.yaw_speed;
-
-  if (move > 0.0) {
-    if (move > speed) {
-      move = speed;
-    }
-  } else if (move < -speed) {
-    move = -speed;
-  }
-
-  return Vector.anglemod(current + move);
-};
-
-SV.StepDirection = function(ent, yaw, dist) {
-  ent.entity.ideal_yaw = yaw;
-  ent.entity.angles = new Vector(ent.entity.angles[0], SV.ChangeYaw(ent), ent.entity.angles[2]); // CR: I’m not happy about this line
-  yaw *= Math.PI / 180.0;
-  const oldorigin = ent.entity.origin.copy();
-  if (SV.movestep(ent, new Vector(Math.cos(yaw) * dist, Math.sin(yaw) * dist, 0.0), false)) {
-    const delta = ent.entity.angles[1] - ent.entity.ideal_yaw;
-    if ((delta > 45.0) && (delta < 315.0)) {
-      ent.entity.origin = ent.entity.origin.set(oldorigin);
-    }
-    SV.LinkEdict(ent, true);
-    return true;
-  }
-  SV.LinkEdict(ent, true);
-  return false;
-};
-
-SV.NewChaseDir = function(actor, endpos, dist) {
-  const olddir = Vector.anglemod(((actor.entity.ideal_yaw / 45.0) >> 0) * 45.0);
-  const turnaround = Vector.anglemod(olddir - 180.0);
-  const deltax = endpos[0] - actor.entity.origin[0];
-  const deltay = endpos[1] - actor.entity.origin[1];
-  let dx; let dy;
-  if (deltax > 10.0) {
-    dx = 0.0;
-  } else if (deltax < -10.0) {
-    dx = 180.0;
-  } else {
-    dx = -1;
-  }
-  if (deltay < -10.0) {
-    dy = 270.0;
-  } else if (deltay > 10.0) {
-    dy = 90.0;
-  } else {
-    dy = -1;
-  }
-  let tdir;
-  if ((dx !== -1) && (dy !== -1)) {
-    if (dx === 0.0) {
-      tdir = (dy === 90.0) ? 45.0 : 315.0;
-    } else {
-      tdir = (dy === 90.0) ? 135.0 : 215.0;
-    }
-    if ((tdir !== turnaround) && SV.StepDirection(actor, tdir, dist)) {
-      return;
-    }
-  }
-  if ((Math.random() >= 0.25) || (Math.abs(deltay) > Math.abs(deltax))) {
-    tdir = dx;
-    dx = dy;
-    dy = tdir;
-  }
-  if ((dx !== -1) && (dx !== turnaround) && SV.StepDirection(actor, dx, dist)) {
-    return;
-  }
-  if ((dy !== -1) && (dy !== turnaround) && SV.StepDirection(actor, dy, dist)) {
-    return;
-  }
-  if ((olddir !== -1) && SV.StepDirection(actor, olddir, dist)) {
-    return;
-  }
-  if (Math.random() >= 0.5) {
-    for (tdir = 0.0; tdir <= 315.0; tdir += 45.0) {
-      if ((tdir !== turnaround) && SV.StepDirection(actor, tdir, dist)) {
-        return;
-      }
-    }
-  } else {
-    for (tdir = 315.0; tdir >= 0.0; tdir -= 45.0) {
-      if ((tdir !== turnaround) && SV.StepDirection(actor, tdir, dist)) {
-        return;
-      }
-    }
-  }
-  if ((turnaround !== -1) && SV.StepDirection(actor, turnaround, dist)) {
-    return;
-  }
-  actor.entity.ideal_yaw = olddir;
-  if (!SV.CheckBottom(actor)) {
-    actor.entity.flags |= SV.fl.partialground;
-  }
-};
-
-SV.CloseEnough = function(ent, goal, dist) { // Edict
-  const absmin = ent.entity.absmin, absmax = ent.entity.absmax;
-  const absminGoal = goal.entity.absmin, absmaxGoal = goal.entity.absmax;
-  for (let i = 0; i < 3; i++) {
-    if (absminGoal[i] > (absmax[i] + dist)) {
-      return false;
-    }
-    if (absmaxGoal[i] < (absmin[i] - dist)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-// phys
-
-SV.CheckAllEnts = function() {
-  for (let e = 1; e < SV.server.num_edicts; e++) {
-    const check = SV.server.edicts[e];
-    if (check.isFree() === true) {
-      continue;
-    }
-    switch (check.entity.movetype) {
-      case SV.movetype.push:
-      case SV.movetype.none:
-      case SV.movetype.noclip:
-        continue;
-    }
-    if (SV.TestEntityPosition(check) === true) {
-      Con.Print('entity in invalid position\n');
-    }
-  }
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.CheckVelocity = function(ent) {
-  const velo = ent.entity.velocity, origin = ent.entity.origin;
-  for (let i = 0; i < 3; i++) {
-    let component = velo[i];
-    if (Q.isNaN(component)) {
-      Con.Print('Got a NaN velocity on ' + ent.entity.classname + '\n');
-      component = 0.0;
-    }
-    if (Q.isNaN(origin[i])) {
-      Con.Print('Got a NaN origin on ' + ent.entity.classname + '\n');
-      origin[i] = 0.0;
-    }
-    if (component > SV.maxvelocity.value) {
-      component = SV.maxvelocity.value;
-    } else if (component < -SV.maxvelocity.value) {
-      component = -SV.maxvelocity.value;
-    }
-    velo[i] = component;
-  }
-  ent.entity.origin = ent.entity.origin.set(origin);
-  ent.entity.velocity = ent.entity.velocity.set(velo);
-};
-
-/**
- * Runs thinking code if time.  There is some play in the exact time the think
- * function will be called, because it is called before any movement is done
- * in a frame.  Not used for pushmove objects, because they must be exact.
- * @param {ServerEdict} ent edict
- * @returns {boolean} whether false when an edict got freed
- */
-SV.RunThink = function(ent) {
-  // CR: turn into an infinite loop to catch up with all thinks (QW)
-  while (true) {
-    let thinktime = ent.entity.nextthink;
-
-    if (thinktime <= 0.0 || thinktime > (SV.server.time + Host.frametime)) {
-      return true;
-    }
-
-    if (thinktime < SV.server.time) {
-      // don't let things stay in the past.
-      // it is possible to start that way
-      // by a trigger with a local time.
-      thinktime = SV.server.time;
-    }
-
-    ent.entity.nextthink = 0.0;
-    SV.server.gameAPI.time = thinktime;
-    ent.entity.think(null);
-
-    if (ent.isFree()) {
-      return false; // think might have deleted the edict
-    }
-  }
-};
-
-/**
- * who touched whom? (depends on solid type not being not)
- * @param {ServerEdict} e1 edict
- * @param {ServerEdict} e2 edict
- */
-SV.Impact = function(e1, e2) {
-  SV.server.gameAPI.time = SV.server.time;
-
-  if (e1.entity.touch && (e1.entity.solid !== SV.solid.not)) {
-    e1.entity.touch(e2.entity);
-  }
-  if (e2.entity.touch && (e2.entity.solid !== SV.solid.not)) {
-    e2.entity.touch(e1.entity);
-  }
-};
-
-SV.ClipVelocity = function(vec, normal, out, overbounce) {
-  const backoff = vec.dot(normal) * overbounce;
-
-  out[0] = vec[0] - normal[0] * backoff;
-  if ((out[0] > -0.1) && (out[0] < 0.1)) {
-    out[0] = 0.0;
-  }
-  out[1] = vec[1] - normal[1] * backoff;
-  if ((out[1] > -0.1) && (out[1] < 0.1)) {
-    out[1] = 0.0;
-  }
-  out[2] = vec[2] - normal[2] * backoff;
-  if ((out[2] > -0.1) && (out[2] < 0.1)) {
-    out[2] = 0.0;
-  }
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @param {number} time time to move
- * @returns {number} blocked flags (0, 1, 2, 3, 7)
- */
-SV.FlyMove = function(ent, time) {
-  let bumpcount;
-  let numplanes = 0;
-  let dir;
-  const planes = [];
-  const primal_velocity = ent.entity.velocity;
-  let original_velocity = ent.entity.velocity;
-  const new_velocity = new Vector();
-  let i; let j;
-  let time_left = time;
-  let blocked = 0;
-  for (bumpcount = 0; bumpcount < 4; bumpcount++) {
-    if (ent.entity.velocity.isOrigin()) {
-      break;
-    }
-    const end = ent.entity.origin.copy().add(ent.entity.velocity.copy().multiply(time_left));
-    const trace = SV.Move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, 0, ent);
-    if (trace.allsolid === true) {
-      ent.entity.velocity = new Vector();
-      return 3;
-    }
-    if (trace.fraction > 0.0) {
-      ent.entity.origin = ent.entity.origin.set(trace.endpos);
-      original_velocity = ent.entity.velocity.copy();
-      numplanes = 0;
-      if (trace.fraction === 1.0) {
-        break;
-      }
-    }
-    console.assert(trace.ent !== null, 'trace.ent must not be null');
-    if (trace.plane.normal[2] > 0.7) {
-      blocked |= 1;
-      if (trace.ent.entity.solid === SV.solid.bsp) {
-        ent.entity.flags |= SV.fl.onground;
-        ent.entity.groundentity = trace.ent.entity;
-      }
-    } else if (trace.plane.normal[2] === 0.0) {
-      blocked |= 2;
-      SV.steptrace = trace;
-    }
-    SV.Impact(ent, trace.ent);
-    if (ent.isFree()) {
-      break;
-    }
-    time_left -= time_left * trace.fraction;
-    if (numplanes >= 5) {
-      ent.entity.velocity = new Vector();
-      return 3;
-    }
-    planes[numplanes++] = trace.plane.normal.copy();
-    for (i = 0; i < numplanes; i++) {
-      SV.ClipVelocity(original_velocity, planes[i], new_velocity, 1.0);
-      for (j = 0; j < numplanes; j++) {
-        if (j !== i) {
-          const plane = planes[j];
-          if ((new_velocity[0] * plane[0] + new_velocity[1] * plane[1] + new_velocity[2] * plane[2]) < 0.0) { // plane is not a Vector
-            break;
-          }
-        }
-      }
-      if (j === numplanes) {
-        break;
-      }
-    }
-    if (i !== numplanes) {
-      ent.entity.velocity = new_velocity;
-    } else {
-      if (numplanes !== 2) {
-        ent.entity.velocity = new Vector();
-        return 7;
-      }
-      dir = planes[0].cross(planes[1]);
-      // scale the velocity by the dot product of velocity and direction
-      ent.entity.velocity = dir.multiply(dir.dot(ent.entity.velocity));
-    }
-    if (ent.entity.velocity.dot(primal_velocity) <= 0.0) {
-      ent.entity.velocity = new Vector();
-      return blocked;
-    }
-  }
-  return blocked;
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.AddGravity = function(ent) {
-  const ent_gravity = ent.entity.gravity || 1.0;
-
-  const velocity = ent.entity.velocity;
-  velocity[2] += ent_gravity * SV.gravity.value * Host.frametime * -1.0;
-  ent.entity.velocity = velocity;
-};
-
-SV.AddBoyancy = function(ent) {
-  const velocity = ent.entity.velocity;
-  velocity[2] += SV.gravity.value * Host.frametime * 0.01;
-  ent.entity.velocity = velocity;
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @param {Vector} pushVector vector to push the entity
- * @returns {Trace} trace result
- */
-SV.PushEntity = function(ent, pushVector) {
-  const end = ent.entity.origin.copy().add(pushVector);
-  let nomonsters;
-  const solid = ent.entity.solid;
-  if (ent.entity.movetype === SV.movetype.flymissile) {
-    nomonsters = SV.move.missile;
-  } else if ((solid === SV.solid.trigger) || (solid === SV.solid.not)) {
-    nomonsters = SV.move.nomonsters;
-  } else {
-    nomonsters = SV.move.normal;
-  }
-  const trace = SV.Move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, nomonsters, ent);
-  ent.entity.origin = ent.entity.origin.set(trace.endpos);
-  SV.LinkEdict(ent, true);
-  if (trace.ent) {
-    SV.Impact(ent, trace.ent);
-  }
-  return trace;
-};
-
-/**
- * @param {ServerEdict} pusher edict
- * @param {number} movetime time to move
- */
-SV.PushMove = function(pusher, movetime) {
-  if (pusher.entity.velocity.isOrigin() && pusher.entity.avelocity.isOrigin()) {
-    pusher.entity.ltime += movetime;
-    return;
-  }
-  const move = pusher.entity.velocity.copy().multiply(movetime);
-  const rotation = pusher.entity.avelocity.copy().multiply(movetime);
-  const mins = pusher.entity.absmin.copy().add(move);
-  const maxs = pusher.entity.absmax.copy().add(move);
-  const pushorig = pusher.entity.origin.copy().add(move);
-  const pushangle = pusher.entity.angles.copy().add(rotation);
-  pusher.entity.origin = pushorig;
-  pusher.entity.angles = pushangle;
-  pusher.entity.ltime += movetime;
-  SV.LinkEdict(pusher);
-  const moved = [];
-  for (let e = 1; e < SV.server.num_edicts; e++) {
-    const check = SV.server.edicts[e];
-    if (check.isFree() === true) {
-      continue;
-    }
-    const movetype = check.entity.movetype;
-    if ((movetype === SV.movetype.push) || (movetype === SV.movetype.none) || (movetype === SV.movetype.noclip)) {
-      continue;
-    }
-    if (((check.entity.flags & SV.fl.onground) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher)) {
-      if (!check.entity.absmin.lt(maxs) || !check.entity.absmax.gt(mins)) {
-        continue;
-      }
-
-      if (!SV.TestEntityPosition(check)) {
-        continue;
-      }
-    }
-    // remove the onground flag for non-players
-    if (movetype !== SV.movetype.walk) {
-      check.entity.flags &= ~SV.fl.onground;
-    }
-    const entorig = check.entity.origin.copy();
-    moved[moved.length] = [entorig, check]; // CR: dear reader, do not use moved.push(…) here
-    pusher.entity.solid = SV.solid.not;
-    SV.PushEntity(check, move);
-    pusher.entity.solid = SV.solid.bsp;
-    if (SV.TestEntityPosition(check) === true) {
-      const cmins = check.entity.mins, cmaxs = check.entity.maxs;
-      if (cmins[0] === cmaxs[0]) {
-        continue;
-      }
-      if (check.entity.solid === SV.solid.not || check.entity.solid === SV.solid.trigger) {
-        cmins[0] = cmaxs[0] = 0.0;
-        cmins[1] = cmaxs[1] = 0.0;
-        cmaxs[2] = cmins[2];
-        check.entity.mins = cmins;
-        check.entity.maxs = cmaxs;
-        continue;
-      }
-      check.entity.origin = entorig;
-      SV.LinkEdict(check, true);
-      check.entity.origin = pushorig;
-      SV.LinkEdict(pusher);
-      pusher.entity.ltime -= movetime;
-      if (pusher.entity.blocked) {
-        pusher.entity.blocked(check.entity);
-      }
-      for (let i = 0; i < moved.length; i++) {
-        const moved_edict = moved[i];
-        moved_edict[1].entity.origin = moved_edict[0];
-        SV.LinkEdict(moved_edict[1]);
-      }
-      return;
-    }
-  }
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.Physics_Pusher = function(ent) {
-  const oldltime = ent.entity.ltime;
-  const thinktime = ent.entity.nextthink;
-  let movetime;
-  if (thinktime < (oldltime + Host.frametime)) {
-    movetime = thinktime - oldltime;
-    if (movetime < 0.0) {
-      movetime = 0.0;
-    }
-  } else {
-    movetime = Host.frametime;
-  }
-  if (movetime > 0.0) {
-    SV.PushMove(ent, movetime);
-  }
-  if (thinktime <= oldltime || thinktime > ent.entity.ltime) {
-    return;
-  }
-  ent.entity.nextthink = 0.0;
-  SV.server.gameAPI.time = SV.server.time;
-  ent.entity.think(null);
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.CheckStuck = function(ent) {
-  if (!SV.TestEntityPosition(ent)) {
-    ent.entity.oldorigin = ent.entity.oldorigin.set(ent.entity.origin);
-    return;
-  }
-  ent.entity.origin = ent.entity.origin.set(ent.entity.oldorigin);
-  if (SV.TestEntityPosition(ent)) {
-    Con.DPrint('Unstuck.\n');
-    SV.LinkEdict(ent, true);
-    return;
-  }
-  const norg = ent.entity.origin.copy();
-  for (norg[2] = 0.0; norg[2] <= 17.0; norg[2]++) {
-    for (norg[0] = -1.0; norg[0] <= 1.0; norg[0]++) {
-      for (norg[1] = -1.0; norg[1] <= 1.0; norg[1]++) {
-        ent.entity.origin = ent.entity.origin.set(norg).add(norg);
-        if (SV.TestEntityPosition(ent) !== true) {
-          Con.DPrint('Unstuck.\n');
-          SV.LinkEdict(ent, true);
-          return;
-        }
-      }
-    }
-  }
-  Con.DPrint('player is stuck.\n');
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @returns {boolean} true if the entity is in water
- */
-SV.CheckWater = function(ent) {
-  const point = ent.entity.origin.copy().add(new Vector(0.0, 0.0, ent.entity.mins[2] + 1.0));
-  ent.entity.waterlevel = 0.0;
-  ent.entity.watertype = Defs.content.CONTENT_EMPTY;
-  let cont = SV.PointContents(point);
-  if (cont > Defs.content.CONTENT_WATER) {
-    return false;
-  }
-  ent.entity.watertype = cont;
-  ent.entity.waterlevel = 1.0;
-  const origin = ent.entity.origin;
-  point[2] = origin[2] + (ent.entity.mins[2] + ent.entity.maxs[2]) * 0.5;
-  cont = SV.PointContents(point);
-  if (cont <= Defs.content.CONTENT_WATER) {
-    ent.entity.waterlevel = 2.0;
-    if ('view_ofs' in ent.entity) {
-      point[2] = origin[2] + ent.entity.view_ofs[2];
-      cont = SV.PointContents(point);
-      if (cont <= Defs.content.CONTENT_WATER) {
-        ent.entity.waterlevel = 3.0;
-      }
-    } else {
-      ent.entity.waterlevel = 3.0;
-    }
-  }
-  return ent.entity.waterlevel > 1.0;
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @param {Trace} trace trace of the wall hit
- */
-SV.WallFriction = function(ent, trace) {
-  const { forward } = ent.entity.v_angle.angleVectors();
-  const normal = trace.plane.normal;
-  let d = normal.dot(forward) + 0.5;
-  if (d >= 0.0) {
-    return;
-  }
-  d += 1.0;
-  const velo = ent.entity.velocity;
-  const i = normal.dot(velo);
-
-  // CR: velo[2] was always 0 when I tested this code substitude
-  // ent.entity.velocity = ent.entity.velocity.subtract(normal.multiply(i)).multiply(d);
-
-  velo[0] = (velo[0] - normal[0] * i) * d;
-  velo[1] = (velo[1] - normal[1] * i) * d;
-
-  ent.entity.velocity = velo;
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @param {Vector} oldvel old velocity of the entity
- * @returns {number} clip value, 7 if stuck, otherwise the clip value returned by SV.FlyMove
- */
-SV.TryUnstick = function(ent, oldvel) {
-  const oldorg = ent.entity.origin.copy();
-  const dir = new Vector(2.0, 0.0, 0.0);
-  for (let i = 0; i <= 7; i++) {
-    switch (i) {
-      case 1: dir[0] = 0.0; dir[1] = 2.0; break;
-      case 2: dir[0] = -2.0; dir[1] = 0.0; break;
-      case 3: dir[0] = 0.0; dir[1] = -2.0; break;
-      case 4: dir[0] = 2.0; dir[1] = 2.0; break;
-      case 5: dir[0] = -2.0; dir[1] = 2.0; break;
-      case 6: dir[0] = 2.0; dir[1] = -2.0; break;
-      case 7: dir[0] = -2.0; dir[1] = -2.0; break;
-    }
-    SV.PushEntity(ent, dir);
-    ent.entity.velocity = new Vector(oldvel[0], oldvel[1], 0.0);
-    const clip = SV.FlyMove(ent, 0.1);
-    const curorg = ent.entity.origin;
-    if (Math.abs(oldorg[1] - curorg[1]) > 4.0 || Math.abs(oldorg[0] - curorg[0]) > 4.0) {
-      return clip;
-    }
-    ent.entity.origin = ent.entity.origin.set(oldorg);
-  }
-  ent.entity.velocity = new Vector();
-  return 7;
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.WalkMove = function(ent) {
-  const oldonground = ent.entity.flags & SV.fl.onground;
-  ent.entity.flags ^= oldonground;
-  const oldorg = ent.entity.origin.copy();
-  const oldvel = ent.entity.velocity.copy();
-  let clip = SV.FlyMove(ent, Host.frametime);
-  if ((clip & 2) === 0) {
-    return;
-  }
-  if ((oldonground === 0) && (ent.entity.waterlevel === 0.0)) {
-    return;
-  }
-  if (ent.entity.movetype !== SV.movetype.walk) {
-    return;
-  }
-  if (SV.nostep.value !== 0) {
-    return;
-  }
-  if ((SV.player.entity.flags & SV.fl.waterjump) !== 0) {
-    return;
-  }
-  const nosteporg = ent.entity.origin.copy();
-  const nostepvel = ent.entity.velocity.copy();
-  ent.entity.origin = ent.entity.origin.set(oldorg);
-  SV.PushEntity(ent, new Vector(0.0, 0.0, 18.0));
-  ent.entity.velocity = new Vector(oldvel[0], oldvel[1], 0.0);
-  clip = SV.FlyMove(ent, Host.frametime);
-  if (clip !== 0) {
-    const curorg = ent.entity.origin;
-    if (Math.abs(oldorg[1] - curorg[1]) < 0.03125 && Math.abs(oldorg[0] - curorg[0]) < 0.03125) {
-      clip = SV.TryUnstick(ent, oldvel);
-    }
-    if ((clip & 2) !== 0) {
-      // FIXME: SV.steptrace can be null!
-      if (SV.steptrace) {
-        SV.WallFriction(ent, SV.steptrace);
-      }
-    }
-  }
-  const downtrace = SV.PushEntity(ent, new Vector(0.0, 0.0, oldvel[2] * Host.frametime - 18.0));
-  if (downtrace.plane.normal[2] > 0.7) {
-    if (ent.entity.solid === SV.solid.bsp) {
-      ent.entity.flags |= SV.fl.onground;
-      ent.entity.groundentity = downtrace.ent.entity;
-    }
-    return;
-  }
-  ent.entity.origin = ent.entity.origin.set(nosteporg);
-  ent.entity.velocity = ent.entity.velocity.set(nostepvel);
-};
-
-SV.NoclipMove = function() {
-  const ent = SV.player, cmd = Host.client.cmd;
-
-  const { forward, right } = ent.entity.v_angle.angleVectors();
-
-  const wishvel = new Vector(
-    forward[0] * cmd.forwardmove + right[0] * cmd.sidemove,
-    forward[1] * cmd.forwardmove + right[1] * cmd.sidemove,
-    forward[2] * cmd.forwardmove + right[2] * cmd.sidemove,
-  );
-
-  ent.entity.velocity = ent.entity.velocity.set(wishvel.multiply(2.0));
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.Physics_Client = function(ent) {
-  if (!ent.getClient().active) {
-    return;
-  }
-
-  SV.server.gameAPI.time = SV.server.time;
-  SV.server.gameAPI.PlayerPreThink(ent);
-  SV.CheckVelocity(ent);
-  const movetype = ent.entity.movetype >> 0;
-  if ((movetype === SV.movetype.toss) || (movetype === SV.movetype.bounce)) {
-    SV.Physics_Toss(ent);
-  } else {
-    if (!SV.RunThink(ent)) {
-      return; // thinking might have freed the edict
-    }
-    switch (movetype) {
-      case SV.movetype.none:
-        break;
-      case SV.movetype.walk:
-        if (!SV.CheckWater(ent) && (ent.entity.flags & SV.fl.waterjump) === 0) {
-          SV.AddGravity(ent);
-        }
-        SV.CheckStuck(ent);
-        SV.WalkMove(ent);
-        break;
-      case SV.movetype.fly:
-        SV.FlyMove(ent, Host.frametime);
-        break;
-      case SV.movetype.noclip:
-        ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
-        ent.entity.origin = ent.entity.origin.add(ent.entity.velocity.copy().multiply(Host.frametime));
-        break;
-      default:
-        throw new Error('SV.Physics_Client: bad movetype ' + movetype);
-    }
-  }
-  SV.LinkEdict(ent, true);
-  SV.server.gameAPI.time = SV.server.time;
-  SV.server.gameAPI.PlayerPostThink(ent);
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.CheckWaterTransition = function(ent) {
-  const cont = SV.PointContents(ent.entity.origin);
-
-  if (ent.entity.watertype === 0.0) {
-    ent.entity.watertype = cont;
-    ent.entity.waterlevel = 1.0;
-    return;
-  }
-
-  if (cont <= Defs.content.CONTENT_WATER) {
-    if (ent.entity.watertype === Defs.content.CONTENT_EMPTY) {
-      SV.StartSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0); // TODO: move to game logic
-    }
-    ent.entity.watertype = cont;
-    ent.entity.waterlevel = 1.0;
-    return;
-  }
-  if (ent.entity.watertype !== Defs.content.CONTENT_EMPTY) {
-    SV.StartSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0); // TODO: move to game logic
-  }
-  ent.entity.watertype = Defs.content.CONTENT_EMPTY;
-  ent.entity.waterlevel = cont;
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.Physics_Toss = function(ent) {
-  if (!SV.RunThink(ent)) {
-    return; // thinking might have freed the edict
-  }
-  if ((ent.entity.flags & SV.fl.onground) !== 0) {
-    return;
-  }
-
-  SV.CheckVelocity(ent);
-  const movetype = ent.entity.movetype;
-  if ((movetype !== SV.movetype.fly) && (movetype !== SV.movetype.flymissile)) {
-    SV.AddGravity(ent);
-  }
-  ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
-  const trace = SV.PushEntity(ent, ent.entity.velocity.copy().multiply(Host.frametime));
-  if (trace.fraction === 1.0 || ent.isFree()) {
-    return;
-  }
-  const velocity = new Vector();
-  SV.ClipVelocity(ent.entity.velocity, trace.plane.normal, velocity, (movetype === SV.movetype.bounce) ? 1.5 : 1.0);
-  ent.entity.velocity = velocity;
-  if (trace.plane.normal[2] > 0.7) {
-    if (ent.entity.velocity[2] < 60.0 || movetype !== SV.movetype.bounce) {
-      ent.entity.flags |= SV.fl.onground;
-      ent.entity.groundentity = trace.ent.entity;
-      ent.entity.velocity = new Vector();
-      ent.entity.avelocity = new Vector();
-    }
-  }
-  SV.CheckWaterTransition(ent);
-};
-
-/**
- * @param {ServerEdict} ent edict
- */
-SV.Physics_Step = function(ent) {
-  const entity = ent.entity;
-  // SV.CheckWater(ent);
-  if ((entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
-    const hitsound = (ent.entity.velocity[2] < (SV.gravity.value * -0.1));
-    SV.AddGravity(ent);
-    SV.CheckVelocity(ent);
-    SV.FlyMove(ent, Host.frametime);
-    SV.LinkEdict(ent, true);
-    if (((entity.flags & SV.fl.onground) !== 0) && (hitsound === true)) { // TODO: move to game logic
-      SV.StartSound(ent, 0, 'demon/dland2.wav', 255, 1.0);
-    }
-  // } else if ((entity.flags & SV.fl.monster) !== 0 && entity.health <= 0 && entity.waterlevel > 2) {
-  //   SV.AddBoyancy(ent);
-  //   SV.CheckVelocity(ent);
-  //   SV.FlyMove(ent, Host.frametime);
-  //   SV.LinkEdict(ent, true);
-  }
-  SV.RunThink(ent);
-  SV.CheckWaterTransition(ent);
-};
-
-SV.Physics = function() {
-  SV.server.gameAPI.time = SV.server.time;
-  SV.server.gameAPI.startFrame();
-  for (let i = 0; i < SV.server.num_edicts; i++) {
-    /** @type {ServerEdict} */
-    const ent = SV.server.edicts[i];
-    if (ent.isFree()) {
-      continue;
-    }
-    if (SV.server.gameAPI.force_retouch-- > 0) {
-      SV.LinkEdict(ent, true);
-    }
-    if (ent.isClient()) {
-      SV.Physics_Client(ent);
-      continue;
-    }
-    switch (ent.entity.movetype) {
-      case SV.movetype.push:
-        SV.Physics_Pusher(ent);
-        continue;
-      case SV.movetype.none:
-        SV.RunThink(ent);
-        continue;
-      case SV.movetype.noclip:
-        SV.RunThink(ent);
-        continue;
-      case SV.movetype.step:
-        SV.Physics_Step(ent);
-        continue;
-      case SV.movetype.toss:
-      case SV.movetype.bounce:
-      case SV.movetype.fly:
-      case SV.movetype.flymissile:
-        SV.Physics_Toss(ent);
-        continue;
-    }
-    throw new HostError('SV.Physics: bad movetype ' + (ent.entity.movetype >> 0));
-  }
-  SV.server.time += Host.frametime;
-};
-
-// user
-
-SV.SetIdealPitch = function() {
-  const ent = SV.player;
-  if ((ent.entity.flags & SV.fl.onground) === 0) {
-    return;
-  }
-  const origin = ent.entity.origin;
-  const angleval = ent.entity.angles[1] * (Math.PI / 180.0);
-  const sinval = Math.sin(angleval);
-  const cosval = Math.cos(angleval);
-  const top = new Vector(0.0, 0.0, origin[2] + ent.entity.view_ofs[2]);
-  const bottom = new Vector(0.0, 0.0, top[2] - 160.0);
-  const z = [];
-  for (let i = 0; i < 6; i++) {
-    top[0] = bottom[0] = origin[0] + cosval * (i + 3) * 12.0;
-    top[1] = bottom[1] = origin[1] + sinval * (i + 3) * 12.0;
-    const tr = SV.Move(top, Vector.origin, Vector.origin, bottom, 1, ent);
-    if (tr.allsolid || tr.fraction === 1.0) {
-      return;
-    }
-    z[i] = top[2] - tr.fraction * 160.0;
-  }
-  let dir = 0.0; let step; let steps = 0;
-  for (let i = 1; i < 6; i++) {
-    step = z[i] - z[i - 1];
-    if ((step > -0.1) && (step < 0.1)) {
-      continue;
-    }
-    if ((dir !== 0.0) && (((step - dir) > 0.1) || ((step - dir) < -0.1))) {
-      return;
-    }
-    steps++;
-    dir = step;
-  }
-  if (dir === 0.0) {
-    ent.entity.idealpitch = 0.0;
-    return;
-  }
-  if (steps >= 2) {
-    ent.entity.idealpitch = -dir * SV.idealpitchscale.value;
-  }
-};
-
-SV.UserFriction = function() {
-  const ent = SV.player;
-  const vel = ent.entity.velocity;
-  const speed = Math.sqrt(vel[0] * vel[0] + vel[1] * vel[1]);
-  if (speed === 0.0) {
-    return;
-  }
-  const origin = ent.entity.origin;
-  const start = new Vector(origin[0] + vel[0] / speed * 16.0, origin[1] + vel[1] / speed * 16.0, origin[2] + ent.entity.mins[2]);
-  let friction = SV.friction.value;
-  if (SV.Move(start, Vector.origin, Vector.origin, new Vector(start[0], start[1], start[2] - 34.0), 1, ent).fraction === 1.0) {
-    friction *= SV.edgefriction.value;
-  }
-  let newspeed = speed - Host.frametime * (speed < SV.stopspeed.value ? SV.stopspeed.value : speed) * friction;
-  if (newspeed < 0.0) {
-    newspeed = 0.0;
-  }
-  newspeed /= speed;
-  ent.entity.velocity = ent.entity.velocity.multiply(newspeed);
-};
-
-SV.Accelerate = function(wishvel, air) {
-  const ent = SV.player;
-
-  const wishdir = wishvel.copy(); // new Vector(wishvel[0], wishvel[1], wishvel[2]);
-
-  let wishspeed = wishdir.normalize();
-
-  if (air && wishspeed > 30.0) {
-    wishspeed = 30.0;
-  }
-
-  const addspeed = wishspeed - ent.entity.velocity.dot(wishdir);
-  if (addspeed <= 0.0) {
-    return;
-  }
-  const accelspeed = Math.min(SV.accelerate.value * Host.frametime * wishspeed, addspeed);
-  ent.entity.velocity = ent.entity.velocity.add(wishdir.multiply(accelspeed));
-};
-
-SV.WaterMove = function() { // Host.client
-  const ent = SV.player; const cmd = Host.client.cmd;
-  const { forward, right } = ent.entity.v_angle.angleVectors();
-  const wishvel = new Vector(
-    forward[0] * cmd.forwardmove + right[0] * cmd.sidemove,
-    forward[1] * cmd.forwardmove + right[1] * cmd.sidemove,
-    forward[2] * cmd.forwardmove + right[2] * cmd.sidemove,
-  );
-  if ((cmd.forwardmove === 0.0) && (cmd.sidemove === 0.0) && (cmd.upmove === 0.0)) {
-    wishvel[2] -= 60.0;
-  } else {
-    wishvel[2] += cmd.upmove;
-  }
-  let wishspeed = wishvel.len();
-  let scale;
-  if (wishspeed > SV.maxspeed.value) {
-    scale = SV.maxspeed.value / wishspeed;
-    wishvel.multiply(scale);
-    wishspeed = SV.maxspeed.value;
-  }
-  wishspeed *= 0.7;
-  const speed = ent.entity.velocity.len(); let newspeed;
-  if (speed !== 0.0) {
-    newspeed = speed - Host.frametime * speed * SV.friction.value;
-    if (newspeed < 0.0) {
-      newspeed = 0.0;
-    }
-    scale = newspeed / speed;
-    ent.entity.velocity = ent.entity.velocity.multiply(scale);
-  } else {
-    newspeed = 0.0;
-  }
-
-  if (wishspeed === 0.0) {
-    return;
-  }
-
-  const addspeed = wishspeed - newspeed;
-  if (addspeed <= 0.0) {
-    return;
-  }
-  const accelspeed = Math.min(SV.accelerate.value * wishspeed * Host.frametime, addspeed);
-  ent.entity.velocity = ent.entity.velocity.add(wishvel.multiply(accelspeed / wishspeed));
-};
-
-SV.WaterJump = function() { // Host.client
-  const ent = SV.player;
-  if ((SV.server.time > ent.entity.teleport_time) || (ent.entity.waterlevel === 0.0)) {
-    ent.entity.flags &= (~SV.fl.waterjump >>> 0);
-    ent.entity.teleport_time = 0.0;
-  }
-
-  const nvelo = ent.entity.movedir.copy();
-  nvelo[2] = ent.entity.velocity[2];
-  ent.entity.velocity = nvelo;
-};
-
-SV.AirMove = function() { // Host.client
-  const ent = SV.player;
-  const cmd = Host.client.cmd;
-  const {forward, right} =   ent.entity.angles.angleVectors();
-  let fmove = cmd.forwardmove;
-  const smove = cmd.sidemove;
-  if ((SV.server.time < ent.entity.teleport_time) && (fmove < 0.0)) {
-    fmove = 0.0;
-  }
-  const wishvel = new Vector(
-    forward[0] * fmove + right[0] * smove,
-    forward[1] * fmove + right[1] * smove,
-		((ent.entity.movetype >> 0) !== SV.movetype.walk) ? cmd.upmove : 0.0);
-  const wishdir = new Vector(wishvel[0], wishvel[1], wishvel[2]);
-  if (wishdir.normalize() > SV.maxspeed.value) {
-    wishvel[0] = wishdir[0] * SV.maxspeed.value;
-    wishvel[1] = wishdir[1] * SV.maxspeed.value;
-    wishvel[2] = wishdir[2] * SV.maxspeed.value;
-  }
-  if (ent.entity.movetype === SV.movetype.noclip) {
-    ent.entity.velocity = wishvel;
-  } else if ((ent.entity.flags & SV.fl.onground) !== 0) {
-    SV.UserFriction();
-    SV.Accelerate(wishvel);
-  } else {
-    SV.Accelerate(wishvel, true);
-  }
-};
-
-SV.ClientThink = function() {
-  const ent = SV.player;
-
-  if (ent.entity.movetype === SV.movetype.none) {
-    return;
-  }
-
-  const punchangle = ent.entity.punchangle.copy();
-  let len = punchangle.normalize() - 10.0 * Host.frametime;
-  if (len < 0.0) {
-    len = 0.0;
-  }
-  ent.entity.punchangle = punchangle.multiply(len);
-
-  if (ent.entity.health <= 0.0) {
-    return;
-  }
-
-  const angles = ent.entity.angles;
-  const v_angle = ent.entity.v_angle.copy().add(punchangle);
-
-  angles[2] = V.CalcRoll(angles, ent.entity.velocity) * 4.0;
-
-  if (!SV.player.entity.fixangle) {
-    angles[0] = v_angle[0] / -3.0;
-    angles[1] = v_angle[1];
-  }
-
-  ent.entity.angles = angles;
-
-  if (ent.entity.flags & SV.fl.waterjump) {
-    SV.WaterJump();
-  } else if (ent.entity.waterlevel >= 2.0 && ent.entity.movetype !== SV.movetype.noclip) {
-    SV.WaterMove();
-  } else if (ent.entity.movetype === SV.movetype.noclip) {
-    SV.NoclipMove();
-  } else {
-    SV.AirMove();
-  }
-};
+// =============================================================================
+// CLIENT COMMUNICATION
+// Functions for reading client input and handling client messages
+// =============================================================================
 
 /**
  * @param {ServerClient} client client
@@ -2850,32 +918,110 @@ SV.HandleRconRequest = function(client) {
  * @param {ServerClient} client client
  * @returns {boolean} true, if everything was processed successfully
  */
+/**
+ * List of commands that clients are allowed to execute via clc.stringcmd.
+ * These commands can be sent by the client using Cmd.ForwardToServer.
+ * @type {string[]}
+ */
+const ALLOWED_CLIENT_COMMANDS = [
+  'status',
+  'god',
+  'notarget',
+  'fly',
+  'name',
+  'noclip',
+  'say',
+  'say_team',
+  'tell',
+  'color',
+  'kill',
+  'pause',
+  'spawn',
+  'begin',
+  'prespawn',
+  'kick',
+  'ping',
+  'give',
+  'ban',
+];
+
+/**
+ * Handles a string command from the client.
+ * @param {ServerClient} client client sending the command
+ * @param {string} input command string
+ */
+function handleClientStringCommand(client, input) {
+  const matchedCommand = ALLOWED_CLIENT_COMMANDS.find((command) =>
+    input.toLowerCase().startsWith(command),
+  );
+
+  if (matchedCommand) {
+    Cmd.ExecuteString(input, client);
+  } else {
+    Con.Print(`${client.name} tried to ${input}!\n`);
+  }
+}
+
+/**
+ * Processes a single client command from the message buffer.
+ * @param {ServerClient} client client
+ * @param {number} cmd command type
+ * @param {object} state shared state object
+ * @returns {boolean} false if client should disconnect, true otherwise
+ */
+function processClientCommand(client, cmd, state) {
+  switch (cmd) {
+    case Protocol.clc.nop:
+      Con.DPrint(`${client.netconnection.address} sent a nop\n`);
+      return true;
+
+    case Protocol.clc.stringcmd: {
+      const input = MSG.ReadString();
+      handleClientStringCommand(client, input);
+      return true;
+    }
+
+    case Protocol.clc.sync:
+      client.sync_time = MSG.ReadFloat();
+      return true;
+
+    case Protocol.clc.rconcmd:
+      SV.HandleRconRequest(client);
+      return true;
+
+    case Protocol.clc.disconnect:
+      return false; // Client disconnect
+
+    case Protocol.clc.move:
+      SV.ReadClientMove(client);
+      return true;
+
+    case Protocol.clc.qwmove:
+      if (state.qwmove_issued) {
+        return false;
+      }
+      state.qwmove_issued = true;
+      SV.ReadClientMoveQW(client);
+      return true;
+
+    default:
+      Con.Print(`SV.ReadClientMessage: unknown command ${cmd}\n`);
+      return false;
+  }
+}
+
+/**
+ * Reads and processes all pending messages from a client.
+ * Continues processing until all messages are consumed or an error occurs.
+ * @param {ServerClient} client client to read messages from
+ * @returns {boolean} false if client should be disconnected, true otherwise
+ */
 SV.ReadClientMessage = function(client) {
-  let qwmove_issued = false;
+  const state = {
+    qwmove_issued: false,
+  };
 
-  /** commands that may be pushed by Cmd.ForwardToServer */
-  const commands = [
-    'status',
-    'god',
-    'notarget',
-    'fly',
-    'name',
-    'noclip',
-    'say',
-    'say_team',
-    'tell',
-    'color',
-    'kill',
-    'pause',
-    'spawn',
-    'begin',
-    'prespawn',
-    'kick',
-    'ping',
-    'give',
-    'ban',
-  ];
-
+  // Process all pending network messages
   while (true) {
     const ret = NET.GetMessage(client.netconnection);
 
@@ -2885,11 +1031,12 @@ SV.ReadClientMessage = function(client) {
     }
 
     if (ret === 0) {
-      return true;
+      return true; // No more messages
     }
 
     MSG.BeginReading();
 
+    // Process all commands in this message
     while (true) {
       if (!client.active) {
         return false;
@@ -2900,6 +1047,7 @@ SV.ReadClientMessage = function(client) {
         return false;
       }
 
+      // Update client ping time
       client.ping_times[client.num_pings++ % client.ping_times.length] = SV.server.time - client.sync_time;
 
       const cmd = MSG.ReadChar();
@@ -2908,65 +1056,19 @@ SV.ReadClientMessage = function(client) {
         break; // End of message
       }
 
-      switch (cmd) {
-        case Protocol.clc.nop: {
-          Con.DPrint(`${client.netconnection.address} sent a nop\n`);
-          continue;
-        }
-
-        case Protocol.clc.stringcmd: {
-          const input = MSG.ReadString();
-          const matchedCommand = commands.find((command) =>
-            input.toLowerCase().startsWith(command),
-          );
-          if (matchedCommand) {
-            Cmd.ExecuteString(input, client);
-          } else {
-            Con.Print(`${client.name} tried to ${input}!\n`);
-          }
-          break;
-        }
-
-        case Protocol.clc.sync:
-          client.sync_time = MSG.ReadFloat();
-          break;
-
-        case Protocol.clc.rconcmd:
-          SV.HandleRconRequest(client);
-          break;
-
-        case Protocol.clc.disconnect:
-          return false; // Client disconnect
-
-        case Protocol.clc.move:
-          SV.ReadClientMove(client);
-          break;
-
-        case Protocol.clc.qwmove: // TODO
-          if (qwmove_issued) {
-            return false;
-          }
-          qwmove_issued = true;
-          SV.ReadClientMoveQW(client);
-          break;
-
-        default:
-          Con.Print(`SV.ReadClientMessage: unknown command ${cmd}\n`);
-          return false;
+      if (!processClientCommand(client, cmd, state)) {
+        return false; // Client should disconnect
       }
     }
   }
 };
 
-SV.RunClients = function() { // FIXME: Host.client
+SV.RunClients = function() {
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
     if (!client.active) {
       continue;
     }
-    Host.client = client;
-    /** @type {ServerEdict} @deprecated */
-    SV.player = client.edict; // FIXME: SV.player
     if (!SV.ReadClientMessage(client)) {
       Host.DropClient(client, false, 'Connectivity issues, failed to read message');
       continue;
@@ -2976,7 +1078,7 @@ SV.RunClients = function() { // FIXME: Host.client
       continue;
     }
     // TODO: drop clients without an update
-    SV.ClientThink(); // FIXME: SV.player
+    SV.clientPhysics.clientThink(client.edict, client);
   }
 };
 
@@ -2986,472 +1088,10 @@ SV.FindClientByName = function(name) {
       .find((client) => client.name === name);
 };
 
-// world
+// =============================================================================
+// WORLD & SPATIAL PARTITIONING
+// Functions for collision detection, spatial queries, and entity linking.
+// These handle the BSP tree traversal and entity-world interactions.
+// =============================================================================
 
-SV.move = Object.freeze({
-  normal: 0,
-  nomonsters: 1,
-  missile: 2,
-});
-
-SV.InitBoxHull = function() {
-  SV.box_clipnodes = [];
-  SV.box_planes = [];
-  SV.box_hull = {
-    clipnodes: SV.box_clipnodes,
-    planes: SV.box_planes,
-    firstclipnode: 0,
-    lastclipnode: 5,
-  };
-  for (let i = 0; i <= 5; i++) {
-    const node = {};
-    SV.box_clipnodes[i] = node;
-    node.planenum = i;
-    node.children = [];
-    node.children[i & 1] = Defs.content.CONTENT_EMPTY;
-    if (i !== 5) {
-      node.children[1 - (i & 1)] = i + 1;
-    } else {
-      node.children[1 - (i & 1)] = Defs.content.CONTENT_SOLID;
-    }
-    const plane = {};
-    SV.box_planes[i] = plane;
-    plane.type = i >> 1;
-    plane.normal = new Vector();
-    plane.normal[i >> 1] = 1.0;
-    plane.dist = 0.0;
-  }
-};
-
-SV.HullForEntity = function(ent, mins, maxs, out_offset) {
-  const origin = ent.entity.origin;
-  if (ent.entity.solid !== SV.solid.bsp) {
-    const emaxs = ent.entity.maxs, emins = ent.entity.mins;
-    SV.box_planes[0].dist = emaxs[0] - mins[0];
-    SV.box_planes[1].dist = emins[0] - maxs[0];
-    SV.box_planes[2].dist = emaxs[1] - mins[1];
-    SV.box_planes[3].dist = emins[1] - maxs[1];
-    SV.box_planes[4].dist = emaxs[2] - mins[2];
-    SV.box_planes[5].dist = emins[2] - maxs[2];
-    out_offset.set(origin);
-    return SV.box_hull;
-  }
-  console.assert(ent.entity.movetype !== SV.movetype.none, 'requires SOLID_BSP with MOVETYPE_NONE, use MOVETYPE_PUSH instead');
-  const model = SV.server.models[ent.entity.modelindex];
-  console.assert(model && model.type === Mod.type.brush, 'model is null or not a brush');
-  const size = maxs[0] - mins[0];
-  let hull;
-  if (size < 3.0) {
-    hull = model.hulls[0];
-  } else if (size <= 32.0) {
-    hull = model.hulls[1];
-  } else {
-    hull = model.hulls[2];
-  }
-  out_offset.setTo(
-    hull.clip_mins[0] - mins[0] + origin[0],
-    hull.clip_mins[1] - mins[1] + origin[1],
-    hull.clip_mins[2] - mins[2] + origin[2],
-  );
-  return hull;
-};
-
-SV.CreateAreaNode = function(depth, mins, maxs) {
-  const anode = {depth, mins, maxs};
-  SV.areanodes[0] = anode;
-
-  anode.trigger_edicts = {ent: null};
-  anode.trigger_edicts.prev = anode.trigger_edicts.next = anode.trigger_edicts;
-  anode.solid_edicts = {ent: null};
-  anode.solid_edicts.prev = anode.solid_edicts.next = anode.solid_edicts;
-
-  if (depth === 4) {
-    anode.axis = -1;
-    anode.children = [];
-    return anode;
-  }
-
-  anode.axis = (maxs[0] - mins[0]) > (maxs[1] - mins[1]) ? 0 : 1;
-  anode.dist = 0.5 * (maxs[anode.axis] + mins[anode.axis]);
-
-  const maxs1 = maxs.copy();
-  const mins2 = mins.copy();
-  maxs1[anode.axis] = mins2[anode.axis] = anode.dist;
-  anode.children = [SV.CreateAreaNode(depth + 1, mins2, maxs), SV.CreateAreaNode(depth + 1, mins, maxs1)];
-  return anode;
-};
-
-SV.UnlinkEdict = function(ent) {
-  if (ent.area.prev) {
-    ent.area.prev.next = ent.area.next;
-  }
-  if (ent.area.next) {
-    ent.area.next.prev = ent.area.prev;
-  }
-  ent.area.prev = ent.area.next = null;
-};
-
-SV.TouchLinks = function(ent, node) {
-  const absmin = ent.entity.absmin, absmax = ent.entity.absmax;
-  for (let l = node.trigger_edicts.next, next = null; l !== node.trigger_edicts; l = next) {
-    next = l.next;
-    const touch = l.ent;
-    if (touch === ent) {
-      continue;
-    }
-    if (!touch.entity.touch || touch.entity.solid !== SV.solid.trigger) {
-      continue;
-    }
-    if (!absmin.lte(touch.entity.absmax) || !absmax.gte(touch.entity.absmin)) {
-      continue;
-    }
-    SV.server.gameAPI.time = SV.server.time;
-    touch.entity.touch(!ent.isFree() ? ent.entity : null);
-  }
-  if (node.axis === -1) {
-    return;
-  }
-  if (absmax[node.axis] > node.dist) {
-    SV.TouchLinks(ent, node.children[0]);
-  }
-  if (absmax[node.axis] < node.dist) {
-    SV.TouchLinks(ent, node.children[1]);
-  }
-};
-
-SV.FindTouchedLeafs = function(ent, node) {
-  if (node.contents === Defs.content.CONTENT_SOLID) {
-    return;
-  }
-
-  if (node.contents < 0) {
-    if (ent.leafnums.length === 16) {
-      return;
-    }
-    ent.leafnums[ent.leafnums.length] = node.num - 1;
-    return;
-  }
-
-  const sides = Vector.boxOnPlaneSide(ent.entity.absmin, ent.entity.absmax, node.plane);
-
-  if ((sides & 1) !== 0) {
-    SV.FindTouchedLeafs(ent, node.children[0]);
-  }
-  if ((sides & 2) !== 0) {
-    SV.FindTouchedLeafs(ent, node.children[1]);
-  }
-};
-
-SV.LinkEdict = function(ent, touch_triggers = false) {
-  if (ent.equals(SV.server.edicts[0]) || ent.isFree()) {
-    return;
-  }
-
-  SV.server.navigation.relinkEdict(ent);
-
-  SV.UnlinkEdict(ent);
-
-  const origin = ent.entity.origin;
-  const absmin = origin.copy(), absmax = origin.copy();
-
-  absmin.add(ent.entity.mins).add(new Vector(-1.0, -1.0, -1.0));
-  absmax.add(ent.entity.maxs).add(new Vector( 1.0,  1.0,  1.0));
-
-  if ((ent.entity.flags & SV.fl.item) !== 0) {
-    // the former else-branch would set Z, but we did it two statements before already,
-    // so we need to correct it by subtracting the adjusted Z back.
-    absmin.add(new Vector(-14.0, -14.0,  1.0));
-    absmax.add(new Vector( 14.0,  14.0, -1.0));
-  }
-
-  ent.entity.absmin = ent.entity.absmin.set(absmin);
-  ent.entity.absmax = ent.entity.absmax.set(absmax);
-
-  ent.leafnums = [];
-  if (ent.entity.modelindex !== 0) {
-    SV.FindTouchedLeafs(ent, SV.server.worldmodel.nodes[0]);
-  }
-
-  if (ent.entity.solid === SV.solid.not) {
-    return;
-  }
-
-  let node = SV.areanodes[0];
-  for (;;) {
-    if (node.axis === -1) {
-      break;
-    }
-    if (ent.entity.absmin[node.axis] > node.dist) {
-      node = node.children[0];
-    } else if (ent.entity.absmax[node.axis] < node.dist) {
-      node = node.children[1];
-    } else {
-      break;
-    }
-  }
-
-  const before = (ent.entity.solid === SV.solid.trigger) ? node.trigger_edicts : node.solid_edicts;
-  ent.area.next = before;
-  ent.area.prev = before.prev;
-  ent.area.prev.next = ent.area;
-  ent.area.next.prev = ent.area;
-  ent.area.ent = ent;
-
-  if (ent.entity.movetype !== SV.movetype.noclip && touch_triggers) {
-    SV.TouchLinks(ent, SV.areanodes[0]);
-  }
-};
-
-SV.HullPointContents = function(hull, num, p) {
-  let d; let node; let plane;
-  for (; num >= 0; ) {
-    console.assert(num >= hull.firstclipnode && num <= hull.lastclipnode, 'valid node number', num);
-    node = hull.clipnodes[num];
-    plane = hull.planes[node.planenum];
-    if (plane.type <= 2) {
-      d = p[plane.type] - plane.dist;
-    } else {
-      d = plane.normal[0] * p[0] + plane.normal[1] * p[1] + plane.normal[2] * p[2] - plane.dist;
-    }
-    if (d >= 0.0) {
-      num = node.children[0];
-    } else {
-      num = node.children[1];
-    }
-  }
-  return num;
-};
-
-SV.PointContents = function(p) {
-  const cont = SV.HullPointContents(SV.server.worldmodel.hulls[0], 0, p);
-  if ((cont <= Defs.content.CONTENT_CURRENT_0) && (cont >= Defs.content.CONTENT_CURRENT_DOWN)) {
-    return Defs.content.CONTENT_WATER;
-  }
-  return cont;
-};
-
-SV.TestEntityPosition = function(ent) {
-  const origin = ent.entity.origin.copy();
-  return SV.Move(origin, ent.entity.mins, ent.entity.maxs, origin, 0, ent).startsolid;
-};
-
-/**
- * @param {object} hull what hull to check against
- * @param {number} num starting clipnode number (typically hull.firstclipnode)
- * @param {number} p1f fraction at p1 (usually 0.0)
- * @param {number} p2f fraction at p2 (usually 1.0)
- * @param {Vector} p1 start point
- * @param {Vector} p2 end point
- * @param {Trace} trace object to store trace results
- * @returns {boolean} true means going down, false means going up
- */
-SV.RecursiveHullCheck = function(hull, num, p1f, p2f, p1, p2, trace) { // TODO: rewrite to iterative check, also move to client/server shared
-  // check for empty
-  if (num < 0) {
-    if (num !== Defs.content.CONTENT_SOLID) {
-      trace.allsolid = false;
-      if (num === Defs.content.CONTENT_EMPTY) {
-        trace.inopen = true;
-      } else {
-        trace.inwater = true;
-      }
-    } else {
-      trace.startsolid = true;
-    }
-    return true; // going down the tree
-  }
-
-  console.assert(num >= hull.firstclipnode && num <= hull.lastclipnode, 'valid node number', num);
-
-  // find the point distances
-  const node = hull.clipnodes[num];
-  const plane = hull.planes[node.planenum];
-  const t1 = (plane.type < 3 ? p1[plane.type] : plane.normal[0] * p1[0] + plane.normal[1] * p1[1] + plane.normal[2] * p1[2]) - plane.dist;
-  const t2 = (plane.type < 3 ? p2[plane.type] : plane.normal[0] * p2[0] + plane.normal[1] * p2[1] + plane.normal[2] * p2[2]) - plane.dist;
-
-  // checking children on side 1
-  if (t1 >= 0.0 && t2 >= 0.0) {
-    return SV.RecursiveHullCheck(hull, node.children[0], p1f, p2f, p1, p2, trace);
-  }
-
-  // checking children on side 2
-  if (t1 < 0.0 && t2 < 0.0) {
-    return SV.RecursiveHullCheck(hull, node.children[1], p1f, p2f, p1, p2, trace);
-  }
-
-  // put the crosspoint DIST_EPSILON pixels on the near side
-  let frac = Math.max(0.0, Math.min(1.0, (t1 + (t1 < 0.0 ? DIST_EPSILON : -DIST_EPSILON)) / (t1 - t2))); // epsilon value of 0.03125 = 1/32
-  let midf = p1f + (p2f - p1f) * frac;
-  const mid = new Vector(p1[0] + frac * (p2[0] - p1[0]), p1[1] + frac * (p2[1] - p1[1]), p1[2] + frac * (p2[2] - p1[2]));
-  const side = t1 < 0.0 ? 1 : 0;
-
-  // move up to the node
-  if (!SV.RecursiveHullCheck(hull, node.children[side], p1f, midf, p1, mid, trace)) {
-    return false;
-  }
-
-  // go past the node
-  if (SV.HullPointContents(hull, node.children[1 - side], mid) !== Defs.content.CONTENT_SOLID) {
-    return SV.RecursiveHullCheck(hull, node.children[1 - side], midf, p2f, mid, p2, trace);
-  }
-
-  // never got out of the solid area
-  if (trace.allsolid) {
-    return false;
-  }
-
-  // the other side of the node is solid, this is the impact point
-  if (side === 0) {
-    trace.plane.normal = plane.normal.copy();
-    trace.plane.dist = plane.dist;
-  } else {
-    trace.plane.normal = plane.normal.copy().multiply(-1);
-    trace.plane.dist = -plane.dist;
-  }
-
-  while (SV.HullPointContents(hull, hull.firstclipnode, mid) === Defs.content.CONTENT_SOLID) {
-    // shouldn't really happen, but does occasionally
-    frac -= 0.1;
-    if (frac < 0.0) {
-      trace.fraction = midf;
-      trace.endpos = mid.copy();
-      Con.DPrint('backup past 0\n');
-      return false;
-    }
-    midf = p1f + (p2f - p1f) * frac;
-    mid[0] = p1[0] + frac * (p2[0] - p1[0]);
-    mid[1] = p1[1] + frac * (p2[1] - p1[1]);
-    mid[2] = p1[2] + frac * (p2[2] - p1[2]);
-  }
-
-  trace.fraction = midf;
-  trace.endpos = mid.copy();
-
-  return false;
-};
-
-/**
- * @param {ServerEdict} ent edict
- * @param {Vector} start start vector
- * @param {Vector} mins mins vector
- * @param {Vector} maxs maxs vector
- * @param {Vector} end end vector
- * @returns {Trace} trace result
- */
-SV.ClipMoveToEntity = function(ent, start, mins, maxs, end) {
-  /** @type {Trace} */
-  const trace = {
-    fraction: 1.0,
-    allsolid: true,
-    startsolid: false,
-    endpos: end.copy(),
-    plane: {normal: new Vector(), dist: 0.0},
-    ent: null,
-  };
-  const offset = new Vector();
-  const hull = SV.HullForEntity(ent, mins, maxs, offset);
-  SV.RecursiveHullCheck(hull, hull.firstclipnode, 0.0, 1.0, start.copy().subtract(offset), end.copy().subtract(offset), trace);
-  if (trace.fraction !== 1.0) {
-    trace.endpos.add(offset);
-  }
-  if ((trace.fraction < 1.0) || (trace.startsolid === true)) {
-    trace.ent = ent;
-  }
-  return trace;
-};
-
-SV.ClipToLinks = function(node, clip) {
-  for (let l = node.solid_edicts.next; l !== node.solid_edicts; l = l.next) {
-    const touch = l.ent;
-    const solid = touch.entity.solid;
-    if ((solid === SV.solid.not) || (touch === clip.passedict)) {
-      continue;
-    }
-    console.assert(solid !== SV.solid.trigger, 'trigger not in clipping list');
-    if (clip.type === SV.move.nomonsters && solid !== SV.solid.bsp) {
-      continue;
-    }
-    if (!clip.boxmins.lte(touch.entity.absmax) || !clip.boxmaxs.gte(touch.entity.absmin)) {
-      continue;
-    }
-    if (clip.passedict) {
-      if (clip.passedict.entity.size !== 0.0 && touch.entity.size === 0.0) {
-        continue;
-      }
-    }
-    if (clip.trace.allsolid === true) {
-      return;
-    }
-    if (clip.passedict) {
-      if (touch.entity.owner && touch.entity.owner.equals(clip.passedict)) { // TODO: Edict vs Entity
-        continue;
-      }
-      if (clip.passedict.entity.owner && clip.passedict.entity.owner.equals(touch)) { // TODO: Edict vs Entity
-        continue;
-      }
-    }
-    if (clip.ignoreedicts && clip.ignoreedicts.includes(touch.num)) {
-      continue;
-    }
-    let trace;
-    if ((touch.entity.flags & SV.fl.monster) !== 0) {
-      trace = SV.ClipMoveToEntity(touch, clip.start, clip.mins2, clip.maxs2, clip.end);
-    } else {
-      trace = SV.ClipMoveToEntity(touch, clip.start, clip.mins, clip.maxs, clip.end);
-    }
-    if (trace.allsolid || trace.startsolid || trace.fraction < clip.trace.fraction) {
-      trace.ent = touch;
-      clip.trace = trace;
-      if (trace.startsolid) {
-        clip.trace.startsolid = true;
-      }
-    }
-  }
-  if (node.axis === -1) {
-    return;
-  }
-  if (clip.boxmaxs[node.axis] > node.dist) {
-    SV.ClipToLinks(node.children[0], clip);
-  }
-  if (clip.boxmins[node.axis] < node.dist) {
-    SV.ClipToLinks(node.children[1], clip);
-  }
-};
-
-/**
- * @param {Vector} start start vector
- * @param {Vector} mins mins vector
- * @param {Vector} maxs maxs vector
- * @param {Vector} end end vector
- * @param {number} type move type, one of SV.move.*
- * @param {ServerEdict} passedict what edict to pass
- * @param {(ServerEdict | number)[]} ignoreedicts list of edicts to ignore
- * @returns {Trace} trace result
- */
-SV.Move = function(start, mins, maxs, end, type, passedict, ignoreedicts = []) {
-  const clip = {
-    trace: SV.ClipMoveToEntity(SV.server.edicts[0], start, mins, maxs, end),
-    start: start,
-    end: end,
-    mins: mins,
-    mins2: type === SV.move.missile ? new Vector(-15.0, -15.0, -15.0) : mins,
-    maxs: maxs,
-    maxs2: type === SV.move.missile ? new Vector(15.0, 15.0, 15.0) : maxs,
-    type: type,
-    passedict,
-    ignoreedicts,
-    boxmins: new Vector(),
-    boxmaxs: new Vector(),
-  };
-  for (let i = 0; i < 3; i++) {
-    if (end[i] > start[i]) {
-      clip.boxmins[i] = start[i] + clip.mins2[i] - 1.0;
-      clip.boxmaxs[i] = end[i] + clip.maxs2[i] + 1.0;
-      continue;
-    }
-    clip.boxmins[i] = end[i] + clip.mins2[i] - 1.0;
-    clip.boxmaxs[i] = start[i] + clip.maxs2[i] + 1.0;
-  }
-  SV.ClipToLinks(SV.areanodes[0], clip);
-  return clip.trace;
-};
+SV.move = moveTypes;

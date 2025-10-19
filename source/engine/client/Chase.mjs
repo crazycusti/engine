@@ -32,7 +32,7 @@ export default class Chase {
     const back = forward.copy().subtract(new Vector(0.0, 128.0, 0.0));
     const trace = { plane: {} };
     const org = R.refdef.vieworg;
-    SV.RecursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, new Vector(
+    SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, new Vector(
       org[0] + 4096.0 * right[0],
       org[1] + 4096.0 * right[1],
       org[2] + 4096.0 * right[2]), trace);
@@ -50,7 +50,7 @@ export default class Chase {
   static Update() {
     const { forward, right } = CL.state.viewangles.angleVectors();
     const trace = { plane: {} }; const org = R.refdef.vieworg;
-    SV.RecursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, new Vector(
+    SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, new Vector(
       org[0] + 4096.0 * forward[0],
       org[1] + 4096.0 * forward[1],
       org[2] + 4096.0 * forward[2]), trace);
@@ -66,7 +66,7 @@ export default class Chase {
     org2[1] -= forward[1] * Chase.back.value + right[1] * Chase.right.value;
     org2[2] += Chase.up.value;
     const trace2 = { plane: {} };
-    SV.RecursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, org2, trace2);
+    SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, org, org2, trace2);
     if (trace2.endpos) {
       org.set(trace2.endpos);
     } else {

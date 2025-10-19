@@ -1,0 +1,699 @@
+import Vector from '../../../shared/Vector.mjs';
+import * as Defs from '../../../shared/Defs.mjs';
+import Q from '../../../shared/Q.mjs';
+import { eventBus, registry } from '../../registry.mjs';
+import {
+  GROUND_ANGLE_THRESHOLD,
+  VELOCITY_EPSILON,
+  MAX_BUMP_COUNT,
+  BlockedFlags,
+} from './PhysicsConstants.mjs';
+
+let { Con, Host, SV } = registry;
+
+eventBus.subscribe('registry.frozen', () => {
+  Con = registry.Con;
+  Host = registry.Host;
+  SV = registry.SV;
+});
+
+/**
+ * Handles core physics simulation, entity movement, and collision handling.
+ */
+export class ServerPhysics {
+  constructor() {
+  }
+
+  /**
+   * Iterates all non-static entities to ensure none start inside solid space.
+   */
+  checkAllEnts() {
+    for (let e = 1; e < SV.server.num_edicts; e++) {
+      const check = SV.server.edicts[e];
+      if (check.isFree()) {
+        continue;
+      }
+
+      switch (check.entity.movetype) {
+        case SV.movetype.push:
+        case SV.movetype.none:
+        case SV.movetype.noclip:
+          continue;
+        default:
+      }
+
+      if (SV.collision.testEntityPosition(check)) {
+        Con.Print('entity in invalid position\n');
+      }
+    }
+  }
+
+  /**
+   * Clamps velocity/origin components and guards against NaN values.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to validate
+   */
+  checkVelocity(ent) {
+    const velo = ent.entity.velocity;
+    const origin = ent.entity.origin;
+
+    for (let i = 0; i < 3; i++) {
+      let component = velo[i];
+
+      if (Q.isNaN(component)) {
+        Con.Print('Got a NaN velocity on ' + ent.entity.classname + '\n');
+        component = 0.0;
+      }
+
+      if (Q.isNaN(origin[i])) {
+        Con.Print('Got a NaN origin on ' + ent.entity.classname + '\n');
+        origin[i] = 0.0;
+      }
+
+      if (component > SV.maxvelocity.value) {
+        component = SV.maxvelocity.value;
+      } else if (component < -SV.maxvelocity.value) {
+        component = -SV.maxvelocity.value;
+      }
+
+      velo[i] = component;
+    }
+
+    ent.entity.origin = ent.entity.origin.set(origin);
+    ent.entity.velocity = ent.entity.velocity.set(velo);
+  }
+
+  /**
+   * Executes pending thinks for an entity until caught up with server time.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to process
+   * @returns {boolean} false if the entity was freed during thinking
+   */
+  runThink(ent) {
+    while (true) {
+      let thinktime = ent.entity.nextthink;
+
+      if (thinktime <= 0.0 || thinktime > (SV.server.time + Host.frametime)) {
+        return true;
+      }
+
+      if (thinktime < SV.server.time) {
+        thinktime = SV.server.time;
+      }
+
+      ent.entity.nextthink = 0.0;
+      SV.server.gameAPI.time = thinktime;
+      ent.entity.think();
+
+      if (ent.isFree()) {
+        return false;
+      }
+    }
+  }
+
+  /**
+   * Invokes touch callbacks between two entities.
+   * @param {import('../Edict.mjs').ServerEdict} e1 first entity
+   * @param {import('../Edict.mjs').ServerEdict} e2 second entity
+   */
+  impact(e1, e2) {
+    SV.server.gameAPI.time = SV.server.time;
+
+    const ent1 = /** @type {*} */ (e1.entity);
+    const ent2 = /** @type {*} */ (e2.entity);
+
+    if (ent1.touch && ent1.solid !== SV.solid.not) {
+      ent1.touch(ent2);
+    }
+    if (ent2.touch && ent2.solid !== SV.solid.not) {
+      ent2.touch(ent1);
+    }
+  }
+
+  /**
+   * Clips the velocity vector against a collision plane.
+   * @param {Vector} vec incoming velocity
+   * @param {Vector} normal collision normal
+   * @param {Vector} out output velocity
+   * @param {number} overbounce overbounce factor
+   */
+  clipVelocity(vec, normal, out, overbounce) {
+    const backoff = vec.dot(normal) * overbounce;
+
+    out[0] = vec[0] - normal[0] * backoff;
+    if ((out[0] > -VELOCITY_EPSILON) && (out[0] < VELOCITY_EPSILON)) {
+      out[0] = 0.0;
+    }
+
+    out[1] = vec[1] - normal[1] * backoff;
+    if ((out[1] > -VELOCITY_EPSILON) && (out[1] < VELOCITY_EPSILON)) {
+      out[1] = 0.0;
+    }
+
+    out[2] = vec[2] - normal[2] * backoff;
+    if ((out[2] > -VELOCITY_EPSILON) && (out[2] < VELOCITY_EPSILON)) {
+      out[2] = 0.0;
+    }
+  }
+
+  /**
+   * Performs sliding movement with up to four collision planes.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to move
+   * @param {number} time frame time slice
+   * @returns {{blocked: number, steptrace: import('./CollisionCore.mjs').Trace | null}} result with blocked flags and optional wall trace
+   */
+  flyMove(ent, time) {
+    const planes = [];
+    const primalVelocity = ent.entity.velocity.copy();
+    let originalVelocity = primalVelocity.copy();
+    const newVelocity = new Vector();
+    let timeLeft = time;
+    let blocked = BlockedFlags.NONE;
+    let steptrace = null;
+
+    for (let bumpCount = 0; bumpCount < MAX_BUMP_COUNT; bumpCount++) {
+      if (ent.entity.velocity.isOrigin()) {
+        break;
+      }
+
+      const end = ent.entity.origin.copy().add(ent.entity.velocity.copy().multiply(timeLeft));
+      const trace = SV.collision.move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, 0, ent);
+
+      if (trace.allsolid) {
+        ent.entity.velocity = new Vector();
+        return { blocked: BlockedFlags.BOTH, steptrace };
+      }
+
+      if (trace.fraction > 0.0) {
+        ent.entity.origin = ent.entity.origin.set(trace.endpos);
+        originalVelocity = ent.entity.velocity.copy();
+        planes.length = 0;
+        if (trace.fraction === 1.0) {
+          break;
+        }
+      }
+
+      console.assert(trace.ent !== null, 'trace.ent must not be null');
+
+      if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
+        blocked |= BlockedFlags.FLOOR;
+        if (trace.ent.entity.solid === SV.solid.bsp) {
+          ent.entity.flags |= SV.fl.onground;
+          ent.entity.groundentity = trace.ent.entity;
+        }
+      } else if (trace.plane.normal[2] === 0.0) {
+        blocked |= BlockedFlags.WALL;
+        steptrace = trace;
+      }
+
+      this.impact(ent, trace.ent);
+
+      if (ent.isFree()) {
+        break;
+      }
+
+      timeLeft -= timeLeft * trace.fraction;
+
+      if (planes.length >= 5) {
+        ent.entity.velocity = new Vector();
+        return { blocked: 3, steptrace };
+      }
+
+      planes.push(trace.plane.normal.copy());
+
+      let i;
+      let j;
+      for (i = 0; i < planes.length; i++) {
+        this.clipVelocity(originalVelocity, planes[i], newVelocity, 1.0);
+        for (j = 0; j < planes.length; j++) {
+          if (j !== i) {
+            const plane = planes[j];
+            if ((newVelocity[0] * plane[0] + newVelocity[1] * plane[1] + newVelocity[2] * plane[2]) < 0.0) {
+              break;
+            }
+          }
+        }
+        if (j === planes.length) {
+          break;
+        }
+      }
+
+      if (i !== planes.length) {
+        ent.entity.velocity = newVelocity.copy();
+      } else {
+        if (planes.length !== 2) {
+          ent.entity.velocity = new Vector();
+          return { blocked: 7, steptrace };
+        }
+        const dir = planes[0].cross(planes[1]);
+        ent.entity.velocity = dir.multiply(dir.dot(ent.entity.velocity));
+      }
+
+      if (ent.entity.velocity.dot(primalVelocity) <= 0.0) {
+        ent.entity.velocity = new Vector();
+        return { blocked, steptrace };
+      }
+    }
+
+    return { blocked, steptrace };
+  }
+
+  /**
+   * Applies gravity to an entity taking custom gravity into account.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to influence
+   */
+  addGravity(ent) {
+    const entGravity = ent.entity.gravity ?? 1.0;
+    const velocity = ent.entity.velocity;
+    velocity[2] += entGravity * SV.gravity.value * Host.frametime * -1.0;
+    ent.entity.velocity = velocity;
+  }
+
+  /**
+   * Applies a small upward force used for buoyancy.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to influence
+   */
+  addBoyancy(ent) {
+    const velocity = ent.entity.velocity;
+    velocity[2] += SV.gravity.value * Host.frametime * 0.01;
+    ent.entity.velocity = velocity;
+  }
+
+  /**
+   * Pushes an entity by the provided vector and performs collision handling.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to move
+   * @param {Vector} pushVector movement vector
+   * @returns {import('./CollisionCore.mjs').Trace} resulting trace
+   */
+  pushEntity(ent, pushVector) {
+    const end = ent.entity.origin.copy().add(pushVector);
+    const solid = ent.entity.solid;
+
+    let nomonsters;
+    if (ent.entity.movetype === SV.movetype.flymissile) {
+      nomonsters = SV.move.missile;
+    } else if (solid === SV.solid.trigger || solid === SV.solid.not) {
+      nomonsters = SV.move.nomonsters;
+    } else {
+      nomonsters = SV.move.normal;
+    }
+
+    const trace = SV.collision.move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, nomonsters, ent);
+    ent.entity.origin = ent.entity.origin.set(trace.endpos);
+    SV.area.linkEdict(ent, true);
+
+    if (trace.ent) {
+      this.impact(ent, trace.ent);
+    }
+
+    return trace;
+  }
+
+  /**
+   * Moves a pusher entity and resolves collisions with touched entities.
+   * @param {import('../Edict.mjs').ServerEdict} pusher pusher entity
+   * @param {number} movetime time to move
+   */
+  pushMove(pusher, movetime) {
+    if (pusher.entity.velocity.isOrigin() && pusher.entity.avelocity.isOrigin()) {
+      pusher.entity.ltime += movetime;
+      return;
+    }
+
+    const move = pusher.entity.velocity.copy().multiply(movetime);
+    const rotation = pusher.entity.avelocity.copy().multiply(movetime);
+    const mins = pusher.entity.absmin.copy().add(move);
+    const maxs = pusher.entity.absmax.copy().add(move);
+    const pushorig = pusher.entity.origin.copy().add(move);
+    const pushangle = pusher.entity.angles.copy().add(rotation);
+
+    pusher.entity.origin = pushorig;
+    pusher.entity.angles = pushangle;
+    pusher.entity.ltime += movetime;
+    SV.area.linkEdict(pusher);
+
+    const moved = [];
+
+    for (let e = 1; e < SV.server.num_edicts; e++) {
+      const check = SV.server.edicts[e];
+      if (check.isFree()) {
+        continue;
+      }
+
+      const movetype = check.entity.movetype;
+      if (movetype === SV.movetype.push || movetype === SV.movetype.none || movetype === SV.movetype.noclip) {
+        continue;
+      }
+
+      if (((check.entity.flags & SV.fl.onground) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher)) {
+        if (!check.entity.absmin.lt(maxs) || !check.entity.absmax.gt(mins)) {
+          continue;
+        }
+
+        if (!SV.collision.testEntityPosition(check)) {
+          continue;
+        }
+      }
+
+      if (movetype !== SV.movetype.walk) {
+        check.entity.flags &= ~SV.fl.onground;
+      }
+
+      const entorig = check.entity.origin.copy();
+      const entangles = check.entity.angles.copy();
+      moved[moved.length] = [entorig, entangles, check];
+      pusher.entity.solid = SV.solid.not;
+
+      let finalMove = move.copy();
+
+      if (!rotation.isOrigin()) {
+        const pusherOriginBefore = pushorig.copy().subtract(move);
+        const offset = check.entity.origin.copy().subtract(pusherOriginBefore);
+
+        if (rotation[1] !== 0) {
+          const rotatedOffset = new Vector(0, 0, 1).rotatePointAroundVector(offset, rotation[1]);
+          const newPos = pusherOriginBefore.copy().add(rotatedOffset);
+          finalMove = newPos.subtract(check.entity.origin);
+        }
+
+        check.entity.angles = check.entity.angles.copy().add(rotation);
+      }
+
+      this.pushEntity(check, finalMove);
+      pusher.entity.solid = SV.solid.bsp;
+
+      if (SV.collision.testEntityPosition(check)) {
+        const cmins = check.entity.mins;
+        const cmaxs = check.entity.maxs;
+        if (cmins[0] === cmaxs[0]) {
+          continue;
+        }
+        if (check.entity.solid === SV.solid.not || check.entity.solid === SV.solid.trigger) {
+          cmins[0] = cmaxs[0] = 0.0;
+          cmins[1] = cmaxs[1] = 0.0;
+          cmaxs[2] = cmins[2];
+          check.entity.mins = cmins;
+          check.entity.maxs = cmaxs;
+          continue;
+        }
+        check.entity.origin = entorig;
+        check.entity.angles = entangles;
+        SV.area.linkEdict(check, true);
+        check.entity.origin = pushorig;
+        SV.area.linkEdict(pusher);
+        pusher.entity.ltime -= movetime;
+        if (pusher.entity.blocked) {
+          pusher.entity.blocked(check.entity);
+        }
+        for (let i = 0; i < moved.length; i++) {
+          const movedEdict = moved[i];
+          movedEdict[2].entity.origin = movedEdict[0];
+          movedEdict[2].entity.angles = movedEdict[1];
+          SV.area.linkEdict(movedEdict[2]);
+        }
+        return;
+      }
+    }
+  }
+
+  /**
+   * Applies motion to MOVETYPE_PUSH entities.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to process
+   */
+  physicsPusher(ent) {
+    const oldltime = ent.entity.ltime;
+    const thinktime = ent.entity.nextthink;
+    let movetime;
+
+    if (thinktime < (oldltime + Host.frametime)) {
+      movetime = Math.max(thinktime - oldltime, 0.0);
+    } else {
+      movetime = Host.frametime;
+    }
+
+    if (movetime > 0.0) {
+      this.pushMove(ent, movetime);
+    }
+
+    if (thinktime <= oldltime || thinktime > ent.entity.ltime) {
+      return;
+    }
+
+    ent.entity.nextthink = 0.0;
+    SV.server.gameAPI.time = SV.server.time;
+    ent.entity.think();
+  }
+
+  /**
+   * Attempts to resolve a stuck player by nudging the entity around.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to fix
+   */
+  checkStuck(ent) {
+    if (!SV.collision.testEntityPosition(ent)) {
+      ent.entity.oldorigin = ent.entity.oldorigin.set(ent.entity.origin);
+      return;
+    }
+
+    ent.entity.origin = ent.entity.origin.set(ent.entity.oldorigin);
+    if (!SV.collision.testEntityPosition(ent)) {
+      Con.DPrint('Unstuck.\n');
+      SV.area.linkEdict(ent, true);
+      return;
+    }
+
+    const norg = ent.entity.origin.copy();
+    for (norg[2] = 0.0; norg[2] <= 17.0; norg[2]++) {
+      for (norg[0] = -1.0; norg[0] <= 1.0; norg[0]++) {
+        for (norg[1] = -1.0; norg[1] <= 1.0; norg[1]++) {
+          ent.entity.origin = ent.entity.origin.set(norg).add(norg);
+          if (!SV.collision.testEntityPosition(ent)) {
+            Con.DPrint('Unstuck.\n');
+            SV.area.linkEdict(ent, true);
+            return;
+          }
+        }
+      }
+    }
+
+    Con.DPrint('player is stuck.\n');
+  }
+
+  /**
+   * Inspects the entity position to determine water level and type.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to inspect
+   * @returns {boolean} true if entity is largely underwater
+   */
+  checkWater(ent) {
+    const entity = ent.entity;
+    const point = entity.origin.copy().add(new Vector(0.0, 0.0, entity.mins[2] + 1.0));
+    entity.waterlevel = 0.0;
+    entity.watertype = Defs.content.CONTENT_EMPTY;
+    let cont = SV.collision.pointContents(point);
+    if (cont > Defs.content.CONTENT_WATER) {
+      return false;
+    }
+    entity.watertype = cont;
+    entity.waterlevel = 1.0;
+    const origin = entity.origin;
+    point[2] = origin[2] + (entity.mins[2] + entity.maxs[2]) * 0.5;
+    cont = SV.collision.pointContents(point);
+    if (cont <= Defs.content.CONTENT_WATER) {
+      entity.waterlevel = 2.0;
+      if ('view_ofs' in entity) {
+        point[2] = origin[2] + entity.view_ofs[2];
+        cont = SV.collision.pointContents(point);
+        if (cont <= Defs.content.CONTENT_WATER) {
+          entity.waterlevel = 3.0;
+        }
+      } else {
+        entity.waterlevel = 3.0;
+      }
+    }
+    return entity.waterlevel > 1.0;
+  }
+
+  /**
+   * Emits splash sounds when transitioning between water and air.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to update
+   */
+  checkWaterTransition(ent) {
+    const cont = SV.collision.pointContents(ent.entity.origin);
+
+    if (ent.entity.watertype === 0.0) {
+      ent.entity.watertype = cont;
+      ent.entity.waterlevel = 1.0;
+      return;
+    }
+
+    if (cont <= Defs.content.CONTENT_WATER) {
+      if (ent.entity.watertype === Defs.content.CONTENT_EMPTY) {
+        SV.messages.startSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0);
+      }
+      ent.entity.watertype = cont;
+      ent.entity.waterlevel = 1.0;
+      return;
+    }
+
+    if (ent.entity.watertype !== Defs.content.CONTENT_EMPTY) {
+      SV.messages.startSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0);
+    }
+    ent.entity.watertype = Defs.content.CONTENT_EMPTY;
+    ent.entity.waterlevel = cont;
+  }
+
+  /**
+   * Applies wall friction to prevent jittering when sliding along geometry.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to modify
+   * @param {{plane: {normal: Vector}}} trace collision trace
+   */
+  wallFriction(ent, trace) {
+    const viewAngles = ent.entity.v_angle ?? ent.entity.angles;
+    const { forward } = viewAngles.angleVectors();
+    const normal = trace.plane.normal;
+    let d = normal.dot(forward) + 0.5;
+    if (d >= 0.0) {
+      return;
+    }
+    d += 1.0;
+    const velo = ent.entity.velocity;
+    velo[0] = (velo[0] - normal[0] * normal.dot(velo)) * d;
+    velo[1] = (velo[1] - normal[1] * normal.dot(velo)) * d;
+    ent.entity.velocity = velo;
+  }
+
+  /**
+   * Attempts to unstick an entity by trying small offsets.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to adjust
+   * @param {Vector} oldvel previous velocity
+   * @returns {number} resulting clip flags
+   */
+  tryUnstick(ent, oldvel) {
+    const oldorg = ent.entity.origin.copy();
+    const dir = new Vector(2.0, 0.0, 0.0);
+    for (let i = 0; i <= 7; i++) {
+      switch (i) {
+        case 1: dir[0] = 0.0; dir[1] = 2.0; break;
+        case 2: dir[0] = -2.0; dir[1] = 0.0; break;
+        case 3: dir[0] = 0.0; dir[1] = -2.0; break;
+        case 4: dir[0] = 2.0; dir[1] = 2.0; break;
+        case 5: dir[0] = -2.0; dir[1] = 2.0; break;
+        case 6: dir[0] = 2.0; dir[1] = -2.0; break;
+        case 7: dir[0] = -2.0; dir[1] = -2.0; break;
+        default: break;
+      }
+      this.pushEntity(ent, dir);
+      ent.entity.velocity = new Vector(oldvel[0], oldvel[1], 0.0);
+      const result = this.flyMove(ent, VELOCITY_EPSILON);
+      const curorg = ent.entity.origin;
+      if (Math.abs(oldorg[1] - curorg[1]) > 4.0 || Math.abs(oldorg[0] - curorg[0]) > 4.0) {
+        return result.blocked;
+      }
+      ent.entity.origin = ent.entity.origin.set(oldorg);
+    }
+    ent.entity.velocity = new Vector();
+    return 7;
+  }
+
+  /**
+   * Simulates toss/bounce style movement.
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to update
+   */
+  physicsToss(ent) {
+    if (!this.runThink(ent)) {
+      return;
+    }
+    if ((ent.entity.flags & SV.fl.onground) !== 0) {
+      return;
+    }
+
+    this.checkVelocity(ent);
+    const movetype = ent.entity.movetype;
+    if (movetype !== SV.movetype.fly && movetype !== SV.movetype.flymissile) {
+      this.addGravity(ent);
+    }
+
+    ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
+    const trace = this.pushEntity(ent, ent.entity.velocity.copy().multiply(Host.frametime));
+    if (trace.fraction === 1.0 || ent.isFree()) {
+      return;
+    }
+
+    const velocity = new Vector();
+    this.clipVelocity(ent.entity.velocity, trace.plane.normal, velocity, movetype === SV.movetype.bounce ? 1.5 : 1.0);
+    ent.entity.velocity = velocity;
+
+    if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
+      if (ent.entity.velocity[2] < 60.0 || movetype !== SV.movetype.bounce) {
+        ent.entity.flags |= SV.fl.onground;
+        ent.entity.groundentity = trace.ent.entity;
+        ent.entity.velocity = new Vector();
+        ent.entity.avelocity = new Vector();
+      }
+    }
+
+    this.checkWaterTransition(ent);
+  }
+
+  /**
+   * Handles MOVETYPE_STEP entities (most monsters).
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to update
+   */
+  physicsStep(ent) {
+    const entity = ent.entity;
+    if ((entity.flags & (SV.fl.onground | SV.fl.fly | SV.fl.swim)) === 0) {
+      const hitsound = (ent.entity.velocity[2] < (SV.gravity.value * -VELOCITY_EPSILON));
+      this.addGravity(ent);
+      this.checkVelocity(ent);
+      this.flyMove(ent, Host.frametime);
+      SV.area.linkEdict(ent, true);
+      if ((entity.flags & SV.fl.onground) !== 0 && hitsound) {
+        SV.messages.startSound(ent, 0, 'demon/dland2.wav', 255, 1.0);
+      }
+    }
+    this.runThink(ent);
+    this.checkWaterTransition(ent);
+  }
+
+  /**
+   * Runs the main entity physics step for the server.
+   */
+  physics() {
+    SV.server.gameAPI.time = SV.server.time;
+    SV.server.gameAPI.startFrame();
+
+    for (let i = 0; i < SV.server.num_edicts; i++) {
+      const ent = SV.server.edicts[i];
+      if (ent.isFree()) {
+        continue;
+      }
+      if (SV.server.gameAPI.force_retouch-- > 0) {
+        SV.area.linkEdict(ent, true);
+      }
+      if (ent.isClient()) {
+        SV.clientPhysics.physicsClient(ent);
+        continue;
+      }
+      switch (ent.entity.movetype) {
+        case SV.movetype.push:
+          this.physicsPusher(ent);
+          continue;
+        case SV.movetype.none:
+          this.runThink(ent);
+          continue;
+        case SV.movetype.noclip:
+          this.runThink(ent);
+          continue;
+        case SV.movetype.step:
+          this.physicsStep(ent);
+          continue;
+        case SV.movetype.toss:
+        case SV.movetype.bounce:
+        case SV.movetype.fly:
+        case SV.movetype.flymissile:
+          this.physicsToss(ent);
+          continue;
+        default:
+          throw new Error('SV.Physics: bad movetype ' + (ent.entity.movetype >> 0));
+      }
+    }
+    SV.server.time += Host.frametime;
+  }
+}

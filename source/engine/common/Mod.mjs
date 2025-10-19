@@ -232,7 +232,11 @@ Mod.LoadModelFromBuffer = function (loadmodel, buffer) {
   }
 };
 
-/** @deprecated use Mod.LoadModelAsync instead */
+/**
+ * @param mod
+ * @param crash
+ * @deprecated use Mod.LoadModelAsync instead
+ */
 Mod.LoadModel = function(mod, crash) { // private method
   if (mod.needload !== true) {
     return mod;

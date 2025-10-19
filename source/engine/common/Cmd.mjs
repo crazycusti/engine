@@ -3,12 +3,13 @@ import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Cvar from './Cvar.mjs';
 
-let { CL, COM, Con } = registry;
+let { CL, COM, Con, Host } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   COM = registry.COM;
   Con = registry.Con;
+  Host = registry.Host;
 });
 
 /**
@@ -307,7 +308,19 @@ export default class Cmd {
         handler.args = text;
         handler.command = cmdname;
         handler.argv = argv;
-        handler.run.apply(handler, cmdargs);
+
+        // Temporarily set Host.client for backward compatibility with commands that still use it
+        const savedHostClient = Host.client;
+        if (client) {
+          Host.client = client;
+        }
+        try {
+          handler.run.apply(handler, cmdargs);
+        } finally {
+          if (client) {
+            Host.client = savedHostClient;
+          }
+        }
         return;
       }
     }

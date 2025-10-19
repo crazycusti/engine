@@ -10,6 +10,7 @@ import { BrushModel } from '../common/Mod.mjs';
 import { Face } from '../common/model/BaseModel.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
+/** @typedef {import('./Edict.mjs').ServerEntity} ServerEntity */
 
 /** @typedef {import('./WorkerManager.mjs').WorkerThread} WorkerThread */
 
@@ -487,7 +488,7 @@ export class Navigation {
       plane: { normal: new Vector(), dist: 0.0 },
       ent: null,
     };
-    SV.RecursiveHullCheck(
+    SV.collision.recursiveHullCheck(
       SV.server.worldmodel.hulls[0],
       SV.server.worldmodel.hulls[0].firstclipnode,
       0.0, 1.0,
@@ -992,7 +993,12 @@ export class Navigation {
    * @param {ServerEdict} edict edict to relink
    */
   relinkEdict(edict) {
+    /** @type {?ServerEntity} */
     const entity = edict.entity;
+
+    if (!entity) {
+      return;
+    }
 
     // only care about world and large static brushes for now
     if (entity.solid !== Def.solid.SOLID_BSP) {
@@ -1047,12 +1053,20 @@ export class Navigation {
   #buildTeleporterLinks() {
     // looking for teleporters
     for (const teleporterEdict of ServerEngineAPI.FindAllByFieldAndValue('classname', 'trigger_teleport')) {
+      /** @type {?ServerEntity} */
       const source = teleporterEdict.entity;
+
+      if (!source) {
+        continue;
+      }
+
       if (!source.target) {
         continue;
       }
 
-      const destination = Array.from(ServerEngineAPI.FindAllByFieldAndValue('targetname', source.target))[0]?.entity;
+      const destinationEdict = Array.from(ServerEngineAPI.FindAllByFieldAndValue('targetname', source.target))[0];
+      /** @type {?ServerEntity} */
+      const destination = destinationEdict?.entity ?? null;
 
       if (!destination) {
         console.warn('Navigation: teleporter without a valid target', source);
@@ -1095,7 +1109,12 @@ export class Navigation {
   #buildDoorLinks() {
     // looking for simple doors
     for (const doorEdict of ServerEngineAPI.FindAllByFieldAndValue('classname', 'func_door')) {
+      /** @type {?ServerEntity} */
       const door = doorEdict.entity;
+
+      if (!door) {
+        continue;
+      }
 
       if (door.targetname) { // remote controlled door, skip for now
         continue;
