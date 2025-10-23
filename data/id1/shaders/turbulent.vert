@@ -14,7 +14,6 @@ attribute vec4 aLightStyle;
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;
 varying float vFog;
-uniform vec3 uFogColor;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {

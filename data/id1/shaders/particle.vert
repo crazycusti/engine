@@ -12,7 +12,6 @@ varying vec2 vCoord;
 varying vec3 vColor;
 varying float vFog;
 
-uniform vec3 uFogColor;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {

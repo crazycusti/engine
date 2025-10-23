@@ -1,3 +1,5 @@
+precision mediump float;
+
 uniform vec3 uOrigin;
 uniform mat3 uAngles;
 uniform vec3 uViewOrigin;
@@ -13,7 +15,6 @@ attribute vec3 aNormal;
 attribute vec4 aTexCoord;
 attribute vec4 aLightStyle;
 attribute vec3 aTangent;
-attribute vec3 aBitangent;
 
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;
@@ -23,11 +24,9 @@ varying vec3 vNormal;
 varying vec3 vLightVec;
 varying float vLightMix;
 varying vec3 vTangent;
-varying vec3 vBitangent;
 varying mat3 vAngles;
 
 varying vec3 vViewVec;
-uniform vec3 uFogColor;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
@@ -57,7 +56,6 @@ void main(void) {
   vec3 transformedNormal = uAngles * aNormal;
   vNormal = normalize(transformedNormal);
   vTangent = normalize(uAngles * aTangent);
-  vBitangent = normalize(uAngles * aBitangent);
   vAngles = uAngles;
 
   // Compute both lighting paths, select based on uniform

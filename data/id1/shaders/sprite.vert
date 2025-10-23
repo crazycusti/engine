@@ -9,7 +9,6 @@ attribute vec2 aTexCoord;
 varying vec2 vTexCoord;
 varying float vFog;
 
-uniform vec3 uFogColor;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {

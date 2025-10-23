@@ -28,7 +28,6 @@ varying vec3 vNormal;
 varying vec3 vLightVec;
 varying float vLightMix;
 varying vec3 vTangent;
-varying vec3 vBitangent;
 varying vec3 vViewVec;
 uniform vec3 uFogColor;
 varying mat3 vAngles;

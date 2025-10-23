@@ -93,6 +93,7 @@ export class BrushModelRenderer extends ModelRenderer {
 
     // Bind vertex buffer
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    R.c_brush_vbos++;
     const viewMatrix = e.lerp.angles.toRotationMatrix();
 
     // Render opaque surfaces (pass 0) or turbulent surfaces (pass 1)
@@ -111,6 +112,7 @@ export class BrushModelRenderer extends ModelRenderer {
   renderWorld(clmodel) {
     R.currententity = CL.state.clientEntities.getEntity(0);
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    R.c_brush_vbos++;
 
     const program = GL.UseProgram('brush');
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
@@ -160,6 +162,7 @@ export class BrushModelRenderer extends ModelRenderer {
       for (let j = 0; j < leaf.skychain; j++) {
         const cmds = leaf.cmds[j];
         R.c_brush_verts += cmds[2];
+        R.c_brush_tris += cmds[2] / 3;
         const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
         gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
 
@@ -174,13 +177,30 @@ export class BrushModelRenderer extends ModelRenderer {
         } else {
           R.notexture.bind(program.tTextureB);
         }
+        R.c_brush_texture_binds += 2;  // TextureA + TextureB
 
-        gl.uniform1i(program.uPerformDotLighting, clmodel.textures[cmds[0]].normal ? 1 : 0);
+        // LOD: Disable expensive normal mapping for large triangles (fillrate optimization)
+        // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
+        const threshold = R.pbr_lod_threshold.value;
+        const screenCoverageEstimate = cmds[2] / 3; // Rough proxy
+        const usePBR = threshold === 0 ? false :
+                       (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+
+        gl.uniform1i(program.uPerformDotLighting,
+          (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);
 
         // Bind PBR textures
         this._bindPBRTextures(program, clmodel.textures[cmds[0]]);
+        R.c_brush_texture_binds += 3;  // Luminance + Normal + Specular
+
+        // Track if this is a PBR material
+        const texture = clmodel.textures[cmds[0]];
+        if (texture.normal || texture.specular || texture.luminance) {
+          R.c_brush_draws_pbr++;
+        }
 
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
+        R.c_brush_draws++;
       }
     }
   }
@@ -193,6 +213,7 @@ export class BrushModelRenderer extends ModelRenderer {
   renderWorldTurbolents(clmodel) {
     R.currententity = CL.state.clientEntities.getEntity(0);
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    R.c_brush_vbos++;
 
     gl.enable(gl.BLEND);
     const program = GL.UseProgram('turbulent');
@@ -218,8 +239,10 @@ export class BrushModelRenderer extends ModelRenderer {
       for (let j = leaf.waterchain; j < leaf.cmds.length; j++) {
         const cmds = leaf.cmds[j];
         R.c_brush_verts += cmds[2];
+        R.c_brush_tris += cmds[2] / 3;
         clmodel.textures[cmds[0]].glt.bind(program.tTexture);
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
+        R.c_brush_draws++;
       }
     }
     gl.disable(gl.BLEND);
@@ -261,15 +284,12 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, offset + 12);
     gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, offset + 28);
 
-    // Normal, tangent, bitangent only used for 'brush' shader (not 'turbulent')
+    // Normal, tangent only used for 'brush' shader (not 'turbulent')
     if (program.aNormal) {
       gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, offset + 44);
     }
     if (program.aTangent) {
       gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, offset + 56);
-    }
-    if (program.aBitangent) {
-      gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, offset + 68);
     }
   }
 
@@ -344,10 +364,21 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       R.c_brush_verts += chain[2];
+      R.c_brush_tris += chain[2] / 3;
       textureA.glt.bind(program.tTextureA);
       textureB.glt.bind(program.tTextureB);
+      R.c_brush_texture_binds += 2;  // TextureA + TextureB
 
-      gl.uniform1i(program.uPerformDotLighting, clmodel.textures[chain[0]].normal ? 1 : 0);
+      // LOD: Disable expensive normal mapping for large triangles (fillrate optimization)
+      // On weak GPUs, large screen-space triangles with normal maps kill fillrate
+      // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
+      const threshold = R.pbr_lod_threshold.value;
+      const screenCoverageEstimate = chain[2] / 3; // Rough proxy for screen coverage
+      const usePBR = threshold === 0 ? false :
+                     (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+
+      gl.uniform1i(program.uPerformDotLighting,
+        (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
 
       // Setup dynamic lighting
       const lightVector = new Vector(0, 0, 0);
@@ -365,8 +396,16 @@ export class BrushModelRenderer extends ModelRenderer {
 
       // Bind PBR textures
       this._bindPBRTextures(program, clmodel.textures[chain[0]]);
+      R.c_brush_texture_binds += 3;  // Luminance + Normal + Specular
+
+      // Track if this is a PBR material (has normal/specular/luminance maps)
+      const texture = clmodel.textures[chain[0]];
+      if (texture.normal || texture.specular || texture.luminance) {
+        R.c_brush_draws_pbr++;
+      }
 
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
+      R.c_brush_draws++;
     }
   }
 
@@ -402,8 +441,10 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       R.c_brush_verts += chain[2];
+      R.c_brush_tris += chain[2] / 3;
       GL.Bind(program.tTexture, texture.texturenum);
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
+      R.c_brush_draws++;
     }
 
     gl.disable(gl.BLEND);

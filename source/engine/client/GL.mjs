@@ -319,6 +319,7 @@ export class GLTexture {
       this.height = data.height;
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, data);
       gl.generateMipmap(gl.TEXTURE_2D);
+      GL.CheckError();
     } else if (data instanceof Uint8Array) {
       console.assert(data.length === this.width * this.height * 4, 'Texture data length must match width and height');
 
@@ -330,6 +331,7 @@ export class GLTexture {
 
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, scaledWidth, scaledHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
       gl.generateMipmap(gl.TEXTURE_2D);
+      GL.CheckError();
     } else if (data === null) {
       const { scaledWidth, scaledHeight } = scaleTextureDimensions(this.width, this.height);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, scaledWidth, scaledHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -662,6 +664,35 @@ GL.UnbindProgram = function() {
     gl.disableVertexAttribArray(GL.currentProgram.attribs[i].location);
   }
   GL.currentProgram = null;
+};
+
+class GLError extends Error {
+  constructor(message, glError, glErrorName, operation) {
+    super(message);
+    this.glError = glError;
+    this.glErrorName = glErrorName;
+    this.operation = operation;
+  }
+}
+
+GL.CheckError = function(operation = 'WebGL operation') {
+  const error = gl.getError();
+
+  if (error !== gl.NO_ERROR) {
+    const errorNames = {
+      [gl.INVALID_ENUM]: 'GL_INVALID_ENUM',
+      [gl.INVALID_VALUE]: 'GL_INVALID_VALUE',
+      [gl.INVALID_OPERATION]: 'GL_INVALID_OPERATION',
+      [gl.INVALID_FRAMEBUFFER_OPERATION]: 'GL_INVALID_FRAMEBUFFER_OPERATION',
+      [gl.OUT_OF_MEMORY]: 'GL_OUT_OF_MEMORY',
+      [gl.CONTEXT_LOST_WEBGL]: 'CONTEXT_LOST_WEBGL',
+    };
+
+    const errorName = errorNames[error] || `Unknown error (${error})`;
+    const message = `WebGL Error: ${errorName} during ${operation}`;
+
+    throw new GLError(message, error, errorName, operation);
+  }
 };
 
 GL.identity = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];

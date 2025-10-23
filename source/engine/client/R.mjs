@@ -880,24 +880,24 @@ R.Perspective = function() {
   for (let i = 0; i < GL.programs.length; i++) {
     const program = GL.programs[i];
     gl.useProgram(program.program);
-    if (program.uViewOrigin != null) {
+    if (program.uViewOrigin !== undefined) {
       gl.uniform3fv(program.uViewOrigin, R.refdef.vieworg);
     }
-    if (program.uViewAngles != null) {
+    if (program.uViewAngles !== undefined) {
       gl.uniformMatrix3fv(program.uViewAngles, false, viewMatrix);
     }
-    if (program.uPerspective != null) {
+    if (program.uPerspective !== undefined) {
       gl.uniformMatrix4fv(program.uPerspective, false, R.perspective);
     }
-    if (program.uGamma != null) {
+    if (program.uGamma !== undefined) {
       gl.uniform1f(program.uGamma, V.gamma.value);
     }
     // global fog uniforms (only set when shader declares them)
-    if (program.uFogColor != null) {
+    if (program.uFogColor !== undefined) {
       const colParts = (R.fog_color.string || '128 128 128').split(/\s+/).map(Number);
       gl.uniform3fv(program.uFogColor, [(colParts[0]||128)/255.0, (colParts[1]||128)/255.0, (colParts[2]||128)/255.0]);
     }
-    if (program.uFogParams != null) {
+    if (program.uFogParams !== undefined) {
       // uFogParams = vec4(start, end, density, mode)
       gl.uniform4f(program.uFogParams, R.fog_start.value || 100.0, R.fog_end.value || 1000.0, R.fog_density.value || 0.01, R.fog_mode.value || 0.0);
     }
@@ -971,18 +971,21 @@ R.RenderView = function() {
     console.profile('R.RenderView');
   }
   R.c_brush_verts = 0;
+  R.c_brush_tris = 0;
+  R.c_brush_draws = 0;
+  R.c_brush_draws_pbr = 0;  // Draw calls with PBR materials
+  R.c_brush_vbos = 0;
+  R.c_brush_texture_binds = 0;  // Track texture binding overhead
   R.c_alias_polys = 0;
   gl.clear(gl.COLOR_BUFFER_BIT + gl.DEPTH_BUFFER_BIT);
   R.RenderScene();
   if (R.speeds.value !== 0) {
     console.profileEnd('R.RenderView');
-    // const time2 = Math.floor((Sys.FloatTime() - time1) * 1000.0);
-    // const c_brush_polys = R.c_brush_verts / 3;
-    // const c_alias_polys = R.c_alias_polys;
-    // let msg = ((time2 >= 100) ? '' : ((time2 >= 10) ? ' ' : '  ')) + time2 + ' ms  ';
-    // msg += ((c_brush_polys >= 1000) ? '' : ((c_brush_polys >= 100) ? ' ' : ((c_brush_polys >= 10) ? '  ' : '   '))) + c_brush_polys + ' wpoly ';
-    // msg += ((c_alias_polys >= 1000) ? '' : ((c_alias_polys >= 100) ? ' ' : ((c_alias_polys >= 10) ? '  ' : '   '))) + c_alias_polys + ' epoly\n';
-    // Con.Print(msg);
+    const c_brush_polys = R.c_brush_verts / 3;
+    const c_alias_polys = R.c_alias_polys;
+    const avgTrisPerDraw = (R.c_brush_tris / R.c_brush_draws).toFixed(1);
+    Con.DPrint(`Frame Stats: ${R.c_brush_draws} draw calls (${R.c_brush_draws_pbr} PBR), ${R.c_brush_tris} tris (${R.c_brush_verts} verts), ${R.c_brush_vbos} VBO binds, ${c_alias_polys} alias polys, ${c_brush_polys} brush polys\n`);
+    Con.DPrint(`  Avg ${avgTrisPerDraw} tris/draw, ${R.c_brush_texture_binds} texture binds\n`);
   }
 };
 
@@ -1428,7 +1431,6 @@ R.InitShaders = async function() {
           ['aLightStyle', gl.FLOAT, 4],
           ['aNormal', gl.FLOAT, 3],
           ['aTangent', gl.FLOAT, 3],
-          ['aBitangent', gl.FLOAT, 3],
         ],
         ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap']),
 
@@ -1511,6 +1513,7 @@ R.Init = async function() {
   R.flashblend = new Cvar('gl_flashblend', '0');
   R.nocolors = new Cvar('gl_nocolors', '0');
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
+  R.pbr_lod_threshold = new Cvar('r_pbr_lod_threshold', '-1', Cvar.FLAG.ARCHIVE, 'Triangle count threshold to disable PBR (normal mapping) for fillrate optimization. -1 = no limit (always PBR), 0 = PBR off, >0 = disable PBR when triangle count exceeds threshold');
   // fog controls
   R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.ARCHIVE, 'Fog color: R G B (0-255)');
   R.fog_start = new Cvar('r_fog_start', '100', Cvar.FLAG.ARCHIVE, 'Fog start distance');
