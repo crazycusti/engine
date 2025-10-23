@@ -10,7 +10,7 @@ This document outlines the coding conventions and style rules for the Quakeshack
    ```javascript
    // ❌ BAD
    this.boundingradius = 0; // Bounding radius for culling
-   
+
    // ✅ GOOD
    /** @type {number} Bounding radius for culling */
    this.boundingradius = 0;
@@ -24,7 +24,7 @@ This document outlines the coding conventions and style rules for the Quakeshack
     * @returns {void}
     */
    reset() { }
-   
+
    // ✅ GOOD
    /**
     * Reset the model
@@ -37,7 +37,7 @@ This document outlines the coding conventions and style rules for the Quakeshack
    // ❌ BAD
    /** @type {any} */
    let data;
-   
+
    // ✅ GOOD
    /** @type {ArrayBuffer} */
    let data;
@@ -48,7 +48,7 @@ This document outlines the coding conventions and style rules for the Quakeshack
    // ❌ BAD
    /** @type {object} */
    this.worldspawnInfo = {};
-   
+
    // ✅ GOOD
    /**
     * @typedef {Record<string, string>} WorldspawnInfo
@@ -62,37 +62,97 @@ This document outlines the coding conventions and style rules for the Quakeshack
    ```javascript
    // ✅ GOOD
    /** @type {import('./ClientEntities.mjs').ClientEdict} */
-   
+
    // ✅ GOOD for model types
    /** @type {import('../../common/model/BSP.mjs').BrushModel} */
    ```
 
 ## Registry and Global Variables
 
-### No Type Annotations for Registry Variables
+### Registry Pattern
 
-Registry variables are assigned at runtime via event bus - don't add type annotations:
+**ALWAYS use destructuring** to get registry modules in EVERY file - this helps IDEs infer types and is the ONLY correct pattern:
 
 ```javascript
-// ❌ BAD
-/** @type {import('../../common/Mod.mjs').default} */
-let Mod = null;
-/** @type {import('../R.mjs').default} */
-let R = null;
-/** @type {import('../GL.mjs').default} */
-let GL = null;
+// ✅ GOOD - IDE can infer types from registry
+let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V } = registry;
 
-// ✅ GOOD
-let Mod, R, GL, CL, Host;
-let gl = null;
+eventBus.subscribe('registry.frozen', () => {
+  ({ CL, COM, Con, Host, Mod, SCR, SV, Sys, V } = registry);
+});
+```
+
+```javascript
+// ❌ BAD - No type inference, requires manual annotations
+let Mod = null;
+let R = null;
 
 eventBus.subscribe('registry.frozen', () => {
   Mod = registry.Mod;
   R = registry.R;
-  GL = registry.GL;
-  CL = registry.CL;
-  Host = registry.Host;
 });
+```
+
+```javascript
+// ❌ NEVER ACCESS DIRECTLY - This breaks in nested scopes and loses type inference
+registry.Con.DPrint(...);  // WRONG!
+registry.Mod.type.brush;    // WRONG!
+
+// ✅ ALWAYS USE - Destructured variables work everywhere
+Con.DPrint(...);           // CORRECT!
+Mod.type.brush;            // CORRECT!
+```
+
+**Important:** Even in files that already have registry access, always set up the destructuring prolog at the top of the file. Never use `registry.ModuleName` syntax anywhere in the code.
+
+### What Goes in the Registry
+
+**Only modules that need to avoid circular dependencies** should be in the registry.
+
+- ✅ Use registry: `CL`, `COM`, `Con`, `Host`, `Mod`, `SCR`, `SV`, `Sys`, `V`
+
+- ✅ Use registry: `CL`, `COM`, `Con`, `Host`, `Mod`, `SCR`, `SV`, `Sys`, `V`
+- ❌ **NOT in registry**: `GL` (use direct import instead)
+
+```javascript
+// ✅ GOOD - GL is not in registry, import directly
+import GL from './GL.mjs';
+
+let gl = null;
+eventBus.subscribe('gl.ready', () => {
+  gl = GL.gl;
+});
+```
+
+### Event Bus Usage
+
+Use `eventBus` for **business logic events and lifecycle hooks**, not just initialization:
+
+**Good candidates for eventBus:**
+- ✅ System lifecycle: `'registry.frozen'`, `'gl.ready'`, `'gl.shutdown'`
+- ✅ Game state changes: `'game.start'`, `'game.end'`, `'map.loaded'`
+- ✅ Resource loading: `'model.loaded'`, `'texture.uploaded'`
+- ✅ Cross-module notifications: `'player.spawn'`, `'entity.remove'`
+- ✅ Performance events: `'frame.start'`, `'frame.end'`
+
+**Poor candidates for eventBus:**
+- ❌ Direct function calls (just call the function)
+- ❌ Return values needed (use direct calls or promises)
+- ❌ Tight coupling within same module (use methods)
+- ❌ Hot paths (performance critical loops)
+
+Example:
+```javascript
+// ✅ GOOD - Decouple renderer from model loading
+eventBus.subscribe('model.loaded', (model) => {
+  const renderer = modelRendererRegistry.getRenderer(model.type);
+  if (renderer) {
+    renderer.prepareModel(model);
+  }
+});
+
+// In loader
+eventBus.publish('model.loaded', loadedModel);
 ```
 
 ### Global GL Context

@@ -3,11 +3,11 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 
-let { CL, Host, Mod, R } = registry;
+let { CL, Con, Host, Mod, R } = registry;
 let gl = null;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ CL, Host, Mod, R } = registry);
+  ({ CL, Con, Host, Mod, R } = registry);
 });
 
 eventBus.subscribe('gl.ready', () => {
@@ -355,6 +355,10 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
 
     // Render each texture chain
+    if (!clmodel.chains || clmodel.chains.length === 0) {
+      return;
+    }
+
     for (let i = 0; i < clmodel.chains.length; i++) {
       const chain = clmodel.chains[i];
       const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
@@ -428,10 +432,15 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, false);
     GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
 
-    // Setup vertex attributes
-    this._setupBrushVertexAttributes(program, e.model.waterchain);
+    // Setup vertex attributes (use waterchain offset from clmodel, not e.model)
+    this._setupBrushVertexAttributes(program, clmodel.waterchain);
 
     // Render each turbulent chain
+    if (!clmodel.chains || clmodel.chains.length === 0) {
+      gl.disable(gl.BLEND);
+      return;
+    }
+
     for (let i = 0; i < clmodel.chains.length; i++) {
       const chain = clmodel.chains[i];
       const texture = clmodel.textures[chain[0]];
@@ -461,16 +470,265 @@ export class BrushModelRenderer extends ModelRenderer {
 
   /**
    * Prepare brush model for rendering (build display lists, upload to GPU).
-   * This is called from Mod.mjs after loading BSP data.
-   * Uses global `gl` from registry.
+   * Handles both world models (using leafs) and entity models (using chains).
    * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to prepare
+   * @param {boolean} [isWorldModel=false] True if this is the actual world map (model index 1)
    */
-  prepareModel(model) {
-    // This will be implemented in a later task
-    // For now, R.MakeBrushModelDisplayLists is still called from Mod.mjs
-    if (registry.Con) {
-      registry.Con.DPrint(`BrushModelRenderer.prepareModel: TODO - implement for ${model.name}\n`);
+  prepareModel(model, isWorldModel = false) {
+    const m = model;
+
+    // Clean up existing buffer if present
+    if (m.cmds && typeof m.cmds === 'object' && m.cmds !== null) {
+      gl.deleteBuffer(m.cmds);
+      m.cmds = null;
     }
+
+    if (isWorldModel) {
+      this._buildWorldModelDisplayLists(m);
+    } else {
+      this._buildBrushModelDisplayLists(m);
+    }
+  }
+
+  /**
+   * Build display lists for regular brush entities (doors, platforms, etc).
+   * Uses chains structure to group surfaces by texture.
+   * @private
+   * @param {import('../../common/model/BSP.mjs').BrushModel} m The brush model
+   */
+  _buildBrushModelDisplayLists(m) {
+    const cmds = [];
+    const styles = [0.0, 0.0, 0.0, 0.0];
+    let verts = 0;
+    let cutoff = 0;
+    m.chains = [];
+
+    // Build opaque surfaces (non-sky, non-turbulent)
+    for (let i = 0; i < m.textures.length; i++) {
+      const texture = m.textures[i];
+      if ((texture.sky === true) || (texture.turbulent === true)) {
+        continue;
+      }
+      const chain = [i, verts, 0];
+      for (let j = 0; j < m.numfaces; j++) {
+        const surf = m.faces[m.firstface + j];
+        if (surf.texture !== i) {
+          continue;
+        }
+        if (!surf.verts || surf.verts.length === 0) {
+          continue;
+        }
+        styles[0] = styles[1] = styles[2] = styles[3] = 0.0;
+        for (let l = 0; l < surf.styles.length; l++) {
+          styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
+        }
+        chain[2] += surf.verts.length;
+        for (let k = 0; k < surf.verts.length; k++) {
+          const vert = surf.verts[k];
+          // Position (12 bytes)
+          cmds.push(vert[0], vert[1], vert[2]);
+          // TexCoord (16 bytes)
+          cmds.push(vert[3], vert[4], vert[5], vert[6]);
+          // LightStyle (16 bytes)
+          cmds.push(styles[0], styles[1], styles[2], styles[3]);
+          // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
+          cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+          cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+      }
+      if (chain[2] !== 0) {
+        m.chains.push(chain);
+        verts += chain[2];
+      }
+    }
+    cutoff = cmds.length;
+    m.waterchain = verts * 80;
+    verts = 0;
+
+    // Build turbulent surfaces (water, lava, slime)
+    for (let i = 0; i < m.textures.length; i++) {
+      const texture = m.textures[i];
+      if (texture.turbulent !== true) {
+        continue;
+      }
+      const chain = [i, verts, 0];
+      for (let j = 0; j < m.numfaces; j++) {
+        const surf = m.faces[m.firstface + j];
+        if (surf.texture !== i) {
+          continue;
+        }
+        if (!surf.verts || surf.verts.length === 0) {
+          continue;
+        }
+        styles[0] = styles[1] = styles[2] = styles[3] = 0.0;
+        for (let l = 0; l < surf.styles.length; l++) {
+          styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
+        }
+        chain[2] += surf.verts.length;
+        for (let k = 0; k < surf.verts.length; k++) {
+          const vert = surf.verts[k];
+          // Position (12 bytes)
+          cmds.push(vert[0], vert[1], vert[2]);
+          // TexCoord (16 bytes)
+          cmds.push(vert[3], vert[4], vert[5], vert[6]);
+          // LightStyle (16 bytes)
+          cmds.push(styles[0], styles[1], styles[2], styles[3]);
+          // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
+          cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+          cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+      }
+      if (chain[2] !== 0) {
+        m.chains.push(chain);
+        verts += chain[2];
+      }
+    }
+
+    // Calculate tangents and bitangents for PBR normal mapping
+    R.CalculateTagentBitagents(cmds, cutoff);
+
+    // Upload to GPU
+    m.cmds = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
+  }
+
+  /**
+   * Build display lists for the world model.
+   * Uses leafs structure for visibility-based rendering.
+   * @private
+   * @param {import('../../common/model/BSP.mjs').BrushModel} m The world model
+   */
+  _buildWorldModelDisplayLists(m) {
+    if (m.cmds !== null) {
+      return; // Already built
+    }
+
+    const cmds = [];
+    const styles = [0.0, 0.0, 0.0, 0.0];
+    let verts = 0;
+    let cutoff = 0;
+
+    // Build opaque surfaces (non-sky, non-turbulent) organized by leaf
+    for (let i = 0; i < m.textures.length; i++) {
+      const texture = m.textures[i];
+      if ((texture.sky === true) || (texture.turbulent === true)) {
+        continue;
+      }
+      for (let j = 0; j < m.leafs.length; j++) {
+        const leaf = m.leafs[j];
+        const chain = [i, verts, 0];
+        for (let k = 0; k < leaf.nummarksurfaces; k++) {
+          const surf = m.faces[m.marksurfaces[leaf.firstmarksurface + k]];
+          if (surf.texture !== i) {
+            continue;
+          }
+          styles[0] = styles[1] = styles[2] = styles[3] = 0.0;
+          for (let l = 0; l < surf.styles.length; l++) {
+            styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
+          }
+          chain[2] += surf.verts.length;
+          for (let l = 0; l < surf.verts.length; l++) {
+            const vert = surf.verts[l];
+            // Position (12 bytes)
+            cmds.push(vert[0], vert[1], vert[2]);
+            // TexCoord (16 bytes)
+            cmds.push(vert[3], vert[4], vert[5], vert[6]);
+            // LightStyle (16 bytes)
+            cmds.push(styles[0], styles[1], styles[2], styles[3]);
+            // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
+            cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+            cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+          }
+        }
+        if (chain[2] !== 0) {
+          leaf.cmds.push(chain);
+          leaf.skychain++;
+          leaf.waterchain++;
+          verts += chain[2];
+        }
+      }
+    }
+    cutoff = cmds.length;
+    m.skychain = verts * 80;
+    verts = 0;
+
+    // Build sky surfaces
+    for (let i = 0; i < m.textures.length; i++) {
+      const texture = m.textures[i];
+      if (!texture.sky) {
+        continue;
+      }
+      for (let j = 0; j < m.leafs.length; j++) {
+        const leaf = m.leafs[j];
+        const chain = [verts, 0];
+        for (let k = 0; k < leaf.nummarksurfaces; k++) {
+          const surf = m.faces[m.marksurfaces[leaf.firstmarksurface + k]];
+          if (surf.texture !== i) {
+            continue;
+          }
+          chain[1] += surf.verts.length;
+          for (let l = 0; l < surf.verts.length; l++) {
+            const vert = surf.verts[l];
+            cmds.push(vert[0], vert[1], vert[2]);
+          }
+        }
+        if (chain[1] !== 0) {
+          leaf.cmds.push(chain);
+          leaf.waterchain++;
+          verts += chain[1];
+        }
+      }
+    }
+    m.waterchain = m.skychain + verts * 12;
+    verts = 0;
+
+    // Build turbulent surfaces (water, lava, slime)
+    for (let i = 0; i < m.textures.length; i++) {
+      const texture = m.textures[i];
+      if (texture.turbulent !== true) {
+        continue;
+      }
+      for (let j = 0; j < m.leafs.length; j++) {
+        const leaf = m.leafs[j];
+        const chain = [i, verts, 0];
+        for (let k = 0; k < leaf.nummarksurfaces; k++) {
+          const surf = m.faces[m.marksurfaces[leaf.firstmarksurface + k]];
+          if (surf.texture !== i) {
+            continue;
+          }
+          styles[0] = styles[1] = styles[2] = styles[3] = 0.0;
+          for (let l = 0; l < surf.styles.length; l++) {
+            styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
+          }
+          chain[2] += surf.verts.length;
+          for (let l = 0; l < surf.verts.length; l++) {
+            const vert = surf.verts[l];
+            // Position (12 bytes)
+            cmds.push(vert[0], vert[1], vert[2]);
+            // TexCoord (16 bytes)
+            cmds.push(vert[3], vert[4], vert[5], vert[6]);
+            // LightStyle (16 bytes)
+            cmds.push(styles[0], styles[1], styles[2], styles[3]);
+            // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
+            cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+            cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+          }
+        }
+        if (chain[2] !== 0) {
+          leaf.cmds.push(chain);
+          verts += chain[2];
+        }
+      }
+    }
+
+    // Calculate tangents and bitangents for PBR normal mapping
+    R.CalculateTagentBitagents(cmds, cutoff);
+
+    // Upload to GPU
+    m.cmds = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
   }
 
   /**

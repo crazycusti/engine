@@ -329,6 +329,12 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-24
+
+* noticed performance issues with certain brushes in certain situations when you go up close, super strange
+* I let Claude Sonnet 4.5 refactor the whole model rendering stuff according to my rules, it went much better than with GPT-5-Codex
+* had to clean up unused stuff from shaders since different platforms are optimizing things away
+
 ### 2025-10-19
 
 * let GPT-5-Codex refactor Server.mjs into smaller files, ended up in a chaos and I spend time together with Claude Sonnet 4.5 to finish it
