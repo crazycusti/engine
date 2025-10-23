@@ -11,6 +11,10 @@ import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
 import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
 import { ClientEdict } from './ClientEntities.mjs';
+import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
+import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
+import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
+import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 
 let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
 
@@ -375,77 +379,6 @@ R.CullBox = function(mins, maxs) {
   return false;
 };
 
-R.DrawSpriteModel = function(e) {
-  const program = GL.UseProgram('sprite', true);
-  let num = e.frame;
-  if ((num >= e.model.numframes) || (num < 0)) {
-    Con.DPrint('R.DrawSpriteModel: no such frame ' + num + '\n');
-    num = 0;
-  }
-  let frame = e.model.frames[num];
-  if (frame.group === true) {
-    let i;
-    const time = CL.state.time + e.syncbase;
-    num = frame.frames.length - 1;
-    const fullinterval = frame.frames[num].interval;
-    const targettime = time - Math.floor(time / fullinterval) * fullinterval;
-    for (i = 0; i < num; i++) {
-      if (frame.frames[i].interval > targettime) {
-        break;
-      }
-    }
-    frame = frame.frames[i];
-  }
-
-  GL.Bind(program.tTexture, frame.texturenum, true);
-
-  let r, u;
-
-  if (e.model.oriented === true) {
-    r = [];
-    u = [];
-    const {right, up} = e.angles.angleVectors();
-    [r, u] = [right, up];
-  } else {
-    r = R.vright;
-    u = R.vup;
-  }
-  const p = e.origin;
-  const x1 = frame.origin[0]; const y1 = frame.origin[1]; const x2 = x1 + frame.width; const y2 = y1 + frame.height;
-
-  GL.StreamGetSpace(6);
-  GL.StreamWriteFloat3(
-      p[0] + x1 * r[0] + y1 * u[0],
-      p[1] + x1 * r[1] + y1 * u[1],
-      p[2] + x1 * r[2] + y1 * u[2]);
-  GL.StreamWriteFloat2(0.0, 1.0);
-  GL.StreamWriteFloat3(
-      p[0] + x1 * r[0] + y2 * u[0],
-      p[1] + x1 * r[1] + y2 * u[1],
-      p[2] + x1 * r[2] + y2 * u[2]);
-  GL.StreamWriteFloat2(0.0, 0.0);
-  GL.StreamWriteFloat3(
-      p[0] + x2 * r[0] + y1 * u[0],
-      p[1] + x2 * r[1] + y1 * u[1],
-      p[2] + x2 * r[2] + y1 * u[2]);
-  GL.StreamWriteFloat2(1.0, 1.0);
-  GL.StreamWriteFloat3(
-      p[0] + x2 * r[0] + y1 * u[0],
-      p[1] + x2 * r[1] + y1 * u[1],
-      p[2] + x2 * r[2] + y1 * u[2]);
-  GL.StreamWriteFloat2(1.0, 1.0);
-  GL.StreamWriteFloat3(
-      p[0] + x1 * r[0] + y2 * u[0],
-      p[1] + x1 * r[1] + y2 * u[1],
-      p[2] + x1 * r[2] + y2 * u[2]);
-  GL.StreamWriteFloat2(0.0, 0.0);
-  GL.StreamWriteFloat3(
-      p[0] + x2 * r[0] + y2 * u[0],
-      p[1] + x2 * r[1] + y2 * u[1],
-      p[2] + x2 * r[2] + y2 * u[2]);
-  GL.StreamWriteFloat2(1.0, 0.0);
-};
-
 R.avertexnormals = [
   new Vector(-0.525731, 0.0, 0.850651),
   new Vector(-0.442863, 0.238856, 0.864188),
@@ -678,150 +611,62 @@ R._CalculateLightValues = function (e) {
   return [ ambientlight, shadelight, nearestLightOrigin ];
 };
 
-/**
- *
- * @param {ClientEdict} e entity
- */
-R.DrawAliasModel = function(e) {
-  const clmodel = e.model;
-
-  if (R.CullBox(
-      new Vector(
-        e.origin[0] - clmodel.boundingradius,
-        e.origin[1] - clmodel.boundingradius,
-        e.origin[2] - clmodel.boundingradius,
-      ),
-      new Vector(
-        e.origin[0] + clmodel.boundingradius,
-        e.origin[1] + clmodel.boundingradius,
-        e.origin[2] + clmodel.boundingradius,
-  )) === true) {
-    return;
-  }
-
-  let program;
-  if ((e.colormap !== 0) && (clmodel.player === true) && (R.nocolors.value === 0)) {
-    program = GL.UseProgram('player');
-    let top = (CL.state.scores[e.colormap - 1].colors & 0xf0) + 4;
-    let bottom = ((CL.state.scores[e.colormap - 1].colors & 0xf) << 4) + 4;
-    if (top <= 127) {
-      top += 7;
-    }
-    if (bottom <= 127) {
-      bottom += 7;
-    }
-    top = W.d_8to24table[top];
-    bottom = W.d_8to24table[bottom];
-    gl.uniform3f(program.uTop, top & 0xff, (top >> 8) & 0xff, top >> 16);
-    gl.uniform3f(program.uBottom, bottom & 0xff, (bottom >> 8) & 0xff, bottom >> 16);
-  } else {
-    program = GL.UseProgram('alias');
-  }
-  gl.uniform3fv(program.uOrigin, e.lerp.origin);
-  gl.uniformMatrix3fv(program.uAngles, false, e.lerp.angles.toRotationMatrix());
-
-  const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
-
-  gl.uniform3fv(program.uAmbientLight, ambientlight);
-  gl.uniform3fv(program.uShadeLight, shadelight);
-
-  let i;
-
-  gl.uniform3fv(program.uLightVec, lightVector);
-
-  R.c_alias_polys += clmodel._num_tris; // FIXME: private property access
-
-  let num; let fullinterval; let targettime = 0;
-  const time = CL.state.time + e.syncbase;
-  num = e.frame;
-  if ((num >= clmodel.frames.length) || (num < 0)) {
-    Con.DPrint('R.DrawAliasModel: no such frame ' + num + '\n');
-    num = 0;
-  }
-  let frame = clmodel.frames[num];
-  let frameA = frame, frameB = frame;
-  if (frame.group === true) {
-    num = frame.frames.length - 1;
-    fullinterval = frame.frames[num].interval;
-    frameA = frame.frames[0];
-    frameB = frame.frames[1 % frame.frames.length];
-    targettime = time - Math.floor(time / fullinterval) * fullinterval;
-    for (i = 0; i < num; i++) {
-      if (frame.frames[i].interval > targettime) {
-        frameA = frame.frames[i];
-        frameB = frame.frames[(i + 1) % frame.frames.length];
-        break;
-      }
-    }
-  } else if (R.interpolation.value) {
-    const [previousFrame, nextFrame, f] = e.lerp.frame;
-    frameA = clmodel.frames[previousFrame];
-    frameB = clmodel.frames[nextFrame];
-    targettime = f;
-  }
-  gl.uniform1f(program.uAlpha, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
-  gl.uniform1f(program.uTime, Host.realtime);
-  gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-  gl.vertexAttribPointer(program.aPositionA.location, 3, gl.FLOAT, false, 24, frameA.cmdofs);
-  gl.vertexAttribPointer(program.aPositionB.location, 3, gl.FLOAT, false, 24, frameB.cmdofs);
-  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 24, frameA.cmdofs + 12);
-  gl.vertexAttribPointer(program.aTexCoord.location, 2, gl.FLOAT, false, 0, 0);
-
-  num = e.skinnum;
-  if ((num >= clmodel.skins.length) || (num < 0)) {
-    Con.DPrint('R.DrawAliasModel: no such skin # ' + num + '\n');
-    num = 0;
-  }
-  let skin = clmodel.skins[num];
-  if (skin.group === true) {
-    num = skin.skins.length - 1;
-    fullinterval = skin.skins[num].interval;
-    targettime = time - Math.floor(time / fullinterval) * fullinterval;
-    for (i = 0; i < num; i++) {
-      if (skin.skins[i].interval > targettime) {
-        break;
-      }
-    }
-    skin = skin.skins[i];
-  }
-  skin.texturenum.bind(program.tTexture);
-  if (clmodel.player === true) {
-    skin.playertexture.bind(program.tPlayer);
-  }
-
-  gl.drawArrays(gl.TRIANGLES, 0, clmodel._num_tris * 3); // FIXME: private property access
-};
-
 R.DrawEntitiesOnList = function() {
   if (R.drawentities.value === 0) {
     return;
   }
-  for (const currententity of CL.state.clientEntities.getVisibleEntities()) {
-    R.currententity = currententity;
-    if (R.currententity.model === null) {
+
+  // Group entities by model type for batched rendering
+  const entitiesByType = new Map();
+
+  for (const entity of CL.state.clientEntities.getVisibleEntities()) {
+    if (entity.model === null) {
       continue;
     }
-    switch (R.currententity.model.type) {
-      case Mod.type.alias:
-        R.DrawAliasModel(R.currententity);
-        continue;
-      case Mod.type.brush:
-        R.DrawBrushModel(R.currententity);
+
+    const modelType = entity.model.type;
+    if (!entitiesByType.has(modelType)) {
+      entitiesByType.set(modelType, []);
     }
+    entitiesByType.get(modelType).push(entity);
   }
-  GL.StreamFlush();
-  gl.enable(gl.BLEND);
-  for (const currententity of CL.state.clientEntities.getVisibleEntities()) {
-    R.currententity = currententity;
-    if (R.currententity.model === null) {
+
+  // Pass 0: Opaque models (brush, alias)
+  for (const [modelType, entities] of entitiesByType) {
+    if (modelType === Mod.type.sprite) {
+      continue; // Sprites are drawn in pass 1
+    }
+
+    const renderer = modelRendererRegistry.getRenderer(modelType);
+    if (!renderer) {
       continue;
     }
-    if (R.currententity.model.type === Mod.type.sprite) {
-      R.DrawSpriteModel(R.currententity);
+
+    renderer.setupRenderState(0);
+    for (const entity of entities) {
+      R.currententity = entity;
+      renderer.render(entity.model, entity, 0);
     }
+    renderer.cleanupRenderState(0);
   }
   GL.StreamFlush();
-  gl.disable(gl.BLEND);
+
+  // Pass 1: Transparent sprites with blending
+  const spriteEntities = entitiesByType.get(Mod.type.sprite);
+  if (spriteEntities) {
+    const renderer = modelRendererRegistry.getRenderer(Mod.type.sprite);
+    if (renderer) {
+      gl.enable(gl.BLEND);
+      renderer.setupRenderState(1);
+      for (const entity of spriteEntities) {
+        R.currententity = entity;
+        renderer.render(entity.model, entity, 1);
+      }
+      renderer.cleanupRenderState(1);
+      GL.StreamFlush();
+      gl.disable(gl.BLEND);
+    }
+  }
 };
 
 R.DrawViewModel = function() {
@@ -866,7 +711,12 @@ R.DrawViewModel = function() {
   gl.uniformMatrix4fv(program.uPerspective, false, R.perspective);
 
   if (CL.state.viewent.model !== null) {
-    R.DrawAliasModel(CL.state.viewent);
+    const aliasRenderer = modelRendererRegistry.getRenderer(Mod.type.alias);
+    if (aliasRenderer) {
+      aliasRenderer.setupRenderState(0);
+      aliasRenderer.render(CL.state.viewent.model, CL.state.viewent, 0);
+      aliasRenderer.cleanupRenderState(0);
+    }
   }
 
   ymax = 4.0 * Math.tan(R.refdef.fov_y * Math.PI / 360.0);
@@ -1086,9 +936,28 @@ R.RenderScene = function() {
   gl.enable(gl.CULL_FACE);
   R.DrawSkyBox();
   R.DrawViewModel();
-  R.DrawWorld();
+
+  // Render world and entities using the renderer registry
+  const worldEntity = CL.state.clientEntities.getEntity(0);
+  if (worldEntity && worldEntity.model) {
+    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+    if (brushRenderer) {
+      // Pass 0: World opaque surfaces
+      brushRenderer.render(worldEntity.model, worldEntity, 0);
+    }
+  }
+
+  // Draw all other entities (pass 0 for opaque, pass 1 for transparent)
   R.DrawEntitiesOnList();
-  R.DrawWorldTurbolents();
+
+  // Pass 1: World turbulent surfaces
+  if (worldEntity && worldEntity.model) {
+    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+    if (brushRenderer) {
+      brushRenderer.render(worldEntity.model, worldEntity, 1);
+    }
+  }
+
   gl.disable(gl.CULL_FACE);
   R.RenderDlights();
   R.DrawParticles();
@@ -1182,7 +1051,7 @@ R.CalculateTagentBitagents = function(cmds, cutoff) {
 };
 
 R.MakeBrushModelDisplayLists = function(m) {
-  if (m.cmds) {
+  if (m.cmds && typeof m.cmds === 'object' && m.cmds !== null) {
     gl.deleteBuffer(m.cmds);
     m.cmds = null;
   }
@@ -1652,6 +1521,11 @@ R.Init = async function() {
   R.InitTextures();
   R.InitParticles();
   await R.InitShaders();
+
+  // Register model renderers
+  modelRendererRegistry.register(new BrushModelRenderer());
+  modelRendererRegistry.register(new AliasModelRenderer());
+  modelRendererRegistry.register(new SpriteModelRenderer());
 
   R.warpbuffer = gl.createFramebuffer();
   R.warptexture = gl.createTexture();
@@ -2345,155 +2219,6 @@ R.TextureAnimation = function(base) {
   ];
 };
 
-R.DrawBrushModel = function(e) {
-  const clmodel = e.model;
-
-  if (clmodel.submodel === true) {
-    if (R.CullBox(
-        new Vector(
-          e.origin[0] + clmodel.mins[0],
-          e.origin[1] + clmodel.mins[1],
-          e.origin[2] + clmodel.mins[2],
-        ),
-        new Vector(
-          e.origin[0] + clmodel.maxs[0],
-          e.origin[1] + clmodel.maxs[1],
-          e.origin[2] + clmodel.maxs[2],
-        )) === true) {
-      return;
-    }
-  } else {
-    if (R.CullBox(
-        new Vector(
-          e.origin[0] - clmodel.radius,
-          e.origin[1] - clmodel.radius,
-          e.origin[2] - clmodel.radius,
-        ),
-        new Vector(
-          e.origin[0] + clmodel.radius,
-          e.origin[1] + clmodel.radius,
-          e.origin[2] + clmodel.radius,
-        )) === true) {
-      return;
-    }
-  }
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-  const viewMatrix = e.lerp.angles.toRotationMatrix();
-
-  let program = GL.UseProgram('brush');
-
-  if (!clmodel.submodel) {
-    const [ambientlight, shadelight, lightPosition] = R._CalculateLightValues(e);
-    gl.uniform3fv(program.uAmbientLight, ambientlight);
-    gl.uniform3fv(program.uShadeLight, shadelight);
-    gl.uniform4fv(program.uLightVec, [...lightPosition, 64.0]); // FIXME: calculate/fetch the right light radius value
-  } else {
-    gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
-    gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
-    gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
-  }
-
-  gl.uniform3fv(program.uOrigin, e.lerp.origin);
-  gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, 28);
-  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, 44);
-  gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
-  gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
-  gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % .2) / .2 : 0);
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
-    GL.Bind(program.tLightmap, R.fullbright_texture);
-  } else {
-    GL.Bind(program.tLightmap, R.lightmap_texture);
-  }
-  GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
-  GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
-  GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-  GL.Bind(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
-
-  gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
-
-  for (let i = 0; i < clmodel.chains.length; i++) {
-    const chain = clmodel.chains[i];
-    const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
-    if (textureA.turbulent === true) {
-      continue;
-    }
-    R.c_brush_verts += chain[2];
-    textureA.glt.bind(program.tTextureA);
-    textureB.glt.bind(program.tTextureB);
-
-    gl.uniform1i(program.uPerformDotLighting, clmodel.textures[chain[0]].normal ? 1 : 0);
-
-    const lightVector = new Vector(0, 0, 0);
-    let lightRadius = 0;
-
-    // naive approach of getting the next best light
-    for (const l of CL.state.clientEntities.dlights) {
-      if (l.die < CL.state.time || l.radius === 0.0) {
-        continue;
-      }
-
-      lightVector.set(l.origin);
-      lightRadius = l.radius;
-    }
-
-    gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
-
-    for (const [slot, samplerId] of Object.entries({
-      luminance: 'tLuminance',
-      normal: 'tNormal',
-      specular: 'tSpecular',
-    })) {
-      const t = clmodel.textures[chain[0]][slot];
-      if (t !== null) {
-        t.bind(program[samplerId]);
-      } else {
-        GL.Bind(program[samplerId], R.null_texture);
-      }
-    }
-
-    gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
-  }
-
-  if (!R.drawturbolents.value) {
-    return;
-  }
-
-  gl.enable(gl.BLEND);
-  program = GL.UseProgram('turbulent');
-  gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
-  gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-  gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
-    GL.Bind(program.tLightmap, R.fullbright_texture);
-  } else {
-    GL.Bind(program.tLightmap, R.lightmap_texture);
-  }
-  // GL.Bind(program.tDeluxemap, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.deluxemap_texture : R.null_texture);
-  GL.Bind(program.tDlight, ((R.flashblend.value === 0) && (clmodel.submodel === true)) ? R.dlightmap_rgba_texture : R.null_texture);
-  GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, e.model.waterchain);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, e.model.waterchain + 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, e.model.waterchain + 28);
-  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 44);
-  // gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 56);
-  // gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, e.model.waterchain + 68);
-  for (let i = 0; i < clmodel.chains.length; i++) {
-    const chain = clmodel.chains[i];
-    const texture = clmodel.textures[chain[0]];
-    if (!texture.turbulent) {
-      continue;
-    }
-    R.c_brush_verts += chain[2];
-    GL.Bind(program.tTexture, texture.texturenum);
-    gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
-  }
-  gl.disable(gl.BLEND);
-};
-
 R.RecursiveWorldNode = function(node) {
   if (node.contents === content.CONTENT_SOLID) {
     return;
@@ -2510,152 +2235,6 @@ R.RecursiveWorldNode = function(node) {
   }
   R.RecursiveWorldNode(node.children[0]);
   R.RecursiveWorldNode(node.children[1]);
-};
-
-R.DrawWorld = function() {
-  const clmodel = CL.state.worldmodel;
-  R.currententity = CL.state.clientEntities.getEntity(0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-
-  let program = GL.UseProgram('brush');
-  gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
-  gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
-  gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
-
-  gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, 28);
-  gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, 44);
-  gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, 56);
-  gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, 68);
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
-    GL.Bind(program.tLightmap, R.fullbright_texture);
-  } else {
-    GL.Bind(program.tLightmap, R.lightmap_texture);
-  }
-  if (R.flashblend.value === 0) {
-    GL.Bind(program.tDlight, R.dlightmap_rgba_texture);
-  } else {
-    GL.Bind(program.tDlight, R.null_texture);
-  }
-  GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
-  GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-  GL.Bind(program.tDeluxemap, R.deluxemap_texture);
-
-  gl.uniform1f(program.uHaveDeluxemap, 1.0); // TODO: check if deluxemap is actually present
-
-  for (let i = 0; i < clmodel.leafs.length; i++) {
-    const leaf = clmodel.leafs[i];
-
-    if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
-      continue;
-    }
-
-    if (R.CullBox(leaf.mins, leaf.maxs)) {
-      continue;
-    }
-
-    // const p = leaf.maxs.copy().subtract(leaf.mins).multiply(0.5);
-
-    const lightVector = new Vector(0, 0, 0);
-    let lightRadius = 0;
-
-    // naive approach of getting the next best light
-    for (const l of CL.state.clientEntities.dlights) {
-      if (l.die < CL.state.time || l.radius === 0.0) {
-        continue;
-      }
-
-      lightVector.set(l.origin);
-      lightRadius = l.radius;
-    }
-
-    gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
-
-    for (let j = 0; j < leaf.skychain; j++) {
-      const cmds = leaf.cmds[j];
-      R.c_brush_verts += cmds[2];
-      const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
-      gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % .2) / .2 : 0);
-      if (textureA.glt) {
-        textureA.glt.bind(program.tTextureA);
-      } else {
-        R.notexture.bind(program.tTextureA);
-      }
-      if (textureB.glt) {
-        textureB.glt.bind(program.tTextureB);
-      } else {
-        R.notexture.bind(program.tTextureB);
-      }
-
-      gl.uniform1i(program.uPerformDotLighting, clmodel.textures[cmds[0]].normal ? 1 : 0);
-
-      for (const [slot, samplerId] of Object.entries({
-        luminance: 'tLuminance',
-        normal: 'tNormal',
-        specular: 'tSpecular',
-      })) {
-        const t = clmodel.textures[cmds[0]][slot];
-        if (t !== null) {
-          t.bind(program[samplerId]);
-        } else {
-          GL.Bind(program[samplerId], R.null_texture);
-        }
-      }
-
-      gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
-    }
-  }
-};
-
-R.DrawWorldTurbolents = function() {
-  if (R.drawturbolents.value === 0) {
-    return;
-  }
-
-  const clmodel = CL.state.worldmodel;
-  R.currententity = CL.state.clientEntities.getEntity(0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-
-  gl.enable(gl.BLEND);
-  const program = GL.UseProgram('turbulent');
-  gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
-  gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, clmodel.waterchain);
-  gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, clmodel.waterchain + 12);
-  gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, clmodel.waterchain + 28);
-  // gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 44);
-  // gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 56);
-  // gl.vertexAttribPointer(program.aBitangent.location, 3, gl.FLOAT, false, 80, clmodel.waterchain + 68);
-  gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
-  if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
-    GL.Bind(program.tLightmap, R.fullbright_texture);
-  } else {
-    GL.Bind(program.tLightmap, R.lightmap_texture);
-  }
-  if (R.flashblend.value === 0) {
-    GL.Bind(program.tDlight, R.dlightmap_rgba_texture);
-  } else {
-    GL.Bind(program.tDlight, R.null_texture);
-  }
-  GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
-  for (let i = 0; i < clmodel.leafs.length; i++) {
-    const leaf = clmodel.leafs[i];
-    if ((leaf.visframe !== R.visframecount) || (leaf.waterchain === leaf.cmds.length)) {
-      continue;
-    }
-    if (R.CullBox(leaf.mins, leaf.maxs) === true) {
-      continue;
-    }
-    for (let j = leaf.waterchain; j < leaf.cmds.length; j++) {
-      const cmds = leaf.cmds[j];
-      R.c_brush_verts += cmds[2];
-      clmodel.textures[cmds[0]].glt.bind(program.tTexture);
-      gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
-    }
-  }
-  gl.disable(gl.BLEND);
 };
 
 R.MarkLeaves = function() {

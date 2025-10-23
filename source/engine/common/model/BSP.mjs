@@ -1,47 +1,179 @@
-import Vector from '../../../shared/Vector.mjs';
-import { CRC16CCITT } from '../CRC.mjs';
-import { CorruptedResourceError } from '../Errors.mjs';
+import { BaseModel } from './BaseModel.mjs';
 
-import { BaseModel, Face, Plane } from './BaseModel.mjs';
+/** @typedef {import('../../../shared/Vector.mjs').default} Vector */
+/** @typedef {import('./BaseModel.mjs').Face} Face */
+/** @typedef {import('./BaseModel.mjs').Plane} Plane */
 
-const novis = new Array(1024).fill(0xff);
+/**
+ * @typedef {object} Clipnode
+ * @property {number} planenum - Index into planes array
+ * @property {number[]} children - Child node indices [front, back]
+ */
 
+/**
+ * @typedef {object} Hull
+ * @property {Clipnode[]} clipnodes - Clipnodes for this hull
+ * @property {Plane[]} planes - Planes for collision detection
+ * @property {number} [firstclipnode] - Index of first clipnode (optional)
+ * @property {number} lastclipnode - Index of last clipnode
+ * @property {Vector} clip_mins - Minimum bounding box for this hull
+ * @property {Vector} clip_maxs - Maximum bounding box for this hull
+ */
+
+/**
+ * @typedef {object} Submodel
+ * @property {Vector} mins - Minimum bounding box
+ * @property {Vector} maxs - Maximum bounding box
+ * @property {Vector} origin - Model origin
+ * @property {number[]} headnode - Head nodes for each hull
+ * @property {number} visleafs - Number of visible leafs
+ * @property {number} firstface - First face index
+ * @property {number} numfaces - Number of faces
+ */
+
+/**
+ * @typedef {Record<string, string>} WorldspawnInfo
+ * Parsed worldspawn entity key-value pairs
+ */
+
+/**
+ * @typedef {Record<string, {fileofs: number, filelen: number}>} BSPXLumps
+ * BSPX extended lump data (RGBLIGHTING, LIGHTINGDIR, etc.)
+ */
+
+/**
+ * BSP tree node
+ */
 export class Node {
+  /** @type {number} node index in the nodes array */
+  num = 0;
   /** @type {number} */
   contents = 0;
-  /** @type {Plane} dividing plane */
+  /** @type {number} index into planes array */
+  planenum = 0;
+  /** @type {Plane|null} dividing plane */
   plane = null;
-  /** @type {Node[]} frontside, backside */
+  /** @type {Node|null} parent node */
+  parent = null;
+  /** @type {(Node|number)[]} frontside, backside - numbers during loading, Node refs after */
   children = [null, null];
-};
+  /** @type {number} visibility offset for PVS */
+  visofs = 0;
+  /** @type {Vector|null} minimum bounding box */
+  mins = null;
+  /** @type {Vector|null} maximum bounding box */
+  maxs = null;
+  /** @type {number} first marksurface index (for leafs) */
+  firstmarksurface = 0;
+  /** @type {number} number of marksurfaces (for leafs) */
+  nummarksurfaces = 0;
+  /** @type {number} first face index (for nodes) */
+  firstface = 0;
+  /** @type {number} number of faces (for nodes) */
+  numfaces = 0;
+  /** @type {number[]} render command list */
+  cmds = [];
+  /** @type {number[]} ambient sound levels [water, sky, slime, lava] */
+  ambient_level = [0, 0, 0, 0];
+  /** @type {number} index into skychain list */
+  skychain = 0;
+  /** @type {number} index into waterchain list */
+  waterchain = 0;
+}
 
+/**
+ * Base class for brush-based models (BSP maps)
+ * All loading is handled by BSP29Loader.mjs
+ */
 export class BrushModel extends BaseModel {
-  /** @type {29|844124994} */
+  /** @type {number} BSP format version */
   version = null;
 
+  /** @type {number} Bounding radius for culling */
   radius = 0;
 
-  /** @type {Plane[]} */
+  /** @type {Plane[]} All planes in the BSP tree */
   planes = [];
 
-  /** @type {Face[]} */
+  /** @type {Face[]} All visible faces/surfaces */
   faces = [];
 
-  /** @type {Vector[]} */
+  /** @type {Vector[]} All vertex positions */
   vertexes = [];
 
-  /** @type {number[][]} */
+  /** @type {number[][]} Edge vertex indices [v1, v2] */
   edges = [];
 
-  /** @type {number[]} */
+  /** @type {number[]} Surface edge list (index into edges, negative = reverse) */
   surfedges = [];
 
-  /** @type {Node[]} */
+  /** @type {Node[]} BSP tree nodes */
   nodes = [];
 
+  /** @type {Node[]} BSP leaf nodes */
+  leafs = [];
+
+  /** @type {any[]} Texture information */
+  textures = [];
+
+  /** @type {any[]} Texture coordinate info per face */
+  texinfo = [];
+
+  /** @type {number[]} Face indices visible from each leaf */
+  marksurfaces = [];
+
+  /** @type {Uint8Array} Lightmap data (grayscale) */
+  lightdata = null;
+
+  /** @type {Uint8Array} Lightmap data (RGB) */
+  lightdata_rgb = null;
+
+  /** @type {Uint8Array} Deluxemap data (normals) */
+  deluxemap = null;
+
+  /** @type {Uint8Array} Visibility data for PVS */
+  visdata = null;
+
+  /** @type {Clipnode[]} Clipnodes for collision detection */
+  clipnodes = [];
+
+  /** @type {Hull[]} Collision hulls for physics (hull0, hull1, hull2) */
+  hulls = [];
+
+  /** @type {Submodel[]} Submodels (brush entities) */
+  submodels = [];
+
+  /** @type {number} First face index for this submodel */
+  firstface = 0;
+
+  /** @type {number} Number of faces in this submodel */
+  numfaces = 0;
+
+  /** @type {string} Entity lump as string */
+  entities = null;
+
+  /** @type {WorldspawnInfo} Parsed worldspawn entity properties */
+  worldspawnInfo = {};
+
+  /** @type {number} Offset for BSPX extended data */
+  bspxoffset = 0;
+
+  /** @type {BSPXLumps} BSPX extended lumps */
+  bspxlumps = null;
+
+  /** @type {boolean} Whether this is an inline submodel (brush entity) vs the world */
+  submodel = false;
+
+  /** @type {Array<number[]>} Rendering chains (texture batches) for optimized drawing */
+  chains = [];
+
+  /** @type {number} Offset into vertex buffer for turbulent surfaces (water, slime, lava) */
+  waterchain = 0;
+
   /**
+   * Find the leaf node for a given point in 3D space
    * @param {Vector} p position
-   * @returns {Node} leaf
+   * @returns {Node} leaf node containing the point
    */
   getLeafForPoint(p) {
     let node = this.nodes[0];
@@ -56,129 +188,10 @@ export class BrushModel extends BaseModel {
       const normal = node.plane.normal;
 
       if (p.dot(normal) - node.plane.dist > 0) {
-        node = node.children[0];
+        node = /** @type {Node} */ (node.children[0]);
       } else {
-        node = node.children[1];
+        node = /** @type {Node} */ (node.children[1]);
       }
     }
   }
-
-  #determineRadius() {
-    const mins = new Vector(), maxs = new Vector();
-
-    for (let i = 0; i < this.vertexes.length; i++) {
-      const vert = this.vertexes[i];
-      if (vert[0] < mins[0]) {
-        mins[0] = vert[0];
-      } else if (vert[0] > maxs[0]) {
-        maxs[0] = vert[0];
-      }
-
-      if (vert[1] < mins[1]) {
-        mins[1] = vert[1];
-      } else if (vert[1] > maxs[1]) {
-        maxs[1] = vert[1];
-      }
-
-      if (vert[2] < mins[2]) {
-        mins[2] = vert[2];
-      } else if (vert[2] > maxs[2]) {
-        maxs[2] = vert[2];
-      }
-    };
-
-    this.radius = (new Vector(
-      Math.abs(mins[0]) > Math.abs(maxs[0]) ? Math.abs(mins[0]) : Math.abs(maxs[0]),
-      Math.abs(mins[1]) > Math.abs(maxs[1]) ? Math.abs(mins[1]) : Math.abs(maxs[1]),
-      Math.abs(mins[2]) > Math.abs(maxs[2]) ? Math.abs(mins[2]) : Math.abs(maxs[2]),
-    )).len();
-  }
-};
-
-export class BSP29 extends BrushModel {
-  /** @type {29} */
-  version = 29;
-
-  static #lump = Object.freeze({
-    entities: 0,
-    planes: 1,
-    textures: 2,
-    vertexes: 3,
-    visibility: 4,
-    nodes: 5,
-    texinfo: 6,
-    faces: 7,
-    lighting: 8,
-    clipnodes: 9,
-    leafs: 10,
-    marksurfaces: 11,
-    edges: 12,
-    surfedges: 13,
-    models: 14,
-  });
-
-  #loadVertexes(buffer) {
-    const view = new DataView(buffer);
-    let fileofs = view.getUint32((BSP29.#lump.vertexes << 3) + 4, true);
-    const filelen = view.getUint32((BSP29.#lump.vertexes << 3) + 8, true);
-    if ((filelen % 12) !== 0) {
-      throw new CorruptedResourceError(this.name, 'BSP29: vertexes lump length is not a multiple of 12');
-    }
-    const count = filelen / 12;
-    this.vertexes.length = count;
-    let i;
-    for (i = 0; i < count; i++) {
-      this.vertexes[i] = new Vector(view.getFloat32(fileofs, true), view.getFloat32(fileofs + 4, true), view.getFloat32(fileofs + 8, true));
-      fileofs += 12;
-    }
-  }
-
-  #loadEdges(buffer) {
-    const view = new DataView(buffer);
-    let fileofs = view.getUint32((BSP29.#lump.edges << 3) + 4, true);
-    const filelen = view.getUint32((BSP29.#lump.edges << 3) + 8, true);
-    if ((filelen & 3) !== 0) {
-      throw new CorruptedResourceError(this.name, 'BSP29: edges lump length is not a multiple of 8');
-    }
-    const count = filelen >> 2;
-    this.edges.length = count;
-    for (let i = 0; i < count; i++) {
-      this.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
-      fileofs += 4;
-    }
-  }
-
-  #loadSurfedges(buffer) {
-    const view = new DataView(buffer);
-    const fileofs = view.getUint32((BSP29.#lump.surfedges << 3) + 4, true);
-    const filelen = view.getUint32((BSP29.#lump.surfedges << 3) + 8, true);
-    const count = filelen >> 2;
-    this.surfedges.length = count;
-    for (let i = 0; i < count; i++) {
-      this.surfedges[i] = view.getInt32(fileofs + (i << 2), true);
-    }
-  }
-
-  #loadPlanes(buffer) {
-
-  }
-
-  #loadTextures(buffer) {
-  }
-
-  load(buffer) {
-    console.assert(this.version === (new DataView(buffer)).getUint32(0, true));
-
-    this.#loadVertexes(buffer);
-    this.#loadEdges(buffer);
-    this.#loadSurfedges(buffer);
-
-    this.checksum = CRC16CCITT.Block(new Uint8Array(buffer));
-    this.needload = false;
-
-    return this;
-  }
-};
-
-export class BSP2 extends BSP29 {
-};
+}

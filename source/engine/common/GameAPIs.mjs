@@ -1,23 +1,27 @@
 import { solid } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
-import { ClientDlight } from '../client/ClientEntities.mjs';
-import { GLTexture } from '../client/GL.mjs';
 import VID from '../client/VID.mjs';
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ED, ServerEdict } from '../server/Edict.mjs';
-import { Navigation } from '../server/Navigation.mjs';
 import Cmd from './Cmd.mjs';
 import Cvar from './Cvar.mjs';
 import { HostError } from './Errors.mjs';
-import Mod, { ParsedQC } from './Mod.mjs';
-import { Pmove, Trace } from './Pmove.mjs';
+import Mod from './Mod.mjs';
 import W from './W.mjs';
 
 /** @typedef {import('../client/ClientEntities.mjs').ClientEdict} ClientEdict */
+/** @typedef {import('../client/ClientEntities.mjs').ClientDlight} ClientDlight */
+/** @typedef {import('../client/GL.mjs').GLTexture} GLTexture */
+/** @typedef {import('../network/MSG.mjs').SzBuffer} SzBuffer */
+/** @typedef {import('../server/Navigation.mjs').Navigation} Navigation */
+/** @typedef {import('./Mod.mjs').ParsedQC} ParsedQC */
+/** @typedef {import('./Pmove.mjs').Pmove} Pmove */
+/** @typedef {import('./Pmove.mjs').Trace} Trace */
+/** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
 
-let { CL, Con, Draw, Host, R, S, SCR, SV, V } = registry;
+let { CL, Con, Draw, Host, R, S, SCR, SV, V} = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;

@@ -58,27 +58,46 @@ export class BaseModel {
   }
 
   reset() {
-    // private variables
+    // Private variables (used during loading)
+
+    /** @type {number} Number of frames in file */
     this._num_frames = 0;
+
+    /** @type {number} Number of skins in file */
     this._num_skins = 0;
-    this._num_tris = 0; // R requires that
+
+    /** @type {number} Number of triangles (R requires that) */
+    this._num_tris = 0;
+
+    /** @type {number} Number of vertices */
     this._num_verts = 0;
 
+    /** @type {Vector} Scale factors for vertices */
     this._scale = new Vector(1.0, 1.0, 1.0);
-    this._scale_origin = new Vector();
-    this._random = false; // FIXME: read but unused
 
-    // public variables
-    /** whether the file still needs loading */
+    /** @type {Vector} Origin offset for vertices */
+    this._scale_origin = new Vector();
+
+    /** @type {boolean} FIXME: read but unused */
+    this._random = false;
+
+    // Public variables
+
+    /** @type {boolean} Whether the file still needs loading */
     this.needload = true;
-    /** simple CRC checksum to check if things are still the same */
+
+    /** @type {number} Simple CRC checksum to check if things are still the same */
     this.checksum = 0;
 
-    // public variables
-    this.mins = []; // required by PF, R, CL, SV (on worldmodel)
-    this.maxs = []; // required by PF, R, CL, SV (on worldmodel)
+    /** @type {number[]} Bounding box minimum (required by PF, R, CL, SV on worldmodel) */
+    this.mins = [];
 
-    // public variables just for rendering purposes (IDEA: refactor into ModelRenderer classes)
-    this.cmds = []; // required by R
+    /** @type {number[]} Bounding box maximum (required by PF, R, CL, SV on worldmodel) */
+    this.maxs = [];
+
+    // Public variables just for rendering purposes (IDEA: refactor into ModelRenderer classes)
+
+    /** @type {WebGLBuffer|null} WebGLBuffer for alias models, or null for brush/sprite models */
+    this.cmds = null;
   }
 };
