@@ -157,11 +157,6 @@ void main(void) {
   // Combine lighting in one operation per channel
   vec3 finalColor = texture.rgb * mix(vec3(1.0), lightingFactor, luminanceMask) + specFactor * staticLight;
 
-  // Early discard for fully transparent pixels (check before gamma)
-  if (texture.a == 0.0 && dot(finalColor, vec3(1.0)) == 0.0) {
-    discard;
-  }
-
   // Apply gamma correction using pow on vec3 (single operation instead of 3)
   finalColor = pow(finalColor, vec3(uGamma));
 

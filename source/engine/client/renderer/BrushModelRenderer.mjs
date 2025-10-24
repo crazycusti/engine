@@ -55,6 +55,8 @@ export class BrushModelRenderer extends ModelRenderer {
         this.renderWorld(clmodel);
       } else if (pass === 1 && R.drawturbolents.value) {
         this.renderWorldTurbolents(clmodel);
+      } else if (pass === 2) {
+        this.renderWorldTransparent(clmodel);
       }
       return;
     }
@@ -96,11 +98,13 @@ export class BrushModelRenderer extends ModelRenderer {
     R.c_brush_vbos++;
     const viewMatrix = e.lerp.angles.toRotationMatrix();
 
-    // Render opaque surfaces (pass 0) or turbulent surfaces (pass 1)
+    // Render opaque surfaces (pass 0), turbulent surfaces (pass 1), or transparent surfaces (pass 2)
     if (pass === 0) {
       this._renderOpaqueSurfaces(clmodel, e, viewMatrix);
     } else if (pass === 1 && R.drawturbolents.value) {
       this._renderTurbulentSurfaces(clmodel, e, viewMatrix);
+    } else if (pass === 2) {
+      this._renderTransparentSurfaces(clmodel, e, viewMatrix);
     }
   }
 
@@ -161,9 +165,15 @@ export class BrushModelRenderer extends ModelRenderer {
 
       for (let j = 0; j < leaf.skychain; j++) {
         const cmds = leaf.cmds[j];
+        const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
+
+        // Skip transparent surfaces in opaque pass
+        if (textureA.transparent === true) {
+          continue;
+        }
+
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
-        const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
         gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
 
         if (textureA.glt) {
@@ -203,6 +213,120 @@ export class BrushModelRenderer extends ModelRenderer {
         R.c_brush_draws++;
       }
     }
+  }
+
+  /**
+   * Render the world (entity 0) transparent surfaces with alpha blending.
+   * World uses leafs structure instead of chains.
+   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
+   */
+  renderWorldTransparent(clmodel) {
+    R.currententity = CL.state.clientEntities.getEntity(0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    R.c_brush_vbos++;
+
+    const program = GL.UseProgram('brush');
+    gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
+    gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
+    gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
+
+    gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
+
+    // Setup vertex attributes
+    this._setupBrushVertexAttributes(program, 0);
+
+    // Bind common textures
+    this._setupBrushShaderCommon(program, clmodel, true);
+    GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
+    GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
+    GL.Bind(program.tDeluxemap, R.deluxemap_texture);
+
+    gl.uniform1f(program.uHaveDeluxemap, 1.0);
+
+    // Enable blending and disable depth writing for transparent surfaces
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
+    // Iterate through visible leafs
+    for (let i = 0; i < clmodel.leafs.length; i++) {
+      const leaf = clmodel.leafs[i];
+
+      if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
+        continue;
+      }
+
+      if (R.CullBox(leaf.mins, leaf.maxs)) {
+        continue;
+      }
+
+      const lightVector = new Vector(0, 0, 0);
+      let lightRadius = 0;
+
+      // naive approach of getting the next best light
+      for (const l of CL.state.clientEntities.dlights) {
+        if (l.die < CL.state.time || l.radius === 0.0) {
+          continue;
+        }
+
+        lightVector.set(l.origin);
+        lightRadius = l.radius;
+      }
+
+      gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
+
+      for (let j = 0; j < leaf.skychain; j++) {
+        const cmds = leaf.cmds[j];
+        const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
+
+        // Only render transparent surfaces in this pass
+        if (textureA.transparent !== true) {
+          continue;
+        }
+
+        R.c_brush_verts += cmds[2];
+        R.c_brush_tris += cmds[2] / 3;
+        gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+
+        if (textureA.glt) {
+          textureA.glt.bind(program.tTextureA);
+        } else {
+          R.notexture.bind(program.tTextureA);
+        }
+
+        if (textureB.glt) {
+          textureB.glt.bind(program.tTextureB);
+        } else {
+          R.notexture.bind(program.tTextureB);
+        }
+        R.c_brush_texture_binds += 2;
+
+        const threshold = R.pbr_lod_threshold.value;
+        const screenCoverageEstimate = cmds[2] / 3;
+        const usePBR = threshold === 0 ? false :
+                       (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+
+        gl.uniform1i(program.uPerformDotLighting,
+          (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);
+
+        // Bind PBR textures
+        this._bindPBRTextures(program, clmodel.textures[cmds[0]]);
+        R.c_brush_texture_binds += 3;
+
+        // Track if this is a PBR material
+        const texture = clmodel.textures[cmds[0]];
+        if (texture.normal || texture.specular || texture.luminance) {
+          R.c_brush_draws_pbr++;
+        }
+
+        gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
+        R.c_brush_draws++;
+      }
+    }
+
+    // Restore depth writing and disable blending
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
   }
 
   /**
@@ -363,8 +487,9 @@ export class BrushModelRenderer extends ModelRenderer {
       const chain = clmodel.chains[i];
       const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
 
-      if (textureA.turbulent === true) {
-        continue; // Skip turbulent surfaces in this pass
+      // Skip turbulent and transparent surfaces in opaque pass
+      if (textureA.turbulent === true || textureA.transparent === true) {
+        continue;
       }
 
       R.c_brush_verts += chain[2];
@@ -411,6 +536,115 @@ export class BrushModelRenderer extends ModelRenderer {
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
       R.c_brush_draws++;
     }
+  }
+
+  /**
+   * Render transparent brush surfaces with alpha blending
+   * @private
+   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
+   * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
+   * @param {number[]} viewMatrix Rotation matrix for entity orientation
+   */
+  _renderTransparentSurfaces(clmodel, e, viewMatrix) {
+    const program = GL.UseProgram('brush');
+
+    // Setup lighting
+    if (!clmodel.submodel) {
+      const [ambientlight, shadelight, lightPosition] = R._CalculateLightValues(e);
+      gl.uniform3fv(program.uAmbientLight, ambientlight);
+      gl.uniform3fv(program.uShadeLight, shadelight);
+      gl.uniform4fv(program.uLightVec, [...lightPosition, 64.0]);
+    } else {
+      gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
+      gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
+      gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
+    }
+
+    // Setup transforms
+    gl.uniform3fv(program.uOrigin, e.lerp.origin);
+    gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
+
+    // Setup vertex attributes
+    this._setupBrushVertexAttributes(program, 0);
+
+    // Setup uniforms
+    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+
+    // Bind common textures
+    this._setupBrushShaderCommon(program, clmodel, false);
+    GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
+    GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
+    GL.Bind(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
+
+    gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
+
+    // Enable blending and disable depth writing for transparent surfaces
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
+    // Render each texture chain (only transparent ones)
+    if (!clmodel.chains || clmodel.chains.length === 0) {
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      return;
+    }
+
+    for (let i = 0; i < clmodel.chains.length; i++) {
+      const chain = clmodel.chains[i];
+      const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
+
+      // Only render transparent surfaces in this pass
+      if (textureA.turbulent === true || textureA.transparent !== true) {
+        continue;
+      }
+
+      R.c_brush_verts += chain[2];
+      R.c_brush_tris += chain[2] / 3;
+      textureA.glt.bind(program.tTextureA);
+      textureB.glt.bind(program.tTextureB);
+      R.c_brush_texture_binds += 2;
+
+      // LOD: Disable expensive normal mapping for large triangles
+      const threshold = R.pbr_lod_threshold.value;
+      const screenCoverageEstimate = chain[2] / 3;
+      const usePBR = threshold === 0 ? false :
+                     (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+
+      gl.uniform1i(program.uPerformDotLighting,
+        (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
+
+      // Setup dynamic lighting
+      const lightVector = new Vector(0, 0, 0);
+      let lightRadius = 0;
+
+      for (const l of CL.state.clientEntities.dlights) {
+        if (l.die < CL.state.time || l.radius === 0.0) {
+          continue;
+        }
+        lightVector.set(l.origin);
+        lightRadius = l.radius;
+      }
+
+      gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
+
+      // Bind PBR textures
+      this._bindPBRTextures(program, clmodel.textures[chain[0]]);
+      R.c_brush_texture_binds += 3;
+
+      // Track if this is a PBR material
+      const texture = clmodel.textures[chain[0]];
+      if (texture.normal || texture.specular || texture.luminance) {
+        R.c_brush_draws_pbr++;
+      }
+
+      gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
+      R.c_brush_draws++;
+    }
+
+    // Restore depth writing and disable blending
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
   }
 
   /**
@@ -472,7 +706,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Prepare brush model for rendering (build display lists, upload to GPU).
    * Handles both world models (using leafs) and entity models (using chains).
    * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to prepare
-   * @param {boolean} [isWorldModel=false] True if this is the actual world map (model index 1)
+   * @param {boolean} [isWorldModel] True if this is the actual world map (model index 1)
    */
   prepareModel(model, isWorldModel = false) {
     const m = model;

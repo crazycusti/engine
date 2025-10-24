@@ -334,6 +334,9 @@ class MainMenu extends BaseMenu {
 * noticed performance issues with certain brushes in certain situations when you go up close, super strange
 * I let Claude Sonnet 4.5 refactor the whole model rendering stuff according to my rules, it went much better than with GPT-5-Codex
 * had to clean up unused stuff from shaders since different platforms are optimizing things away
+* started working on a Wavefront OBJ loader
+* version bump to 1.1.5: CL refactor, SV refactor, Mod refactor.
+* paved the way for semi-transparent brushes etc.
 
 ### 2025-10-19
 

@@ -7,6 +7,7 @@ import { modelLoaderRegistry } from './model/ModelLoaderRegistry.mjs';
 import { AliasMDLLoader } from './model/loaders/AliasMDLLoader.mjs';
 import { SpriteSPRLoader } from './model/loaders/SpriteSPRLoader.mjs';
 import { BSP29Loader } from './model/loaders/BSP29Loader.mjs';
+import { WavefrontOBJLoader } from './model/loaders/WavefrontOBJLoader.mjs';
 
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
 
@@ -42,8 +43,9 @@ eventBus.subscribe('gl.shutdown', () => {
 export { AliasModel } from './model/AliasModel.mjs';
 export { BrushModel } from './model/BSP.mjs';
 export { SpriteModel } from './model/SpriteModel.mjs';
+export { MeshModel } from './model/MeshModel.mjs';
 
-Mod.type = { brush: 0, sprite: 1, alias: 2 };
+Mod.type = { brush: 0, sprite: 1, alias: 2, mesh: 3 };
 
 Mod.hull = {
   /** hull0, point intersection */
@@ -66,6 +68,7 @@ Mod.known = [];
   const aliasLoader = new AliasMDLLoader();
   const spriteLoader = new SpriteSPRLoader();
   const bsp29Loader = new BSP29Loader();
+  const objLoader = new WavefrontOBJLoader();
 
   // BSP29Loader needs access to Mod's helper functions
   // We need to defer this until after all Mod functions are defined
@@ -83,6 +86,7 @@ Mod.known = [];
   modelLoaderRegistry.register(bsp29Loader);
   modelLoaderRegistry.register(aliasLoader);
   modelLoaderRegistry.register(spriteLoader);
+  modelLoaderRegistry.register(objLoader);
 })();
 
 Mod.Init = function () {

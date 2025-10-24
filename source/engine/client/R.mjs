@@ -15,6 +15,7 @@ import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
+import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 
 let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
 
@@ -669,6 +670,44 @@ R.DrawEntitiesOnList = function() {
   }
 };
 
+/**
+ * Render transparent brush entities with alpha blending (pass 2)
+ */
+R.DrawTransparentEntitiesOnList = function() {
+  if (R.drawentities.value === 0) {
+    return;
+  }
+
+  // Group entities by model type
+  const entitiesByType = new Map();
+  for (const entity of CL.state.clientEntities.getVisibleEntities()) {
+    if (!entity || !entity.model) {
+      continue;
+    }
+
+    const modelType = entity.model.type;
+    if (!entitiesByType.has(modelType)) {
+      entitiesByType.set(modelType, []);
+    }
+    entitiesByType.get(modelType).push(entity);
+  }
+
+  // Pass 2: Transparent brush models only
+  const brushEntities = entitiesByType.get(Mod.type.brush);
+  if (brushEntities) {
+    const renderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+    if (renderer) {
+      renderer.setupRenderState(2);
+      for (const entity of brushEntities) {
+        R.currententity = entity;
+        renderer.render(entity.model, entity, 2);
+      }
+      renderer.cleanupRenderState(2);
+    }
+  }
+  GL.StreamFlush();
+};
+
 R.DrawViewModel = function() {
   if (R.drawviewmodel.value === 0) {
     return;
@@ -947,7 +986,7 @@ R.RenderScene = function() {
     }
   }
 
-  // Draw all other entities (pass 0 for opaque, pass 1 for transparent)
+  // Draw all other entities (pass 0 for opaque, pass 1 for turbulent)
   R.DrawEntitiesOnList();
 
   // Pass 1: World turbulent surfaces
@@ -961,6 +1000,19 @@ R.RenderScene = function() {
   gl.disable(gl.CULL_FACE);
   R.RenderDlights();
   R.DrawParticles();
+
+  // Pass 2: Transparent brush surfaces (after all opaque geometry)
+  gl.enable(gl.CULL_FACE);
+  if (worldEntity && worldEntity.model) {
+    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+    if (brushRenderer) {
+      brushRenderer.render(worldEntity.model, worldEntity, 2);
+    }
+  }
+
+  // Draw transparent entities
+  R.DrawTransparentEntitiesOnList();
+  gl.disable(gl.CULL_FACE);
 };
 
 R.RenderView = function() {
@@ -1152,6 +1204,16 @@ R.InitShaders = async function() {
       ],
       ['tTexture']),
 
+    // rendering mesh models (OBJ, IQM, GLTF)
+    GL.CreateProgram('mesh',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      [
+        ['aPosition', gl.FLOAT, 3],
+        ['aTexCoord', gl.FLOAT, 2],
+        ['aNormal', gl.FLOAT, 3],
+      ],
+      ['tTexture']),
+
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
       ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
@@ -1259,6 +1321,7 @@ R.Init = async function() {
   modelRendererRegistry.register(new BrushModelRenderer());
   modelRendererRegistry.register(new AliasModelRenderer());
   modelRendererRegistry.register(new SpriteModelRenderer());
+  modelRendererRegistry.register(new MeshModelRenderer());
 
   R.warpbuffer = gl.createFramebuffer();
   R.warptexture = gl.createTexture();
@@ -2095,28 +2158,37 @@ R.BuildLightmaps = function() {
 
   for (let i = 1; i < CL.state.model_precache.length; i++) {
     R.currentmodel = CL.state.model_precache[i];
-    if (R.currentmodel.type !== Mod.type.brush) {
-      continue;
-    }
-    if (R.currentmodel.name[0] !== '*') {
-      for (let j = 0; j < R.currentmodel.faces.length; j++) {
-        const surf = R.currentmodel.faces[j];
-        if (!surf.sky) {
-          R.AllocBlock(surf);
-          if (R.currentmodel.lightdata_rgb !== null) {
-            R.BuildLightMapEx(surf);
-          } else if (R.currentmodel.lightdata !== null) {
-            R.BuildLightMap(surf);
+
+    // Handle brush models (BSP maps)
+    if (R.currentmodel.type === Mod.type.brush) {
+      if (R.currentmodel.name[0] !== '*') {
+        for (let j = 0; j < R.currentmodel.faces.length; j++) {
+          const surf = R.currentmodel.faces[j];
+          if (!surf.sky) {
+            R.AllocBlock(surf);
+            if (R.currentmodel.lightdata_rgb !== null) {
+              R.BuildLightMapEx(surf);
+            } else if (R.currentmodel.lightdata !== null) {
+              R.BuildLightMap(surf);
+            }
           }
+          R.BuildSurfaceDisplayList(surf);
         }
-        R.BuildSurfaceDisplayList(surf);
+      }
+      // Use the brush renderer to prepare the model
+      // Only model index 1 is the world model, all others are entity models
+      const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+      if (brushRenderer) {
+        brushRenderer.prepareModel(R.currentmodel, i === 1);
       }
     }
-    // Use the brush renderer to prepare the model
-    // Only model index 1 is the world model, all others are entity models
-    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    if (brushRenderer) {
-      brushRenderer.prepareModel(R.currentmodel, i === 1);
+
+    // Handle mesh models (OBJ, IQM, etc.)
+    if (R.currentmodel.type === Mod.type.mesh) {
+      const meshRenderer = modelRendererRegistry.getRenderer(Mod.type.mesh);
+      if (meshRenderer) {
+        meshRenderer.prepareModel(R.currentmodel);
+      }
     }
   }
 

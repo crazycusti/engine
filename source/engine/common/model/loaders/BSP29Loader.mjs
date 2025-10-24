@@ -42,7 +42,7 @@ export class BSP29Loader extends ModelLoader {
   /** Shared notexture placeholder */
   static #notexture_mip = {
     name: 'notexture', width: 16, height: 16, texturenum: null,
-    glt: null, sky: false, turbulent: false,
+    glt: null, sky: false, turbulent: false, transparent: false,
     anims: [], anim_base: null, alternate_anims: [],
     luminance: null, specular: null, normal: null,
   };
@@ -197,7 +197,7 @@ export class BSP29Loader extends ModelLoader {
         name: Q.memstr(new Uint8Array(buf, absofs, 16)),
         width: view.getUint32(absofs + 16, true),
         height: view.getUint32(absofs + 20, true),
-        glt: null, sky: false, turbulent: false,
+        glt: null, sky: false, turbulent: false, transparent: false,
         anims: [], anim_base: null, alternate_anims: [],
         luminance: null, specular: null, normal: null,
       };
@@ -231,6 +231,11 @@ export class BSP29Loader extends ModelLoader {
 
         if (tx.name[0] === '*' || tx.name[0] === '!') {
           tx.turbulent = true;
+        }
+
+        // Mark textures with '{' prefix as transparent (for alpha blending)
+        if (tx.name[0] === '{' || tx.name.toLowerCase() === 'dev_glass') {
+          tx.transparent = true;
         }
       }
       loadmodel.textures[i] = tx;
@@ -286,7 +291,10 @@ export class BSP29Loader extends ModelLoader {
    */
   _loadMaterials(loadmodel) {
     const matfile = COM.LoadTextFile(loadmodel.name.replace('.bsp', '.qsmat.json'));
-    if (!matfile) { return; }
+
+    if (!matfile) {
+      return;
+    }
 
     Con.DPrint(`BSP29Loader: found materials file for ${loadmodel.name}\n`);
     const materialData = JSON.parse(matfile);
