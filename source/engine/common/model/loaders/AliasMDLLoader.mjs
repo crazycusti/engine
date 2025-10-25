@@ -3,9 +3,16 @@ import Q from '../../../../shared/Q.mjs';
 import GL, { GLTexture, resampleTexture8 } from '../../../client/GL.mjs';
 import W, { translateIndexToRGBA } from '../../W.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
-import { registry } from '../../../registry.mjs';
+import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { AliasModel } from '../AliasModel.mjs';
+
+// Get registry references (will be set by eventBus)
+let { R } = registry;
+
+eventBus.subscribe('registry.frozen', () => {
+  ({ R } = registry);
+});
 
 /**
  * Loader for Quake Alias Model format (.mdl)
@@ -405,7 +412,6 @@ export class AliasMDLLoader extends ModelLoader {
    * @private
    */
   _buildRenderCommands(loadmodel) {
-    const R = registry.R;
     const gl = GL.gl;
     const cmds = [];
 

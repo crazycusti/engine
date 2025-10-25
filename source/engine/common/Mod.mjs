@@ -72,30 +72,6 @@ Mod.known = [];
   const bsp2Loader = new BSP2Loader();
   const objLoader = new WavefrontOBJLoader();
 
-  // BSP29Loader needs access to Mod's helper functions
-  // We need to defer this until after all Mod functions are defined
-  // So we'll use a lazy initialization approach
-  let modReferenceSet = false;
-  const originalLoad = bsp29Loader.load.bind(bsp29Loader);
-  bsp29Loader.load = function (buffer, name, loadmodel) {
-    if (!modReferenceSet) {
-      bsp29Loader.setModReference(Mod);
-      modReferenceSet = true;
-    }
-    return originalLoad(buffer, name, loadmodel);
-  };
-
-  // BSP2Loader extends BSP29Loader and also needs Mod reference
-  let bsp2ModReferenceSet = false;
-  const originalBSP2Load = bsp2Loader.load.bind(bsp2Loader);
-  bsp2Loader.load = function (buffer, name, loadmodel) {
-    if (!bsp2ModReferenceSet) {
-      bsp2Loader.setModReference(Mod);
-      bsp2ModReferenceSet = true;
-    }
-    return originalBSP2Load(buffer, name, loadmodel);
-  };
-
   // Register BSP2 before BSP29 so it's checked first (more specific format)
   modelLoaderRegistry.register(bsp2Loader);
   modelLoaderRegistry.register(bsp29Loader);

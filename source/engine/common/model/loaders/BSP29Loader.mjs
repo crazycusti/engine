@@ -4,13 +4,17 @@ import { GLTexture } from '../../../client/GL.mjs';
 import W, { readWad3Texture, translateIndexToRGBA } from '../../W.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
-import { registry } from '../../../registry.mjs';
+import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { BrushModel } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
 
 // Get registry references (will be set by eventBus)
-let { COM, Con, R } = registry;
+let { COM, Con, Mod, R } = registry;
+
+eventBus.subscribe('registry.frozen', () => {
+  ({ COM, Con, Mod, R } = registry);
+});
 
 /**
  * Loader for Quake BSP29 format (.bsp)
@@ -49,8 +53,6 @@ export class BSP29Loader extends ModelLoader {
 
   constructor() {
     super();
-    // Reference to Mod for FindName
-    this._modRef = null;
   }
 
   /**
@@ -75,18 +77,6 @@ export class BSP29Loader extends ModelLoader {
    */
   getName() {
     return 'Quake BSP29';
-  }
-
-  /**
-   * Set Mod reference (for FindName function during submodel loading)
-   * @param {object} mod - The Mod module
-   */
-  setModReference(mod) {
-    this._modRef = mod;
-    // Also update registry references
-    COM = registry.COM;
-    Con = registry.Con;
-    R = registry.R;
   }
 
   /**
@@ -854,17 +844,13 @@ export class BSP29Loader extends ModelLoader {
   }
 
   /**
-   * Load submodels (brush entities like doors, platforms, etc.)
+   * Load submodels (brush models for doors, lifts, etc.)
    * @private
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
-   * @throws {Error} If no submodels found or Mod reference not set
+   * @throws {Error} If no submodels found
    */
   _loadSubmodels(loadmodel, buf) {
-    if (!this._modRef) {
-      throw new Error('BSP29Loader: Mod reference not set, cannot load submodels');
-    }
-
     const view = new DataView(buf);
     const lump = BSP29Loader.#lump;
     let fileofs = view.getUint32((lump.models << 3) + 4, true);
@@ -884,7 +870,7 @@ export class BSP29Loader extends ModelLoader {
 
     const clipnodes = loadmodel.hulls[0].clipnodes;
     for (let i = 1; i < count; i++) {
-      const out = this._modRef.FindName('*' + i);
+      const out = Mod.FindName('*' + i);
       out.needload = false;
       out.type = 0; // Mod.type.brush
       out.submodel = true;
