@@ -329,6 +329,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-10-25
+
+* bumped up lightmap limit to 2048
+* fixed a weird bug when setting cvars to an empty string causing NaN values
+
 ### 2025-10-24
 
 * noticed performance issues with certain brushes in certain situations when you go up close, super strange

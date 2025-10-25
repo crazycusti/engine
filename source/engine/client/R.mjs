@@ -57,6 +57,15 @@ const R = {};
 
 export default R;
 
+// Lightmap atlas configuration
+// This defines the width of the dynamic lightmap texture atlas.
+// The height is LIGHTMAP_BLOCK_SIZE * 4 because we pack 4 lightstyles in RGBA channels.
+// The 3 RGB color channels are stacked vertically (see shader for details).
+// Increase this value for larger maps (e.g., 2048 or 4096).
+// NOTE: Memory usage scales quadratically (2048 = 4x memory, 4096 = 16x memory).
+const LIGHTMAP_BLOCK_SIZE = 2048;
+const LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4; // 4 lightstyles in RGBA
+
 // efrag
 
 R.SplitEntityOnNode = function(node) {
@@ -173,7 +182,7 @@ R.PushDlights = function() {
   if (R.flashblend.value !== 0) {
     return;
   }
-  for (let i = 0; i <= 1023; i++) {
+  for (let i = 0; i < LIGHTMAP_BLOCK_SIZE; i++) {
     R.lightmap_modified[i] = false;
   }
 
@@ -208,15 +217,15 @@ R.PushDlights = function() {
   }
 
   GL.Bind(0, R.dlightmap_rgba_texture);
-  for (let i = 0; i < 1024; i++) {
+  for (let i = 0; i < LIGHTMAP_BLOCK_SIZE; i++) {
     if (R.lightmap_modified[i] !== true) {
       continue;
     }
-    for (j = 1023; j >= i; --j) {
+    for (j = LIGHTMAP_BLOCK_SIZE - 1; j >= i; --j) {
       if (R.lightmap_modified[j] !== true) {
         continue;
       }
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, i, 1024, j - i + 1, gl.RGBA, gl.UNSIGNED_BYTE, R.dlightmaps_rgba.subarray(i * 1024 * 4, (j + 1) * 1024 * 4));
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, i, LIGHTMAP_BLOCK_SIZE, j - i + 1, gl.RGBA, gl.UNSIGNED_BYTE, R.dlightmaps_rgba.subarray(i * LIGHTMAP_BLOCK_SIZE * 4, (j + 1) * LIGHTMAP_BLOCK_SIZE * 4));
       break;
     }
     break;
@@ -1380,7 +1389,7 @@ R.NewMap = function() {
   }
 
   GL.Bind(0, R.dlightmap_rgba_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 };
 
 R.TimeRefresh_f = function() {
@@ -1827,10 +1836,10 @@ R.AllocParticles = function(count) {
 // surf
 
 R.lightmap_modified = [];
-R.lightmaps = new Uint8Array(new ArrayBuffer(4194304));
-R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(4194304 * 4));
-R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(1048576 * 4)); // TODO: doesn’t need to be 32 bits I guess
-R.deluxemap = new Uint8Array(new ArrayBuffer(4194304 * 4));
+R.lightmaps = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT));
+R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
+R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
 
 R.AddDynamicLights = function(surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
@@ -1928,28 +1937,28 @@ R.BuildLightMap = function(surf) {
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   for (let k = 0; k < 3; k++) {
-    const offset = 4194304 * k;
+    const offset = LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * k;
     let lightmap = surf.lightofs;
     let maps;
 
     for (maps = 0; maps < surf.styles.length; maps++) {
-      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata[lightmap + j];
         }
         lightmap += smax;
-        dest += 4096;
+        dest += LIGHTMAP_BLOCK_HEIGHT;
       }
     }
 
     for (; maps < 4; maps++) {
-      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
         }
-        dest += 4096;
+        dest += LIGHTMAP_BLOCK_HEIGHT;
       }
     }
   }
@@ -1960,12 +1969,12 @@ R.BuildLightMapEx = function(surf) {
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   for (let k = 0; k < 3; k++) {
-    const offset = 4194304 * k;
+    const offset = LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * k;
     let lightmap = surf.lightofs * 3;
     let maps;
 
     for (maps = 0; maps < surf.styles.length; maps++) {
-      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata_rgb[(lightmap + j * 3) + k];
@@ -1975,18 +1984,18 @@ R.BuildLightMapEx = function(surf) {
           }
         }
         lightmap += smax * 3;
-        dest += 4096;
+        dest += LIGHTMAP_BLOCK_HEIGHT;
       }
     }
 
     for (; maps < 4; maps++) {
-      let dest = (surf.light_t << 12) + (surf.light_s << 2) + maps;
+      let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
           R.deluxemap[dest + (j << 2) + offset] = 0;
         }
-        dest += 4096;
+        dest += LIGHTMAP_BLOCK_HEIGHT;
       }
     }
   }
@@ -2093,8 +2102,8 @@ R.MarkLeaves = function() {
 R.AllocBlock = function(surf) {
   const w = (surf.extents[0] >> surf.lmshift) + 1;
   const h = (surf.extents[1] >> surf.lmshift) + 1;
-  let x; let y; let i; let j; let best = 1024; let best2;
-  for (i = 0; i < (1024 - w); i++) {
+  let x; let y; let i; let j; let best = LIGHTMAP_BLOCK_SIZE; let best2;
+  for (i = 0; i < (LIGHTMAP_BLOCK_SIZE - w); i++) {
     best2 = 0;
     for (j = 0; j < w; j++) {
       if (R.allocated[i + j] >= best) {
@@ -2110,7 +2119,7 @@ R.AllocBlock = function(surf) {
     }
   }
   best += h;
-  if (best > 1024) {
+  if (best > LIGHTMAP_BLOCK_SIZE) {
     throw new Error('R.AllocBlock: full');
   }
   for (i = 0; i < w; i++) {
@@ -2142,8 +2151,8 @@ R.BuildSurfaceDisplayList = function(fa) {
       const t = vec.dot(new Vector(...texinfo.vecs[1])) + texinfo.vecs[1][3];
       vert[3] = s / texture.width;
       vert[4] = t / texture.height;
-      vert[5] = (s - fa.texturemins[0] + (fa.light_s << fa.lmshift) + (1 << (fa.lmshift - 1))) / (1024 * (1 << fa.lmshift));
-      vert[6] = (t - fa.texturemins[1] + (fa.light_t << fa.lmshift) + (1 << (fa.lmshift - 1))) / (1024 * (1 << fa.lmshift));
+      vert[5] = (s - fa.texturemins[0] + (fa.light_s << fa.lmshift) + (1 << (fa.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << fa.lmshift));
+      vert[6] = (t - fa.texturemins[1] + (fa.light_t << fa.lmshift) + (1 << (fa.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << fa.lmshift));
     }
     if (i >= 3) {
       fa.verts[fa.verts.length] = fa.verts[0];
@@ -2154,7 +2163,7 @@ R.BuildSurfaceDisplayList = function(fa) {
 };
 
 R.BuildLightmaps = function() {
-  R.allocated = (new Array(1024)).fill(0);
+  R.allocated = (new Array(LIGHTMAP_BLOCK_SIZE)).fill(0);
 
   for (let i = 1; i < CL.state.model_precache.length; i++) {
     R.currentmodel = CL.state.model_precache[i];
@@ -2193,10 +2202,10 @@ R.BuildLightmaps = function() {
   }
 
   GL.Bind(0, R.lightmap_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 4096, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
 
   GL.Bind(0, R.deluxemap_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 4096, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
 };
 
 // scan
