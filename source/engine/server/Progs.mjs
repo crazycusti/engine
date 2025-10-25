@@ -1029,9 +1029,11 @@ PR.Init = async function() {
     return;
     }
   } catch (e) {
-    if (e.code !== 'ERR_MODULE_NOT_FOUND') { // only catch module not found errors
+    if (typeof(e.code) === 'string' && e.code !== 'ERR_MODULE_NOT_FOUND') { // only catch module not found errors
       throw e;
     }
+
+    // CR: stupidest error convention ever, check https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import#return_value
 
     Con.PrintWarning('PR.Init: Falling back to QuakeC, failed to initialize QuakeJS server code: ' + e.message +'.\n');
 
@@ -1474,14 +1476,14 @@ PR.ExecuteProgram = function(fnum) {
 };
 
 PR.GetString = function(num) {
-  const string = [];
+  let string = '';
   for (; num < PR.strings.length; num++) {
     if (PR.strings[num] === 0) {
       break;
     }
-    string[string.length] = String.fromCharCode(PR.strings[num]);
+    string += String.fromCharCode(PR.strings[num]);
   }
-  return string.join('');
+  return string;
 };
 
 PR._StringLength = function(ofs) {

@@ -69,7 +69,7 @@ export default class Cvar {
     /** @type {?string} @readonly */
     this.description = description;
 
-    this.#numberValue = Q.atof(value);
+    this.#numberValue = value === '' ? 0 : Q.atof(value);
 
     console.assert(name.length > 0, 'Cvar name must be at least 1 character long', name);
     console.assert(!Cvar._vars[name], 'Cvar name must not be used already', name);
@@ -152,7 +152,7 @@ export default class Cvar {
     // TODO: implement Cvar.FLAG.DEFERRED
 
     this.#currentValue = value;
-    this.#numberValue = Q.atof(value);
+    this.#numberValue = value === '' ? 0 : Q.atof(value);
 
     if (changed) {
       eventBus.publish('cvar.changed', this.name);
