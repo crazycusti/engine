@@ -334,6 +334,7 @@ class MainMenu extends BaseMenu {
 * bumped up lightmap limit to 2048
 * fixed a weird bug when setting cvars to an empty string causing NaN values
 * added BSP2 support
+* added LIGHTGRID_OCTREE support
 
 ### 2025-10-24
 

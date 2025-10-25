@@ -345,6 +345,14 @@ R.LightPoint = function(p) {
     return [new Vector(255, 255, 255), new Vector(0, 0, 0)];
   }
 
+  // Try lightgrid first if available
+  if (CL.state.worldmodel.lightgrid !== null) {
+    const gridResult = R.LightPointFromGrid(p);
+    if (gridResult !== null) {
+      return gridResult;
+    }
+  }
+
   const r = R.RecursiveLightPoint(CL.state.worldmodel.nodes[0], p, new Vector(p[0], p[1], p[2] - 2048.0));
 
   if (r === null) {
@@ -352,6 +360,184 @@ R.LightPoint = function(p) {
   }
 
   return r;
+};
+
+/**
+ * Sample a single point from the lightgrid octree
+ * @param {Vector} pos - World position to sample
+ * @param {number[]} gridPos - Grid position [x, y, z]
+ * @returns {{stylecount: number, styles: Array<{stylenum: number, rgb: number[]}>}|null} Point data or null if missing
+ */
+R.SampleLightgridPoint = function(pos, gridPos) {
+  const grid = CL.state.worldmodel.lightgrid;
+  const LGNODE_LEAF = 1 << 31;
+  const LGNODE_MISSING = 1 << 30;
+
+  // Walk the octree to find the leaf
+  let nodeIndex = grid.rootnode;
+
+  while (true) {
+    // Check if we've hit a leaf or missing node
+    if ((nodeIndex & LGNODE_LEAF) !== 0) {
+      const leafIndex = nodeIndex & ~(LGNODE_LEAF | LGNODE_MISSING);
+
+      if ((nodeIndex & LGNODE_MISSING) !== 0) {
+        // Missing data at this point
+        return null;
+      }
+
+      // Check if leaf index is valid
+      if (leafIndex >= grid.leafs.length) {
+        return null;
+      }
+
+      const leaf = grid.leafs[leafIndex];
+
+      // Calculate index within the leaf
+      const localX = gridPos[0] - leaf.mins[0];
+      const localY = gridPos[1] - leaf.mins[1];
+      const localZ = gridPos[2] - leaf.mins[2];
+
+      // Check bounds
+      if (localX < 0 || localX >= leaf.size[0] ||
+          localY < 0 || localY >= leaf.size[1] ||
+          localZ < 0 || localZ >= leaf.size[2]) {
+        return null;
+      }
+
+      const pointIndex = localZ * leaf.size[0] * leaf.size[1] + localY * leaf.size[0] + localX;
+
+      // Check if point index is valid
+      if (pointIndex >= leaf.points.length) {
+        return null;
+      }
+
+      const point = leaf.points[pointIndex];
+
+      if (point.stylecount === 0xff) {
+        // No data at this point
+        return null;
+      }
+
+      return point;
+    }
+
+    // Internal node - traverse
+    // Check if node index is valid
+    if (nodeIndex >= grid.nodes.length) {
+      return null;
+    }
+
+    const node = grid.nodes[nodeIndex];
+
+    // Calculate child index: ((z>=mid[2])<<0) | ((y>=mid[1])<<1) | ((x>=mid[0])<<2)
+    let childIdx = 0;
+    if (gridPos[2] >= node.mid[2]) {
+      childIdx |= 1;
+    }
+    if (gridPos[1] >= node.mid[1]) {
+      childIdx |= 2;
+    }
+    if (gridPos[0] >= node.mid[0]) {
+      childIdx |= 4;
+    }
+
+    nodeIndex = node.child[childIdx];
+  }
+};
+
+/**
+ * Sample lighting from the lightgrid octree with trilinear interpolation
+ * @param {Vector} pos - World position to sample
+ * @returns {[Vector, Vector]|null} - [RGB light color, light origin] or null if not available
+ */
+R.LightPointFromGrid = function(pos) {
+  const grid = CL.state.worldmodel.lightgrid;
+
+  if (!grid) {
+    return null;
+  }
+
+  // Convert world position to grid space
+  const gridPosFloat = [
+    (pos[0] - grid.mins[0]) / grid.step[0],
+    (pos[1] - grid.mins[1]) / grid.step[1],
+    (pos[2] - grid.mins[2]) / grid.step[2],
+  ];
+
+  // Get the 8 surrounding grid points
+  const baseX = Math.floor(gridPosFloat[0]);
+  const baseY = Math.floor(gridPosFloat[1]);
+  const baseZ = Math.floor(gridPosFloat[2]);
+
+  // Calculate fractional part for interpolation
+  const fracX = gridPosFloat[0] - baseX;
+  const fracY = gridPosFloat[1] - baseY;
+  const fracZ = gridPosFloat[2] - baseZ;
+
+  // Sample the 8 corner points
+  const samples = [];
+  const weights = [];
+  let totalWeight = 0;
+
+  for (let dz = 0; dz <= 1; dz++) {
+    for (let dy = 0; dy <= 1; dy++) {
+      for (let dx = 0; dx <= 1; dx++) {
+        const gridPos = [baseX + dx, baseY + dy, baseZ + dz];
+        const sample = R.SampleLightgridPoint(pos, gridPos);
+
+        // Calculate trilinear weight
+        const wx = dx === 0 ? (1 - fracX) : fracX;
+        const wy = dy === 0 ? (1 - fracY) : fracY;
+        const wz = dz === 0 ? (1 - fracZ) : fracZ;
+        const weight = wx * wy * wz;
+
+        if (sample !== null) {
+          samples.push(sample);
+          weights.push(weight);
+          totalWeight += weight;
+        }
+      }
+    }
+  }
+
+  // If no samples found, return null
+  if (samples.length === 0) {
+    return null;
+  }
+
+  // Compensate for missing samples by renormalizing weights
+  if (totalWeight > 0) {
+    for (let i = 0; i < weights.length; i++) {
+      weights[i] /= totalWeight;
+    }
+  }
+
+  // Accumulate weighted RGB values
+  const r3 = new Vector(0, 0, 0);
+  const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i];
+    const weight = weights[i];
+
+    for (let s = 0; s < sample.styles.length; s++) {
+      const style = sample.styles[s];
+      const stylenum = style.stylenum;
+
+      // Apply lightstyle animation
+      const scale = (
+        R.lightstylevalue_a[stylenum] * (1 - uAlpha) +
+        R.lightstylevalue_b[stylenum] * uAlpha
+      ) / 12.0; // Normalize from 0-25 range to multiplier
+
+      r3[0] += style.rgb[0] * scale * weight;
+      r3[1] += style.rgb[1] * scale * weight;
+      r3[2] += style.rgb[2] * scale * weight;
+    }
+  }
+
+  return [r3, pos.copy()];
 };
 
 // main

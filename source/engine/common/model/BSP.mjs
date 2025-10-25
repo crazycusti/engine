@@ -131,6 +131,9 @@ export class BrushModel extends BaseModel {
   /** @type {Uint8Array} Deluxemap data (normals) */
   deluxemap = null;
 
+  /** @type {object|null} Lightgrid octree data */
+  lightgrid = null;
+
   /** @type {Uint8Array} Visibility data for PVS */
   visdata = null;
 

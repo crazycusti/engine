@@ -124,6 +124,7 @@ export class BSP29Loader extends ModelLoader {
     this._loadBSPX(loadmodel, buffer);
     this._loadLightingRGB(loadmodel, buffer);
     this._loadDeluxeMap(loadmodel, buffer);
+    this._loadLightgridOctree(loadmodel, buffer);
 
     // Calculate bounding radius
     this._calculateRadius(loadmodel);
@@ -979,5 +980,186 @@ export class BSP29Loader extends ModelLoader {
     if (filelen === 0) { return; }
 
     loadmodel.deluxemap = new Uint8Array(buf.slice(fileofs, fileofs + filelen));
+  }
+
+  /**
+   * Load lightgrid octree from BSPX lump if available
+   * @private
+   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {ArrayBuffer} buf - The BSP file buffer
+   */
+  _loadLightgridOctree(loadmodel, buf) {
+    loadmodel.lightgrid = null;
+    if (!loadmodel.bspxlumps || !loadmodel.bspxlumps['LIGHTGRID_OCTREE']) { return; }
+
+    const { fileofs, filelen } = loadmodel.bspxlumps['LIGHTGRID_OCTREE'];
+    if (filelen === 0) { return; }
+
+    try {
+      const view = new DataView(buf);
+      let offset = fileofs;
+      const endOffset = fileofs + filelen;
+
+      // Minimum size check: vec3_t step (12) + ivec3_t size (12) + vec3_t mins (12) + byte numstyles (1) + uint32_t rootnode (4) + uint32_t numnodes (4) + uint32_t numleafs (4) = 49 bytes
+      if (filelen < 49) {
+        Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE lump too small\n');
+        return;
+      }
+
+      // vec3_t step
+      const step = new Vector(
+        view.getFloat32(offset, true),
+        view.getFloat32(offset + 4, true),
+        view.getFloat32(offset + 8, true),
+      );
+      offset += 12;
+
+    // ivec3_t size
+    const size = [
+      view.getInt32(offset, true),
+      view.getInt32(offset + 4, true),
+      view.getInt32(offset + 8, true),
+    ];
+    offset += 12;
+
+    // vec3_t mins
+    const mins = new Vector(
+      view.getFloat32(offset, true),
+      view.getFloat32(offset + 4, true),
+      view.getFloat32(offset + 8, true),
+    );
+    offset += 12;
+
+    // byte numstyles (WARNING: misaligns the rest of the data)
+    const numstyles = view.getUint8(offset);
+    offset += 1;
+
+    // uint32_t rootnode
+    const rootnode = view.getUint32(offset, true);
+    offset += 4;
+
+    // uint32_t numnodes
+    const numnodes = view.getUint32(offset, true);
+    offset += 4;
+
+    // Check if we have enough data for nodes (each node is 44 bytes: 3*4 for mid + 8*4 for children)
+    if (offset + (numnodes * 44) > endOffset) {
+      Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE nodes data truncated\n');
+      return;
+    }
+
+    // Parse nodes
+    const nodes = [];
+    for (let i = 0; i < numnodes; i++) {
+      const mid = [
+        view.getUint32(offset, true),
+        view.getUint32(offset + 4, true),
+        view.getUint32(offset + 8, true),
+      ];
+      offset += 12;
+
+      const child = [];
+      for (let j = 0; j < 8; j++) {
+        child[j] = view.getUint32(offset, true);
+        offset += 4;
+      }
+
+      nodes[i] = { mid, child };
+    }
+
+    // uint32_t numleafs
+    if (offset + 4 > endOffset) {
+      Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE numleafs missing\n');
+      return;
+    }
+    const numleafs = view.getUint32(offset, true);
+    offset += 4;
+
+    // Parse leafs
+    const leafs = [];
+    for (let i = 0; i < numleafs; i++) {
+      // Check bounds for leaf header (mins + size = 24 bytes)
+      if (offset + 24 > endOffset) {
+        Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} header truncated\n`);
+        return;
+      }
+
+      const leafMins = [
+        view.getInt32(offset, true),
+        view.getInt32(offset + 4, true),
+        view.getInt32(offset + 8, true),
+      ];
+      offset += 12;
+
+      const leafSize = [
+        view.getInt32(offset, true),
+        view.getInt32(offset + 4, true),
+        view.getInt32(offset + 8, true),
+      ];
+      offset += 12;
+
+      // Parse per-point data
+      const totalPoints = leafSize[0] * leafSize[1] * leafSize[2];
+      const points = [];
+
+      for (let p = 0; p < totalPoints; p++) {
+        // Check bounds for stylecount byte
+        if (offset >= endOffset) {
+          Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} truncated\n`);
+          return;
+        }
+
+        const stylecount = view.getUint8(offset);
+        offset += 1;
+
+        // Skip points with no data (stylecount = 0xff means missing)
+        if (stylecount === 0xff) {
+          points.push({ stylecount, styles: [] });
+          continue;
+        }
+
+        const styles = [];
+        for (let s = 0; s < stylecount; s++) {
+          // Check bounds for style data (1 byte stylenum + 3 bytes rgb = 4 bytes)
+          if (offset + 3 >= endOffset) {
+            Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} style ${s} truncated\n`);
+            return;
+          }
+
+          const stylenum = view.getUint8(offset);
+
+          offset += 1;
+
+          const rgb = [
+            view.getUint8(offset),
+            view.getUint8(offset + 1),
+            view.getUint8(offset + 2),
+          ];
+          offset += 3;
+
+          styles.push({ stylenum, rgb });
+        }
+
+        points.push({ stylecount, styles });
+      }
+
+      leafs.push({ mins: leafMins, size: leafSize, points });
+    }
+
+    loadmodel.lightgrid = {
+      step,
+      size,
+      mins,
+      numstyles,
+      rootnode,
+      nodes,
+      leafs,
+    };
+
+    Con.DPrint(`BSP29Loader: loaded LIGHTGRID_OCTREE with ${numnodes} nodes and ${numleafs} leafs\n`);
+    } catch (error) {
+      Con.DPrint(`BSP29Loader: error loading LIGHTGRID_OCTREE: ${error.message}\n`);
+      loadmodel.lightgrid = null;
+    }
   }
 }
