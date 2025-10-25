@@ -334,7 +334,10 @@ export class BSP29Loader extends ModelLoader {
     const lump = BSP29Loader.#lump;
     const fileofs = view.getUint32((lump.lighting << 3) + 4, true);
     const filelen = view.getUint32((lump.lighting << 3) + 8, true);
-    if (filelen === 0) { return; }
+
+    if (filelen === 0) {
+      return;
+    }
 
     loadmodel.lightdata = new Uint8Array(new ArrayBuffer(filelen));
     loadmodel.lightdata.set(new Uint8Array(buf, fileofs, filelen));
@@ -352,7 +355,10 @@ export class BSP29Loader extends ModelLoader {
     const lump = BSP29Loader.#lump;
     const fileofs = view.getUint32((lump.visibility << 3) + 4, true);
     const filelen = view.getUint32((lump.visibility << 3) + 8, true);
-    if (filelen === 0) { return; }
+
+    if (filelen === 0) {
+      return;
+    }
 
     loadmodel.visdata = new Uint8Array(new ArrayBuffer(filelen));
     loadmodel.visdata.set(new Uint8Array(buf, fileofs, filelen));
@@ -381,11 +387,18 @@ export class BSP29Loader extends ModelLoader {
     while (true) {
       const parsedKey = COM.Parse(data);
       data = parsedKey.data;
-      if (!data || parsedKey.token === '}') { break; }
+
+      if (!data || parsedKey.token === '}') {
+        break;
+      }
 
       const parsedValue = COM.Parse(data);
       data = parsedValue.data;
-      if (!data) { break; }
+
+      if (!data) {
+        break;
+      }
+
       console.assert(parsedValue.token !== '}');
 
       loadmodel.worldspawnInfo[parsedKey.token] = parsedValue.token;
@@ -633,7 +646,11 @@ export class BSP29Loader extends ModelLoader {
    */
   _setParent(node, parent) {
     node.parent = parent;
-    if (node.contents < 0) { return; }
+
+    if (node.contents < 0) {
+      return;
+    }
+
     this._setParent(/** @type {import('../BSP.mjs').Node} */(node.children[0]), node);
     this._setParent(/** @type {import('../BSP.mjs').Node} */(node.children[1]), node);
   }
@@ -650,9 +667,11 @@ export class BSP29Loader extends ModelLoader {
     const lump = BSP29Loader.#lump;
     let fileofs = view.getUint32((lump.nodes << 3) + 4, true);
     const filelen = view.getUint32((lump.nodes << 3) + 8, true);
+
     if ((filelen === 0) || ((filelen % 24) !== 0)) {
       throw new Error('BSP29Loader: nodes lump size is invalid in ' + loadmodel.name);
     }
+
     const count = filelen / 24;
     loadmodel.nodes = [];
 

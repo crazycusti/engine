@@ -16,6 +16,7 @@ Added features include but not limited to:
 * Navigation mesh for smarter NPC behavior.
 * Limited multithreading support.
 * Limited BSPX support.
+* BSP2 format support for large maps.
 
 Yet, there is still plenty to do.
 
@@ -24,7 +25,7 @@ Some features on the roadmap:
 * Proper WAD3 support when maps refer them, loading them from external WAD, if not compiled in.
 * Better network code with client-side predicition.
 * More flexible rendering subsystem, making it easier to reuse model rendering etc.
-* BSP2 and HLBSP/BSP30 support.
+* HLBSP/BSP30 support.
 
 This is an educational and recreational project.
 Though the vision is to provide an id tech 2 based game engine running in the browser for fun multiplayer projects.

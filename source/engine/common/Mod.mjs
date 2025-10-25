@@ -7,6 +7,7 @@ import { modelLoaderRegistry } from './model/ModelLoaderRegistry.mjs';
 import { AliasMDLLoader } from './model/loaders/AliasMDLLoader.mjs';
 import { SpriteSPRLoader } from './model/loaders/SpriteSPRLoader.mjs';
 import { BSP29Loader } from './model/loaders/BSP29Loader.mjs';
+import { BSP2Loader } from './model/loaders/BSP2Loader.mjs';
 import { WavefrontOBJLoader } from './model/loaders/WavefrontOBJLoader.mjs';
 
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
@@ -68,6 +69,7 @@ Mod.known = [];
   const aliasLoader = new AliasMDLLoader();
   const spriteLoader = new SpriteSPRLoader();
   const bsp29Loader = new BSP29Loader();
+  const bsp2Loader = new BSP2Loader();
   const objLoader = new WavefrontOBJLoader();
 
   // BSP29Loader needs access to Mod's helper functions
@@ -83,6 +85,19 @@ Mod.known = [];
     return originalLoad(buffer, name, loadmodel);
   };
 
+  // BSP2Loader extends BSP29Loader and also needs Mod reference
+  let bsp2ModReferenceSet = false;
+  const originalBSP2Load = bsp2Loader.load.bind(bsp2Loader);
+  bsp2Loader.load = function (buffer, name, loadmodel) {
+    if (!bsp2ModReferenceSet) {
+      bsp2Loader.setModReference(Mod);
+      bsp2ModReferenceSet = true;
+    }
+    return originalBSP2Load(buffer, name, loadmodel);
+  };
+
+  // Register BSP2 before BSP29 so it's checked first (more specific format)
+  modelLoaderRegistry.register(bsp2Loader);
   modelLoaderRegistry.register(bsp29Loader);
   modelLoaderRegistry.register(aliasLoader);
   modelLoaderRegistry.register(spriteLoader);

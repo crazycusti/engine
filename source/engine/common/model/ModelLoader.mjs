@@ -33,15 +33,14 @@ export class ModelLoader {
   canLoad(buffer, filename) {
     const view = new DataView(buffer);
     const magic = view.getUint32(0, true); // little-endian
+    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
 
     // Check magic number
-    if (this.getMagicNumbers().includes(magic)) {
+    if (this.getExtensions().includes(ext) && this.getMagicNumbers().includes(magic)) {
       return true;
     }
 
-    // Fallback: check file extension
-    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
-    return this.getExtensions().includes(ext);
+    return false;
   }
 
   /**
