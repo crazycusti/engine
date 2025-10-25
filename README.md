@@ -15,7 +15,10 @@ Added features include but not limited to:
 * Somewhat optimized network code.
 * Navigation mesh for smarter NPC behavior.
 * Limited multithreading support.
-* Limited BSPX support.
+* Limited BSPX support:
+  * `LIGHTINGDIR`: used for per-pixel lighting on supported materials.
+  * `RGBLIGHTING`: used for colorful lightmaps.
+* Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
 
 Yet, there is still plenty to do.
