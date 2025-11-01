@@ -183,6 +183,9 @@ export class Navigation {
   /** @type {WorkerThread?} worker thread handling navigation lookups */
   #worker = null;
 
+  /** @type {Function?} unsubscribe from nav.path.request */
+  #pathRequestEventListener = null;
+
   constructor(worldmodel) {
     /** @type {BrushModel?} */
     this.worldmodel = worldmodel;
@@ -257,6 +260,12 @@ export class Navigation {
 
         Con.Print('Use nav command to build the navigation graph.\n');
       });
+
+    this.#pathRequestEventListener = eventBus.subscribe('nav.path.request', (id, start, end) => {
+      const path = this.findPath(new Vector(...start), new Vector(...end));
+
+      eventBus.publish('nav.path.response', id, path);
+    });
   }
 
   shutdown() {
@@ -265,6 +274,10 @@ export class Navigation {
     }
 
     this.#shutdownWorker();
+
+    if (this.#pathRequestEventListener) {
+      this.#pathRequestEventListener();
+    }
   }
 
   async load(mapname) {

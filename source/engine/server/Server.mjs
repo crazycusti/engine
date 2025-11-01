@@ -1,5 +1,7 @@
 import Cvar from '../common/Cvar.mjs';
-import { MoveVars, Pmove } from '../common/Pmove.mjs';
+import { MoveVars } from '../common/Pmove.mjs';
+import { ServerPmove } from './ServerPmove.mjs';
+import { PlayerMover } from './PlayerMover.mjs';
 import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -176,7 +178,10 @@ export default class SV {
   static collision = new ServerCollision();
 
   // Player movement
+  /** @type {ServerPmove} */
   static pmove = null;
+  /** @type {PlayerMover} */
+  static playerMover = null;
 
   // Entity state class
   static EntityState = ServerEntityState;
@@ -198,6 +203,7 @@ export default class SV {
   static spectatormaxspeed = null;
   static waterfriction = null;
   static rcon_password = null;
+  static public = null;
 
   /** Scheduled game commands */
   static _scheduledGameCommands = [];
@@ -205,8 +211,9 @@ export default class SV {
   // ===== STATIC METHODS =====
 
   static InitPmove() {
-    SV.pmove = new Pmove();
+    SV.pmove = new ServerPmove();
     SV.pmove.movevars = new PlayerMoveCvars();
+    SV.playerMover = new PlayerMover(SV.pmove);
   }
 
   static Init() {
@@ -226,6 +233,7 @@ export default class SV {
     SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
     SV.waterfriction = new Cvar('sv_waterfriction', '4');
     SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
+    SV.public = new Cvar('sv_public', '1', Cvar.FLAG.ARCHIVE | Cvar.FLAG.SERVER, 'Make this server publicly listed in the master server');
 
     Navigation.Init();
 
@@ -309,12 +317,12 @@ export default class SV {
   }
 
   static CheckForNewClients() {
-    let i;
     for (; ;) {
       const ret = NET.CheckNewConnections();
       if (!ret) {
         return;
       }
+      let i;
       for (i = 0; i < SV.svs.maxclients; i++) {
         if (!SV.svs.clients[i].active) {
           break;
@@ -329,8 +337,10 @@ export default class SV {
         NET.Close(ret);
         return;
       }
-      SV.ConnectClient(SV.svs.clients[i], ret);
+      const client = SV.svs.clients[i];
+      SV.ConnectClient(client, ret);
       NET.activeconnections++;
+      eventBus.publish('server.client.connected', client.num, client.name);
     }
   }
 

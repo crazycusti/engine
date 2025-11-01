@@ -74,9 +74,12 @@ export class PlayerMover {
     pmPlayer.dead = health <= 0;
 
     const isSpectator = ('spectator' in client) ? client.spectator : false;
-    pmPlayer.spectator = !!isSpectator || edict.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP;
+    pmPlayer.spectator = !!isSpectator; // Only true spectators, not noclip
     pmPlayer.waterlevel = edict.entity.waterlevel ?? 0;
     pmPlayer.watertype = edict.entity.watertype ?? Defs.content.CONTENT_EMPTY;
+
+    // Set per-entity gravity multiplier (defaults to 1.0 = normal gravity)
+    this.pmove.movevars.entgravity = edict.entity.gravity ?? 1.0;
 
     if ((edict.entity.flags & Defs.flags.FL_WATERJUMP) !== 0) {
       pmPlayer.waterjumptime = Math.max(pmPlayer.waterjumptime, Math.max(0, edict.entity.teleport_time - SV.server.time));

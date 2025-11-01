@@ -36,7 +36,7 @@ export default class CDAudio {
     }
     CDAudio.Stop();
     CDAudio.playTrack = track;
-    CDAudio.cd = new Audio(`quakefs/music/${track}.opus`);
+    CDAudio.cd = new Audio(`qfs/music/${track}.opus`);
     CDAudio.cd.loop = looping;
     CDAudio.cd.volume = CDAudio.cdvolume;
     CDAudio.cd.play().catch((e) => {

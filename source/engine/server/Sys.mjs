@@ -186,8 +186,8 @@ export default class Sys {
       app.use('/source', express.static(join(__dirname + '/..', 'source')));
     }
 
-    const skipChars = (basepath + '/quakefs/').length;
-    app.get(basepath + '/quakefs/*', async (req, res) => {
+    const skipChars = (basepath + '/qfs/').length;
+    app.get(basepath + '/qfs/*', async (req, res) => {
       try {
         // Remove the leading "/data/" to get the relative filename
         // e.g. "/data/id1/progs/player.mdl" -> "id1/progs/player.mdl"

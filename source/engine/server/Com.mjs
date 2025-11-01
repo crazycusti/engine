@@ -230,4 +230,24 @@ export default class NodeCOM extends COM {
     Sys.Print('COM.WriteTextFile: ' + filename + '\n');
     return true;
   }
+
+  static async AddGameDirectory(dir) {
+    const search = { filename: dir, pack: [] };
+    for (let i = 0; ; i++) {
+      const pak = await this.LoadPackFile((dir !== '' ? dir + '/' : '') + 'pak' + i + '.pak');
+      if (pak === null) {
+        break;
+      }
+      search.pack[search.pack.length] = pak;
+    }
+    this.searchpaths[this.searchpaths.length] = search;
+  }
+
+  static Path_f() {
+    Con.Print('Current search path:\n');
+    for (let i = NodeCOM.searchpaths.length - 1; i >= 0; i--) {
+      const s = NodeCOM.searchpaths[i];
+      Con.Print(`  ${s.filename}/ (virtual Quake filesystem)\n`);
+    }
+  }
 };

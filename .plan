@@ -326,8 +326,14 @@ class MainMenu extends BaseMenu {
   * https://developer.valvesoftware.com/wiki/MAP_(file_format) – we are using Valve 220
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 * https://www.jagregory.com/abrash-black-book/ the 3d bible
+* https://q1tools.github.io/ set of handy Quake 1 tools
 
 ## Log
+
+### 2025-11-01
+
+* added WebRTC and master server (for lobbies) support
+* a couple of optimizations around loading and serving files
 
 ### 2025-10-25
 

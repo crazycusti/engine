@@ -1,10 +1,9 @@
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
-import { HostError } from '../common/Errors.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { SzBuffer } from './MSG.mjs';
-import { BaseDriver, LoopDriver, QSocket, WebSocketDriver } from './NetworkDrivers.mjs';
+import { BaseDriver, LoopDriver, QSocket, WebRTCDriver, WebSocketDriver } from './NetworkDrivers.mjs';
 
 const NET = {};
 
@@ -49,13 +48,12 @@ NET.Connect = function(host) {
     return NET.drivers[NET.driverlevel].Connect(host);
   }
 
-  let dfunc; let ret = null;
   for (NET.driverlevel = 1; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    dfunc = /** @type {BaseDriver} */ (NET.drivers[NET.driverlevel]);
+    const dfunc = /** @type {BaseDriver} */ (NET.drivers[NET.driverlevel]);
     if (dfunc.initialized !== true) {
       continue;
     }
-    ret = dfunc.Connect(host);
+    let ret = dfunc.Connect(host);
     if (ret === 0) {
       CL.cls.state = CL.active.connecting;
       Con.Print('trying...\n');
@@ -230,7 +228,7 @@ NET.Init = function() {
   Cmd.AddCommand('listen', NET.Listen_f);
   Cmd.AddCommand('net_drivers', NET.Drivers_f);
 
-  NET.drivers = [new LoopDriver(), new WebSocketDriver()];
+  NET.drivers = [new LoopDriver(), new WebSocketDriver(), new WebRTCDriver()];
   for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
     NET.drivers[NET.driverlevel].Init(NET.driverlevel);
   }
@@ -257,14 +255,19 @@ NET.Listen_f = function(isListening) {
     return;
   }
 
-  NET.listening = isListening ? true : false;
+  NET.listening = +isListening ? true : false;
 
   for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    if (!NET.drivers[NET.driverlevel].initialized) {
+    const driver = NET.drivers[NET.driverlevel];
+
+    if (!driver.initialized) {
       continue;
     }
 
-    NET.drivers[NET.driverlevel].Listen(NET.listening);
+    // Let each driver decide if it should listen based on environment
+    if (driver.ShouldListen()) {
+      driver.Listen(NET.listening);
+    }
   }
 };
 

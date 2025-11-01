@@ -189,19 +189,21 @@ export default class Sys {
     const argv = [location.hostname];
     if (location.search && location.search.length > 1) {
       const qs = location.search.substring(1);
-      qs.split('&').forEach((param) => {
+      for (const param of qs.split('&')) {
         if (param.trim() === '') {
-          return;
+          continue;
         }
         const [key, value] = param.split('=');
         const decodedKey = decodeURIComponent(key);
         const decodedValue = value ? decodeURIComponent(value) : '';
         if (decodedValue === '' || decodedValue.toLowerCase() === 'true') {
           argv.push('-' + decodedKey);
-        } else {
+        } else if (decodedKey === 'game') { // HACK: game parameter
           argv.push('-' + decodedKey, decodedValue);
+        } else {
+          argv.push('+' + decodedKey, decodedValue);
         }
-      });
+      }
     }
 
     COM.InitArgv(argv);

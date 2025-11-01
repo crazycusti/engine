@@ -2,8 +2,7 @@
 import { registry, eventBus } from '../registry.mjs';
 
 import Q from '../../shared/Q.mjs';
-import { CRC16CCITT as CRC } from './CRC.mjs';
-import { CorruptedResourceError, MissingResourceError } from './Errors.mjs';
+import { CorruptedResourceError } from './Errors.mjs';
 
 import Cvar from './Cvar.mjs';
 import W from './W.mjs';
@@ -249,14 +248,7 @@ export default class COM {
   }
 
   static Path_f() {
-    Con.Print('Current search path:\n');
-    for (let i = this.searchpaths.length - 1; i >= 0; i--) {
-      const s = this.searchpaths[i];
-      for (let j = s.pack.length - 1; j >= 0; j--) {
-        Con.Print(s.filename + 'pak' + j + '.pak (' + s.pack[j].length + ' files)\n');
-      }
-      Con.Print(s.filename + '\n');
-    }
+    Con.Print('Files are served from the unified virtual filesystem.\n');
   }
 
   static WriteFile(filename, data, len) {
@@ -298,88 +290,39 @@ export default class COM {
     filename = filename.toLowerCase();
 
     const xhr = new XMLHttpRequest();
-    // The Quake engine often wants data as "text/plain; charset=x-user-defined".
     xhr.overrideMimeType('text/plain; charset=x-user-defined');
 
-    // Draw.BeginDisc();
     eventBus.publish('com.fs.being', filename);
 
-    // Traverse the search paths from last to first
-    for (let i = this.searchpaths.length - 1; i >= 0; i--) {
-      const search = this.searchpaths[i];
-      const netpath = search.filename + '/' + filename;
+    // Determine file path based on active game directory
+    const gameDir = this.searchpaths.length > 0
+      ? this.searchpaths[this.searchpaths.length - 1].filename
+      : defaultGame;
+    const netpath = `qfs/${filename}`;
 
-      // 1) Try to load from localStorage first
-      const localData = localStorage.getItem(`Quake.${netpath}`);
-      if (localData !== null) {
-        Sys.Print(`COM.LoadFile: ${netpath}\n`);
-        // Draw.EndDisc();
-        eventBus.publish('com.fs.end', filename);
-        return Q.strmem(localData);
-      }
-
-      // // 2) Search through any PAK files in this search path
-      // for (let j = search.pack.length - 1; j >= 0; j--) {
-      //   const pak = search.pack[j];
-
-      //   for (let k = 0; k < pak.length; k++) {
-      //     const file = pak[k];
-
-      //     // File name must match exactly
-      //     if (file.name !== filename) continue;
-
-      //     // Empty file?
-      //     if (file.filelen === 0) {
-      //       Draw.EndDisc();
-      //       return new ArrayBuffer(0);
-      //     }
-
-      //     // Perform a synchronous XHR for the appropriate byte range
-      //     const prefix = (search.filename !== '') ? `${search.filename}/` : '';
-      //     xhr.open('GET', `data/${prefix}pak${j}.pak`, false);
-      //     xhr.setRequestHeader(
-      //         'Range',
-      //         `bytes=${file.filepos}-${file.filepos + file.filelen - 1}`,
-      //     );
-      //     try {
-      //       xhr.send();
-      //     } catch (err) {
-      //       Sys.Error(`COM.LoadFile: failed to load ${filename} from pak, ${err.message}`);
-      //     }
-
-      //     // Check status and length
-      //     if (
-      //       xhr.status >= 200 &&
-      //       xhr.status <= 299 &&
-      //       xhr.responseText.length === file.filelen
-      //     ) {
-      //       Sys.Print(`COM.LoadFile: ${prefix}pak${j}.pak : ${filename}\n`);
-      //       Draw.EndDisc();
-      //       return Q.strmem(xhr.responseText);
-      //     }
-
-      //     // If we got here, it means a failed range request; break out of the pak loop
-      //     break;
-      //   }
-      // }
-
-      // 3) Fallback: try plain files on the filesystem (in data/)
-      xhr.open('GET', `quakefs/${filename}`, false);
-      try {
-        xhr.send();
-      } catch (err) {
-        // Sys.Error(`COM.LoadFile: failed to load ${filename}, ${err.message}`);
-        throw new MissingResourceError(filename, err);
-      }
-
-      if (xhr.status >= 200 && xhr.status <= 299) {
-        Sys.Print(`COM.LoadFile: ${filename}\n`);
-        eventBus.publish('com.fs.end', filename);
-        return Q.strmem(xhr.responseText);
-      }
+    // 1) Try localStorage first
+    const localData = localStorage.getItem(`Quake.${gameDir}/${netpath}`);
+    if (localData !== null) {
+      Sys.Print(`COM.LoadFile: ${netpath} (localStorage)\n`);
+      eventBus.publish('com.fs.end', filename);
+      return Q.strmem(localData);
     }
 
-    // If we exhaust all search paths, file is not found
+    // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
+    xhr.open('GET', netpath, false);
+    try {
+      xhr.send();
+    } catch {
+      // File doesn't exist
+    }
+
+    if (xhr.status >= 200 && xhr.status <= 299) {
+      Sys.Print(`COM.LoadFile: ${netpath}\n`);
+      eventBus.publish('com.fs.end', filename);
+      return Q.strmem(xhr.responseText);
+    }
+
+    // File not found
     Sys.Print(`COM.LoadFile: can't find ${filename}\n`);
     eventBus.publish('com.fs.end', filename);
     return null;
@@ -392,97 +335,41 @@ export default class COM {
   static async LoadFileAsync(filename) {
     filename = filename.toLowerCase();
 
-    // Draw.BeginDisc();
     eventBus.publish('com.fs.being', filename);
 
-    // Traverse the search paths from last to first
-    for (let i = this.searchpaths.length - 1; i >= 0; i--) {
-      const search = this.searchpaths[i];
-      const netpath = search.filename + '/' + filename;
+    // Determine file path based on active game directory
+    const gameDir = this.searchpaths.length > 0
+      ? this.searchpaths[this.searchpaths.length - 1].filename
+      : defaultGame;
+    const netpath = `qfs/${filename}`;
 
-      // 1) Try localStorage first (instantaneous)
-      const localData = localStorage.getItem(`Quake.${netpath}`);
-      if (localData !== null) {
-        Sys.Print(`COM.LoadFileAsync: ${netpath}\n`);
-        // Draw.EndDisc();
-        eventBus.publish('com.fs.end', filename);
-        return Q.strmem(localData);
-      }
-
-      // // 2) Check files inside each PAK
-      // for (let j = search.pack.length - 1; j >= 0; j--) {
-      //   const pak = search.pack[j];
-
-      //   for (let k = 0; k < pak.length; k++) {
-      //     const file = pak[k];
-      //     if (file.name !== filename) {
-      //       continue;
-      //     }
-
-      //     // Empty file?
-      //     if (file.filelen === 0) {
-      //       Draw.EndDisc();
-      //       return new ArrayBuffer(0);
-      //     }
-
-      //     const prefix = (search.filename !== '') ? `${search.filename}/` : '';
-      //     const pakUrl = `data/${prefix}pak${j}.pak`;
-      //     const rangeHeader = `bytes=${file.filepos}-${file.filepos + file.filelen - 1}`;
-
-      //     try {
-      //       // Attempt ranged fetch
-      //       const response = await fetch(pakUrl, {
-      //         headers: {Range: rangeHeader},
-      //         signal: this._abortController.signal,
-      //       });
-
-      //       // If the server honors the Range request, check the data
-      //       if (response.ok) {
-      //         const responseBuffer = await response.arrayBuffer();
-
-      //         // Validate length
-      //         if (responseBuffer.byteLength === file.filelen) {
-      //           Sys.Print(`COM.LoadFileAsync: ${prefix}pak${j}.pak : ${filename}\n`);
-      //           Draw.EndDisc();
-      //           return responseBuffer;
-      //         } else {
-      //           Sys.Print(`COM.LoadFileAsync: ${prefix}pak${j}.pak : ${filename} invalid length received\n`);
-      //         }
-      //       }
-      //     } catch (err) {
-      //       // Possibly log error, but continue gracefully
-      //       console.error(err);
-      //     }
-
-      //     // If the fetch or length check fails, break out of the PAK loop
-      //     break;
-      //   }
-      // }
-
-      // 3) Fallback: try direct file
-      try {
-        const fallbackUrl = `quakefs/${filename}`;
-        const directResponse = await fetch(fallbackUrl, {
-          signal: this.abortController.signal,
-        });
-
-        if (directResponse.ok) {
-          const data = await directResponse.arrayBuffer();
-          Sys.Print(`COM.LoadFileAsync: ${filename}\n`);
-          eventBus.publish('com.fs.end', filename);
-          // Draw.EndDisc();
-          return data;
-        }
-      } catch (err) {
-        // If direct fetch failed, continue searching
-        console.error(err);
-      }
+    // 1) Try localStorage first
+    const localData = localStorage.getItem(`Quake.${gameDir}/${netpath}`);
+    if (localData !== null) {
+      Sys.Print(`COM.LoadFileAsync: ${netpath} (localStorage)\n`);
+      eventBus.publish('com.fs.end', filename);
+      return Q.strmem(localData);
     }
 
-    // If we exhaust all search paths, file is not found
+    // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
+    try {
+      const directResponse = await fetch(netpath, {
+        signal: this.abortController.signal,
+      });
+
+      if (directResponse.ok) {
+        const data = await directResponse.arrayBuffer();
+        Sys.Print(`COM.LoadFileAsync: ${netpath}\n`);
+        eventBus.publish('com.fs.end', filename);
+        return data;
+      }
+    } catch {
+      // File doesn't exist
+    }
+
+    // File not found
     Sys.Print(`COM.LoadFileAsync: can't find ${filename}\n`);
     eventBus.publish('com.fs.end', filename);
-    // Draw.EndDisc();
     return null;
   }
 
@@ -527,110 +414,16 @@ export default class COM {
     return f.join('');
   };
 
-  static async LoadPackFile(packfile) {
-    // Try fetching the header (first 12 bytes).
-    let headerResponse;
-    try {
-      headerResponse = await fetch(`data/${packfile}`, {
-        headers: { Range: 'bytes=0-11' },
-      });
-    } catch (err) {
-      // Sys.Error(`COM.LoadPackFile: failed to load ${packfile}, ${err.message}`);
-      throw new MissingResourceError(packfile, err);
-    }
-
-    // If the response is not OK, or we didn't get exactly 12 bytes, bail out.
-    if (!headerResponse.ok) {
-      return null;
-    }
-
-    const headerBuffer = await headerResponse.arrayBuffer();
-    if (headerBuffer.byteLength !== 12) {
-      throw new Error(`COM.LoadPackFile: expected 12-byte header, got ${headerBuffer.byteLength}`);
-    }
-
-    // Parse the pack file header.
-    const headerView = new DataView(headerBuffer);
-    if (headerView.getUint32(0, true) !== 0x4b434150) { // 'PACK'
-      throw new Error(`${packfile} is not a packfile`);
-    }
-
-    const dirofs = headerView.getUint32(4, true);
-    const dirlen = headerView.getUint32(8, true);
-    const numpackfiles = dirlen >> 6; // dirlen / 64
-
-    if (numpackfiles !== 339) {
-      this.modified = true;
-    }
-
-    // If there are no files in the pack, just return an empty array.
-    if (numpackfiles === 0) {
-      Con.Print(`Added packfile ${packfile} (0 files)\n`);
-      return [];
-    }
-
-    // Fetch directory entries using Range for the directory area.
-    let dirResponse;
-    try {
-      dirResponse = await fetch(`data/${packfile}`, {
-        headers: { Range: `bytes=${dirofs}-${dirofs + dirlen - 1}` },
-      });
-    } catch (err) {
-      throw new Error(`COM.LoadPackFile: failed to load directory of ${packfile}, ${err.message}`);
-    }
-
-    if (!dirResponse.ok) {
-      return null;
-    }
-
-    const dirBuffer = await dirResponse.arrayBuffer();
-    if (dirBuffer.byteLength !== dirlen) {
-      throw new Error(
-        `COM.LoadPackFile: expected ${dirlen} bytes for directory, got ${dirBuffer.byteLength}`,
-      );
-    }
-
-    // Optional CRC check, assuming CRC.Block() still works on a Uint8Array:
-    const dirUint8 = new Uint8Array(dirBuffer);
-    if (CRC.Block(dirUint8) !== 32981) {
-      this.modified = true;
-    }
-
-    // Parse out the individual file entries in the pack directory.
-    const dirView = new DataView(dirBuffer);
-    /** @type {PackFile} */
-    const pack = [];
-    for (let i = 0; i < numpackfiles; i++) {
-      // Each entry is 64 bytes total:
-      //   - 56 bytes: file name (null-padded)
-      //   - 4 bytes:  file position
-      //   - 4 bytes:  file length
-
-      // Convert the "filename" portion to string (using your Q.memstr if needed):
-      const nameBytes = dirUint8.subarray(i * 64, i * 64 + 56);
-      const name = Q.memstr(nameBytes).toLowerCase();
-
-      const filepos = dirView.getUint32(i * 64 + 56, true);
-      const filelen = dirView.getUint32(i * 64 + 60, true);
-
-      pack.push({ name, filepos, filelen });
-    }
-
-    Con.Print(`Added packfile ${packfile} (${numpackfiles} files)\n`);
-    return pack;
-  }
-
+  /**
+   * Add a game directory to the search path.
+   * Note: PAK files are pre-extracted at build time, so we only track the directory.
+   * @param {string} dir - directory name (e.g., 'id1', 'hellwave')
+   */
   static async AddGameDirectory(dir) {
     /** @type {SearchPath} */
     const search = { filename: dir, pack: [] };
-    for (let i = 0; ; i++) {
-      const pak = await this.LoadPackFile((dir !== '' ? dir + '/' : '') + 'pak' + i + '.pak');
-      if (pak === null) {
-        break;
-      }
-      search.pack[search.pack.length] = pak;
-    }
     this.searchpaths[this.searchpaths.length] = search;
+    Con.Print(`Added game directory: ${dir}\n`);
   };
 
   static async InitFilesystem() {

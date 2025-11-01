@@ -18,6 +18,7 @@ Added features include but not limited to:
 * Limited BSPX support:
   * `LIGHTINGDIR`: used for per-pixel lighting on supported materials.
   * `RGBLIGHTING`: used for colorful lightmaps.
+  * `LIGHTGRID_OCTREE`: used for smoothly lighting dynamically moving objects.
 * Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
 

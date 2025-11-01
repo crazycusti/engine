@@ -160,12 +160,16 @@ Host.DropClient = function(client, crash, reason) {
 
   NET.Close(client.netconnection);
 
+  const { name, num } = client;
+
   client.clear();
 
   NET.activeconnections--;
-  let i; const num = client.num;
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    client = SV.svs.clients[i];
+
+  eventBus.publish('server.client.disconnected', num, name);
+
+  for (let i = 0; i < SV.svs.maxclients; i++) {
+    const client = SV.svs.clients[i];
     if (!client.active) {
       continue;
     }
@@ -185,7 +189,7 @@ Host.DropClient = function(client, crash, reason) {
   }
 };
 
-Host.ShutdownServer = function(isCrashShutdown) { // TODO: SV duties
+Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
   if (SV.server.active !== true) {
     return;
   }
@@ -226,6 +230,7 @@ Host.ShutdownServer = function(isCrashShutdown) { // TODO: SV duties
     }
   }
   SV.ShutdownServer(isCrashShutdown);
+  Cmd.ExecuteString('listen 0'); // TODO: proper method over at NET
 };
 
 Host.WriteConfiguration = function() {
@@ -790,7 +795,7 @@ Host.Disconnect_f = function() {
     return;
   }
 
-  SV.ShutdownServer(false);
+  Host.ShutdownServer();
 };
 
 Host.Reconnect_f = function() {
