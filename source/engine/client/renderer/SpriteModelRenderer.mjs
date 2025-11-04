@@ -29,7 +29,7 @@ export class SpriteModelRenderer extends ModelRenderer {
   /**
    * Setup rendering state for sprite models.
    * Enables blending for transparent sprites.
-   * @param {number} [pass] Rendering pass (0=opaque, 1=transparent)
+   * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    * @returns {object|null} The shader program or null if not in sprite pass
    */
   setupRenderState(pass = 0) {
@@ -46,7 +46,7 @@ export class SpriteModelRenderer extends ModelRenderer {
    * Generates billboard geometry dynamically based on camera orientation.
    * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} model The sprite model to render
    * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
-   * @param {number} [pass] Rendering pass (0=opaque, 1=transparent)
+   * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    */
   render(model, entity, pass = 0) {
     if (pass === 0) {

@@ -189,6 +189,9 @@ export class Navigation {
   /** @type {Function?} unsubscribe from nav.path.request */
   #pathRequestEventListener = null;
 
+  /** @type {Function?} unsubscribe from nav.path.response */
+  #pathResponseEventListener = null;
+
   constructor(worldmodel) {
     /** @type {BrushModel?} */
     this.worldmodel = worldmodel;
@@ -228,8 +231,16 @@ export class Navigation {
       'nav.load',
       'nav.path.request',
     ]);
+  }
 
-    eventBus.subscribe('nav.path.response', (id, path) => {
+  #shutdownWorker() {
+    if (this.#worker) {
+      this.#worker.shutdown();
+    }
+  }
+
+  #subscribePathResponse() {
+    this.#pathResponseEventListener = eventBus.subscribe('nav.path.response', (id, path) => {
       const vecpath = path ? path.map((p) => new Vector(...p)) : null;
 
       // since all events are global, we need to check what’s intended for us
@@ -238,12 +249,6 @@ export class Navigation {
         delete this.#requests[id];
       }
     });
-  }
-
-  #shutdownWorker() {
-    if (this.#worker) {
-      this.#worker.shutdown();
-    }
   }
 
   init() {
@@ -255,6 +260,7 @@ export class Navigation {
 
     if (registry.isDedicatedServer) {
       this.#initWorker();
+      this.#subscribePathResponse();
       eventBus.publish('nav.load', SV.server.mapname);
       return;
     }
@@ -277,6 +283,8 @@ export class Navigation {
 
       eventBus.publish('nav.path.response', id, path);
     });
+
+    this.#subscribePathResponse();
   }
 
   shutdown() {
@@ -288,6 +296,10 @@ export class Navigation {
 
     if (this.#pathRequestEventListener) {
       this.#pathRequestEventListener();
+    }
+
+    if (this.#pathResponseEventListener) {
+      this.#pathResponseEventListener();
     }
   }
 
@@ -1243,9 +1255,9 @@ export class Navigation {
     return new Promise((resolve) => {
       const id = Math.random().toString(36).substring(2, 10);
 
-      eventBus.publish('nav.path.request', id, startPos, goalPos);
-
       this.#requests[id] = resolve;
+
+      eventBus.publish('nav.path.request', id, startPos, goalPos);
     });
   }
 

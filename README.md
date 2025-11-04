@@ -37,18 +37,9 @@ The engine is supposed to be extensible and fun to work with. Made for boomer sh
 
 ## Documentation
 
-There’s some documentation in `docs/`, make sure to read the `README.md` over at the game project.
+### Turn-key ready build and deploy
 
-### Deploying
-
-Either you use node.js on your computer:
-
-```sh
-npm install
-npm run start
-```
-
-Or you use Docker to build and start a container:
+Use Docker to build and start a container:
 
 ```sh
 # build the Docker image
@@ -60,7 +51,63 @@ docker run --rm -ti -p 3000:3000 quakeshack
 
 Open http://localhost:3000/ and enjoy the game.
 
-This repository comes with the Quake 1 shareware game assets.
+This repository comes with the Quake 1 shareware game assets and computed navigation graphs for the first episode.
+
+### Development environment
+
+Firstly, you need to install the dependencies and tools (eslint, vite):
+
+```sh
+npm install
+```
+
+Next, you need to start both the dedicated server and vite watcher like so:
+
+```sh
+# start vite in development mode in the background
+npm run dev &
+
+# start the dedicated server to serve both the virtual Quake filesystem and whatever vite is building for you
+./dedicated.mjs -ip ::1 -port 3000
+```
+
+Open http://localhost:3000/ and enjoy hacking.
+
+### Deploy to a CDN
+
+You can deploy the built frontend code to a CDN such as Cloudflare and skip the virtual Quake fileystem by providing the URL where to get the game assets (basically everything extracted from the pak files) from.
+
+You can set a custom URL to serve the assets like this:
+
+```sh
+VITE_CDN_URL_PATTERN="https://cdn.example.net/{gameDir}/{filename}"
+```
+
+However, it’s not necessary to provide a different URL, per default it will try to load files from `/qfs/{filename}`. You can skip the `{gameDir}` part, if you only want to serve one mod or the original game (`id1`).
+
+Next run `npm run build:production` to build for production.
+
+In `dist/` you’ll have everything you need to upload to your static web server or CDN provider.
+
+**Tip**: Make sure to set the max-age as low as possible for `/index.html` so you can quickly rollout a new version. Each update will produce a different hash for cache busting.
+
+### Launching a multiplayer session
+
+It’s straight forward like back in WinQuake, start the dedicated server and type in:
+
+```
+maxplayers 8
+coop 1
+map e1m1
+```
+
+In your browser’s game console you can type in:
+
+```
+connect self
+```
+
+The `connect self` command will connect to the same webserver hosting the game frontend.
 
 ### Extending and hacking
 

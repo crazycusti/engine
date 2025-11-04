@@ -338,6 +338,10 @@ class MainMenu extends BaseMenu {
   * I’m thinking of having Source engine style skyboxes
 * prepared a few more things for serving files from a CDN
 * added -noserver and nav_build_process to integrate baking the nav mesh in a streamlined build process
+* introduced vite and wrangler for a more streamlined deployment process
+* rebuilt nav files for episode 1 (this time without waypoints, just the graph)
+* navigation works again in browser servers
+* some here and theres such as documentation, Dockerfile, deleted some old files etc.
 
 ### 2025-11-01
 

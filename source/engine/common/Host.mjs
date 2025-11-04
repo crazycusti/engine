@@ -829,7 +829,7 @@ Host.Connect_f = function(address) {
 
   if (address === 'self') {
     const url = new URL(location.href);
-    CL.Connect(url.host + url.pathname + (!url.pathname.endsWith('/') ? '/' : '') + 'api/');
+    CL.Connect((url.protocol === 'https:' ? 'wss' : 'ws') + '://' + url.host + url.pathname + (!url.pathname.endsWith('/') ? '/' : '') + 'api/');
   } else {
     CL.Connect(address);
   }
@@ -1047,6 +1047,10 @@ Host.Name_f = function(...names) { // signon 2, step 1
 
 Host.Version_f = function() {
   Con.Print('Version ' + Def.productVersion + '\n');
+
+  if (registry.buildConfig) {
+    Con.Print('Built datetime: ' + registry.buildConfig.timestamp + '\n');
+  }
 };
 
 Host.Say_f = function(teamonly, message) {

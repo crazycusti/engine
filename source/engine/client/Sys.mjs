@@ -227,7 +227,7 @@ export default class Sys {
 
     document.getElementById('progress').style.display = 'none';
 
-    Sys.Print('Host.Init\n');
+    Sys.Print('Host.Init: Initializing game…\n');
 
     await Host.Init();
 

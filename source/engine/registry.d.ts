@@ -17,6 +17,7 @@ import type _Sbar from './client/Sbar.mjs';
 import type _S from './client/Sound.mjs';
 import type _M from './client/Menu.mjs';
 import type _IN from './client/IN.mjs';
+import { BuildConfig, URLFunctions } from './build-config';
 
 type Con = typeof _Con;
 type Com = typeof _Com;
@@ -61,10 +62,9 @@ interface Registry {
   M: M | null;
 
   WebSocket: WebSocket | null;
-  urlFns: {
-    signalingURL?: () => string;
-    cdnURL?: (filename: string, gameDir: string) => string;
-  } | null;
+  urlFns: URLFunctions | null;
+
+  buildConfig: BuildConfig | null;
 };
 
 export const registry: Registry;

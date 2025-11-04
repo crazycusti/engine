@@ -1061,7 +1061,7 @@ export class WebRTCDriver extends BaseDriver {
       // Don't mark as fully connected yet - wait for data channels to open
       // But update the address
       sock.address = `WebRTC Peer (${this.sessionId})`;
-      Con.Print(`WebRTCDriver: Socket found, waiting for P2P connection\n`);
+      Con.Print('WebRTCDriver: Socket found, waiting for P2P connection\n');
     } else {
       Con.PrintWarning(`WebRTCDriver: No socket found for joined session ${this.sessionId}\n`);
     }
@@ -1123,7 +1123,7 @@ export class WebRTCDriver extends BaseDriver {
     // Find our socket (we're the joining peer)
     const sock = this._FindSocketBySession(this.sessionId);
     if (!sock) {
-      Con.PrintWarning(`WebRTCDriver._OnOffer: No socket found for session\n`);
+      Con.PrintWarning('WebRTCDriver._OnOffer: No socket found for session\n');
       return;
     }
 
@@ -1230,7 +1230,7 @@ export class WebRTCDriver extends BaseDriver {
     console.assert(sock && sock.driverdata, 'WebRTCDriver._CreatePeerConnection: Invalid socket');
 
     if (!sock || !sock.driverdata) {
-      Con.PrintError(`WebRTCDriver._CreatePeerConnection: No socket provided\n`);
+      Con.PrintError('WebRTCDriver._CreatePeerConnection: No socket provided\n');
       return null;
     }
 
@@ -1357,7 +1357,7 @@ export class WebRTCDriver extends BaseDriver {
       // Mark socket as connected when the reliable channel opens
       if (channel.label === 'reliable' && sock.state !== QSocket.STATE_CONNECTED) {
         sock.state = QSocket.STATE_CONNECTED;
-        Con.DPrint(`WebRTCDriver: Socket now CONNECTED (can send/receive data)\n`);
+        Con.DPrint('WebRTCDriver: Socket now CONNECTED (can send/receive data)\n');
       }
     };
 
@@ -1498,7 +1498,7 @@ export class WebRTCDriver extends BaseDriver {
     console.assert(qsocket && qsocket.driverdata, 'WebRTCDriver._SendToAllPeers: Invalid socket');
 
     if (!qsocket.driverdata || !qsocket.driverdata.dataChannels) {
-      Con.PrintError(`WebRTCDriver._SendToAllPeers: no driverdata or channels\n`);
+      Con.PrintError('WebRTCDriver._SendToAllPeers: no driverdata or channels\n');
       return -1;
     }
 
@@ -1522,7 +1522,7 @@ export class WebRTCDriver extends BaseDriver {
     }
 
     if (sentCount === 0) {
-      Con.DPrint(`WebRTCDriver._SendToAllPeers: no peers available to send to\n`);
+      Con.DPrint('WebRTCDriver._SendToAllPeers: no peers available to send to\n');
     }
 
     return sentCount > 0 ? 1 : -1;
@@ -1692,13 +1692,15 @@ export class WebRTCDriver extends BaseDriver {
         this.signalingWs = null;
       }
 
+      if (this.sessionId) {
+        Con.Print('WebRTCDriver: Session torn down, no longer accepting connections\n');
+      }
+
       // Reset state
       this.sessionId = null;
       this.peerId = null;
       this.isHost = false;
       this.creatingSession = false;
-
-      Con.Print('WebRTCDriver: Session torn down, no longer accepting connections\n');
     }
   }
 };

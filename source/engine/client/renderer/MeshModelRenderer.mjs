@@ -48,7 +48,7 @@ export class MeshModelRenderer extends ModelRenderer {
    * Render a single mesh model entity.
    * @param {import('../../common/model/MeshModel.mjs').MeshModel} model The mesh model to render
    * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
-   * @param {number} [pass] Rendering pass (0=opaque, 1=transparent)
+   * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    */
   render(model, entity, pass = 0) {
     const clmodel = model;

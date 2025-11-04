@@ -42,7 +42,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Handles frustum culling, transforms, lighting, and both opaque and turbulent surfaces.
    * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to render
    * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
-   * @param {number} [pass] Rendering pass (0=opaque, 1=transparent)
+   * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    */
   render(model, entity, pass = 0) {
     const clmodel = model;

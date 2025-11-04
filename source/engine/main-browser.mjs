@@ -20,10 +20,16 @@ import Sbar from './client/Sbar.mjs';
 import IN from './client/IN.mjs';
 
 export default class EngineLauncher {
-  static async Launch(/** @type {typeof registry.urlFns} */ urlFns) {
+  /**
+   * @param {typeof registry.urlFns} urlFns URL builder functions
+   * @param {typeof registry.buildConfig} buildConfig build information from Vite
+   * @returns {Promise<import("./registry.mjs").registry>} engine registry
+   */
+  static async Launch(urlFns, buildConfig) {
     console.log('Launching engine in browser mode...');
 
     registry.urlFns = urlFns;
+    registry.buildConfig = buildConfig;
 
     // set some global flags
     registry.isDedicatedServer = false;

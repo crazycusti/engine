@@ -7,6 +7,7 @@ import stylistic from '@stylistic/eslint-plugin';
 export default [
   { files: ['**/*.js'], languageOptions: { sourceType: 'commonjs' } },
   {
+    ignores: ['vite.config.mjs', '.env*', 'dist/**'],
     languageOptions: {
       globals: globals.browser,
       parserOptions: {

@@ -1,3 +1,19 @@
+# Build stage
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY source ./source
+COPY public ./public
+COPY vite.config.mjs ./vite.config.mjs
+COPY jsconfig.json ./jsconfig.json
+
+RUN npm run build
+
+# Production stage
 FROM node:24-alpine
 
 ARG GIT_COMMIT_SHA
@@ -6,14 +22,13 @@ ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY dedicated.mjs ./dedicated.mjs
-COPY source ./source
-COPY public ./public
+COPY --from=builder /app/dist ./dist
 COPY data ./data
-
-RUN sed -i -E "s/version = '([^+]+)\\+dev'/version = '\\1+$GIT_COMMIT_SHA'/" ./source/engine/common/Def.mjs
+# still required for the dedicated server
+COPY source ./source
 
 EXPOSE 3000
 

@@ -2,15 +2,11 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8">
-		<link rel="modulepreload" href="./source/engine/main-browser.mjs">
-		<link rel="modulepreload" href="./source/game/id1/main.mjs">
 		<title>The Quake Shack</title>
 		<style>
 			body{background: #222; color:#ddd; font-family:monospace; font-size:12px; }
 			canvas{position:fixed;left:0;top:0;display:none}
 			#loading{display:none;position:fixed}
-			#end{color:white;font-family:monospace;text-align:center}
-			#end1,#end2{background-color:rgb(65, 41, 41);white-space:pre;display:none}
 			#error{animation: flash 1s infinite; font-weight: bold;}
 			#imprint, #imprint > a{color:#999;}
 			#console { padding: 0; }
@@ -39,13 +35,15 @@
 				height: 100%;
 			}
 		</style>
+    <link rel="icon" type="image/png" href="/img/quakeshack.jpeg" sizes="400x400" />
+    <link rel="apple-touch-icon" href="/img/quakeshack.jpeg" />
 	</head>
 	<body>
 		<div>
-			<p id="progress">Launching… this might take a while.</p>
+			<p id="progress">Loading and initializing engine…</p>
 			<p id="error"></p>
 			<ul id="console"></ul>
-			<p id="imprint">Passion project by <a href="https://www.chrisnew.eu/" target="_blank">chrisnew</a>. Source code and more information available on <a href="https://github.com/quakeshack" target="_blank">github.com/quakeshack</a>.</p>
+			<p id="imprint">For source code and more information, visit <a href="https://www.quakeshack.dev" target="_blank">www.quakeshack.dev</a>.</p>
 
 			<!-- WebGL target -->
 			<canvas id="mainwindow"></canvas>
@@ -56,13 +54,45 @@
 			<div id="left-zone"></div>
 			<div id="right-zone"></div>
 		</div>
-		<div class="gui_download" onclick="downloadSaveGame()"></div>
 
+		<!-- TODO: use imports and npm install -->
 		<script src='libs/nipplejs.js'></script>
 
-		<script>
-			import('./source/engine/main-browser.mjs').then((module) => {
-				return module.default.Launch();
+		<script type="module">
+			import('../source/engine/main-browser.mjs').then((module) => {
+				// Build configuration, these variables are replaced at build time
+				// NOTE: These are bare identifiers that get replaced by Vite’s define
+				const signalingURLValue = __BUILD_SIGNALING_URL__;
+				const cdnURLPatternValue = __BUILD_CDN_URL_PATTERN__;
+
+				/** @type {BuildConfig} */
+				const buildConfig = {
+					mode: __BUILD_MODE__,
+					timestamp: __BUILD_TIMESTAMP__,
+				};
+
+				const cdnURL = cdnURLPatternValue
+					? (filename, gameDir) => {
+						return cdnURLPatternValue
+							.replace('{filename}', filename)
+							.replace('{gameDir}', gameDir);
+					}
+					: null;
+
+				const signalingURL = signalingURLValue ? () => signalingURLValue : null;
+
+				return module.default.Launch({
+					signalingURL,
+					cdnURL,
+				}, buildConfig).then(() => {
+					if (document.getElementById('error').textContent === '') {
+						location.href = 'https://www.quakeshack.dev';
+					}
+				}).catch((err) => {
+					const errorElem = document.getElementById('error');
+					errorElem.textContent = `${err.message || err}`;
+					throw err;
+				});
 			});
 		</script>
 	</body>

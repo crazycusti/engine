@@ -1,0 +1,11 @@
+name = "quakeshack-engine"
+main = "source/cloudflare/worker.mjs"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+
+# Environment variables (set in Cloudflare dashboard):
+# VITE_SIGNALING_URL = "https://api.quakeshack.dev/signaling"
+# VITE_CDN_URL_PATTERN = "https://cdn.quakeshack.dev/{gameDir}/{filename}"

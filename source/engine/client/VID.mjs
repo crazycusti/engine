@@ -60,8 +60,6 @@ export default class VID {
     const $progress = document.getElementById('progress');
     $progress.parentElement.removeChild($progress);
 
-    document.getElementById('console').style.display = 'none';
-
     VID.Resize(); // trigger once since we are ready now
 
     window.addEventListener('resize', VID.Resize);
@@ -72,7 +70,6 @@ export default class VID {
   };
 
   static async Shutdown() {
-    document.getElementById('console').style.display = 'block';
     VID.mainwindow.style.display = 'none';
 
     window.removeEventListener('resize', VID.Resize);

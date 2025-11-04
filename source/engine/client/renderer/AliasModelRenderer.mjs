@@ -32,6 +32,7 @@ export class AliasModelRenderer extends ModelRenderer {
    * Setup rendering state for alias models.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   setupRenderState(_pass = 0) {
     // Alias models setup their own state per-entity (different shaders for players)
     // No shared setup needed at this level
@@ -42,8 +43,9 @@ export class AliasModelRenderer extends ModelRenderer {
    * Handles frustum culling, frame interpolation, skinning, and player color translation.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to render
    * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
-   * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
+   * @param {number} _pass Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   render(model, entity, _pass = 0) {
     const clmodel = model;
     const e = entity;
@@ -218,6 +220,7 @@ export class AliasModelRenderer extends ModelRenderer {
    * Cleanup rendering state after alias models
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     // Alias models clean up their own state per-entity
     // No shared cleanup needed at this level

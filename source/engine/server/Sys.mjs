@@ -182,11 +182,11 @@ export default class Sys {
     const __dirname = import.meta.dirname + '/../..';
 
     if (basepath !== '') {
-      app.use(basepath, express.static(join(__dirname + '/..', 'public')));
+      app.use(basepath, express.static(join(__dirname + '/..', 'dist')));
       app.use(basepath + '/data', express.static(join(__dirname + '/..', 'data')));
       app.use(basepath + '/source', express.static(join(__dirname + '/..', 'source')));
     } else {
-      app.use(express.static(join(__dirname + '/..', 'public')));
+      app.use(express.static(join(__dirname + '/..', 'dist')));
       app.use('/data', express.static(join(__dirname + '/..', 'data')));
       app.use('/source', express.static(join(__dirname + '/..', 'source')));
     }

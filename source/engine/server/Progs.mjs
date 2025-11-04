@@ -9,6 +9,7 @@ import { ED } from './Edict.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import PF, { etype, ofs } from './ProgsAPI.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
+import { loadGameModule } from './GameLoader.mjs';
 
 const PR = {};
 
@@ -1021,7 +1022,7 @@ PR.Init = async function() {
       PR.QuakeJS = null;
     } else {
       // try to get the game API
-      PR.QuakeJS = await import('../../game/' + COM.gamedir[0].filename + '/main.mjs');
+      PR.QuakeJS = await loadGameModule(COM.gamedir[0].filename);
       PR.QuakeJS.ServerGameAPI.Init(ServerEngineAPI);
 
       const identification = PR.QuakeJS.identification;

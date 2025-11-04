@@ -284,7 +284,7 @@ export default class COM {
       return registry.urlFns.cdnURL(filename, gameDir);
     }
 
-    return `http://${location.host}/qfs/${filename}`;
+    return `${location.protocol}//${location.host}/qfs/${filename}`;
   }
 
   /**
