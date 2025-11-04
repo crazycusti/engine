@@ -21,10 +21,11 @@ import W from './W.mjs';
 /** @typedef {import('./Pmove.mjs').Trace} Trace */
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
 
-let { CL, Con, Draw, Host, R, S, SCR, SV, V} = registry;
+let { CL, COM, Con, Draw, Host, R, S, SCR, SV, V} = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
+  COM = registry.COM;
   Con = registry.Con;
   Draw = registry.Draw;
   Host = registry.Host;
@@ -121,6 +122,14 @@ export class CommonEngineAPI {
    */
   static ParseQC(qcContent) {
     return Mod.ParseQC(qcContent);
+  }
+
+  /**
+   * Indicates whether the game is registered (not shareware).
+   * @returns {boolean} true if the game is registered, false if it is shareware
+   */
+  static get registered() {
+    return COM.registered.value !== 0;
   }
 };
 

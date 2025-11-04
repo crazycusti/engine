@@ -11,7 +11,7 @@ COPY public ./public
 COPY vite.config.mjs ./vite.config.mjs
 COPY jsconfig.json ./jsconfig.json
 
-RUN npm run build
+RUN npm run build:production
 
 # Production stage
 FROM node:24-alpine

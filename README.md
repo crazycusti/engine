@@ -42,7 +42,10 @@ The engine is supposed to be extensible and fun to work with. Made for boomer sh
 Use Docker to build and start a container:
 
 ```sh
-# build the Docker image
+# make sure that the game repo is also cloned
+git submodule update --init
+
+# build the container image
 ./build.sh
 
 # start the container
@@ -59,6 +62,12 @@ Firstly, you need to install the dependencies and tools (eslint, vite):
 
 ```sh
 npm install
+```
+
+Also, make sure that the game repo is cloned:
+
+```sh
+git submodule update --init
 ```
 
 Next, you need to start both the dedicated server and vite watcher like so:
