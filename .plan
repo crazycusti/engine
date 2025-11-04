@@ -337,6 +337,7 @@ class MainMenu extends BaseMenu {
 * asked Claude to explain DrawSkyBox, it’s neatly commented now
   * I’m thinking of having Source engine style skyboxes
 * prepared a few more things for serving files from a CDN
+* added -noserver and nav_build_process to integrate baking the nav mesh in a streamlined build process
 
 ### 2025-11-01
 
