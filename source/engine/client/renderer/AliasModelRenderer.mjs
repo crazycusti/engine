@@ -227,8 +227,10 @@ export class AliasModelRenderer extends ModelRenderer {
    * Prepare alias model for rendering (build vertex buffers from triangle data).
    * Uses global `gl` from registry.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to prepare
+   * @param {boolean} isWorldModel Whether this model is the world model
    */
-  prepareModel(model) {
+  // eslint-disable-next-line no-unused-vars
+  prepareModel(model, isWorldModel = false) {
     // This will be implemented in a later task
     // For now, vertex buffer building is still done in Mod.mjs
     if (registry.Con) {

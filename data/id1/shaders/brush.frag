@@ -96,7 +96,6 @@ void main(void) {
         dot(deluxemapG, lightstyle),
         dot(deluxemapB, lightstyle)
       );
-      lightDirection = lightDirection * 2.0 - 1.0;
 
       // CR: Since we are fixing normals when loading the faces, we need to fix the deluxemap accordingly
       lightDirection.x *= vNormal.x > 0.0 ? 1.0 : -1.0;

@@ -165,6 +165,11 @@ export default class Sys {
 
   /** @private */
   static StartWebserver() {
+    if (COM.CheckParm('-noserver')) {
+      Sys.Print('Webserver disabled via -noserver\n');
+      return;
+    }
+
     const app = express();
 
     const basepath = COM.GetParm('-basepath') || '';

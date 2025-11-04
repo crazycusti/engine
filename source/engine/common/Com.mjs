@@ -279,6 +279,14 @@ export default class COM {
     return true;
   };
 
+  static GetNetpath(filename, gameDir) {
+    if (registry.urlFns && typeof registry.urlFns.cdnURL === 'function') {
+      return registry.urlFns.cdnURL(filename, gameDir);
+    }
+
+    return `http://${location.host}/qfs/${filename}`;
+  }
+
   /**
    * @param {string} filename virtual filename
    * @returns {ArrayBuffer} binary content
@@ -298,10 +306,10 @@ export default class COM {
     const gameDir = this.searchpaths.length > 0
       ? this.searchpaths[this.searchpaths.length - 1].filename
       : defaultGame;
-    const netpath = `qfs/${filename}`;
+    const netpath = this.GetNetpath(filename, gameDir);
 
     // 1) Try localStorage first
-    const localData = localStorage.getItem(`Quake.${gameDir}/${netpath}`);
+    const localData = localStorage.getItem(`Quake.${gameDir}/${filename}`);
     if (localData !== null) {
       Sys.Print(`COM.LoadFile: ${netpath} (localStorage)\n`);
       eventBus.publish('com.fs.end', filename);
@@ -341,10 +349,10 @@ export default class COM {
     const gameDir = this.searchpaths.length > 0
       ? this.searchpaths[this.searchpaths.length - 1].filename
       : defaultGame;
-    const netpath = `qfs/${filename}`;
+    const netpath = this.GetNetpath(filename, gameDir);
 
     // 1) Try localStorage first
-    const localData = localStorage.getItem(`Quake.${gameDir}/${netpath}`);
+    const localData = localStorage.getItem(`Quake.${gameDir}/${filename}`);
     if (localData !== null) {
       Sys.Print(`COM.LoadFileAsync: ${netpath} (localStorage)\n`);
       eventBus.publish('com.fs.end', filename);

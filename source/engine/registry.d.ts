@@ -61,6 +61,10 @@ interface Registry {
   M: M | null;
 
   WebSocket: WebSocket | null;
+  urlFns: {
+    signalingURL?: () => string;
+    cdnURL?: (filename: string, gameDir: string) => string;
+  } | null;
 };
 
 export const registry: Registry;

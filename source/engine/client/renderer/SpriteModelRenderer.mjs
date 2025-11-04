@@ -161,8 +161,10 @@ export class SpriteModelRenderer extends ModelRenderer {
    * Prepare sprite model for rendering.
    * Sprites use dynamic geometry, so no GPU resources to prepare.
    * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} _model The sprite model to prepare
+   * @param {boolean} isWorldModel Whether this model is the world model
    */
-  prepareModel(_model) {
+  // eslint-disable-next-line no-unused-vars
+  prepareModel(_model, isWorldModel = false) {
     // Sprites don't need GPU preparation - geometry is generated per-frame
   }
 

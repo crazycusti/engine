@@ -539,10 +539,10 @@ export class WebSocketDriver extends BaseDriver {
   /**
    * WebSocketDriver only listens in dedicated server mode
    * Browser environments cannot create WebSocket servers
-   * @returns {boolean} true if should listen
+   * @returns {boolean} true if should listen and can listen
    */
   ShouldListen() {
-    return registry.isDedicatedServer;
+    return registry.isDedicatedServer && NET.server;
   }
 
   Listen(listening) {
@@ -609,6 +609,10 @@ export class WebRTCDriver extends BaseDriver {
 
     // Try to connect to local signaling server first, fallback to same host
     this.signalingUrl = `${protocol}//${location.hostname}:8787/signaling`;
+
+    if (registry.urlFns && typeof registry.urlFns.signalingURL === 'function') {
+      this.signalingUrl = registry.urlFns.signalingURL();
+    }
 
     this.initialized = true;
     Con.DPrint(`WebRTCDriver: Initialized with signaling at ${this.signalingUrl}\n`);

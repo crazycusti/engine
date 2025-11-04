@@ -545,15 +545,17 @@ Host.Status_f = function() {
     print = Host.ClientPrint;
   }
   print('hostname: ' + NET.hostname.string + '\n');
+  // TODO: add NET.listenAddress or anything here, e.g. -ip and -port OR what for instance WebRTC’s session ID is
   print('version : ' + Def.productVersion + ' (' + SV.server.gameVersion + ')\n');
   print('map     : ' + SV.server.mapname + '\n');
   print('game    : ' + SV.server.gameName + '\n');
-  print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' max\n');
+  print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' allocated\n');
   print('players : ' + NET.activeconnections + ' active (' + SV.svs.maxclients + ' max)\n\n');
 
   const lines = [];
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
+    /** @type {ServerClient} */
     const client = SV.svs.clients[i];
     if (!client.active) {
       continue;
@@ -566,7 +568,7 @@ Host.Status_f = function() {
       Q.secsToTime(NET.time - client.netconnection.connecttime).padEnd(9),
       client.ping.toFixed(0).padStart(4),
       new Number(0).toFixed(0).padStart(4),   // TODO: add loss
-      'active', // TODO: add state
+      (client.spawned ? 'ready' : 'pending').padEnd(7),
       client.netconnection.address,
     ];
 
@@ -577,8 +579,8 @@ Host.Status_f = function() {
     return;
   }
 
-  print('id  | name                | unique id           | play time | ping | loss | state  | adr\n');
-  print('----|---------------------|---------------------|-----------|------|------|--------|-----\n');
+  print('id  | name                | unique id           | play time | ping | loss | state   | adr\n');
+  print('----|---------------------|---------------------|-----------|------|------|---------|-----\n');
 
   for (const line of lines) {
     print(line);

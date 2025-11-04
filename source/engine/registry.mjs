@@ -27,6 +27,8 @@ export const registry = {
 
   WebSocket: null,
 
+  urlFns: null,
+
   /** @type {boolean} true, when running in server mode */
   isDedicatedServer: null,
 };

@@ -20,8 +20,10 @@ import Sbar from './client/Sbar.mjs';
 import IN from './client/IN.mjs';
 
 export default class EngineLauncher {
-  static async Launch() {
+  static async Launch(/** @type {typeof registry.urlFns} */ urlFns) {
     console.log('Launching engine in browser mode...');
+
+    registry.urlFns = urlFns;
 
     // set some global flags
     registry.isDedicatedServer = false;

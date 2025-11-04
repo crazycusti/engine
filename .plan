@@ -330,6 +330,14 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-11-04
+
+* fixed an issue with blending deluxemaps
+* some typing compliance issues
+* asked Claude to explain DrawSkyBox, it’s neatly commented now
+  * I’m thinking of having Source engine style skyboxes
+* prepared a few more things for serving files from a CDN
+
 ### 2025-11-01
 
 * added WebRTC and master server (for lobbies) support

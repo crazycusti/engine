@@ -2,6 +2,7 @@ import sampleBSpline from '../../shared/BSpline.mjs';
 import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
+import Cmd from '../common/Cmd.mjs';
 // import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { CorruptedResourceError, MissingResourceError } from '../common/Errors.mjs';
@@ -170,6 +171,8 @@ export class Navigation {
   static nav_debug_graph = null;
   /** @type {Cvar} */
   static nav_debug_path = null;
+  /** @type {Cvar|null} NOTE: unavailable outside of dedicated server */
+  static nav_build_process = null;
 
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
@@ -203,6 +206,10 @@ export class Navigation {
   }
 
   static Init() {
+    if (registry.isDedicatedServer) {
+      this.nav_build_process = new Cvar('nav_build_process', '0', Cvar.FLAG.NONE, 'if set to 1, it will force build the nav mesh and quit');
+    }
+
     this.nav_save_waypoints = new Cvar('nav_save_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will save all extracted waypoints to nav file');
     this.nav_debug_graph = new Cvar('nav_debug_graph', '0', Cvar.FLAG.NONE, 'if set to 1, will render the navigation graph for debugging');
     this.nav_debug_waypoints = new Cvar('nav_debug_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will render all waypoints for debugging');
@@ -241,6 +248,10 @@ export class Navigation {
 
   init() {
     Con.Print('Navigation: initializing navigation graph...\n');
+
+    if (Navigation.nav_build_process?.value) {
+      this.build();
+    }
 
     if (registry.isDedicatedServer) {
       this.#initWorker();
@@ -1449,7 +1460,12 @@ export class Navigation {
     Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes.\n');
 
     this.save()
-      .then(() => Con.PrintSuccess('Navigation: navigation graph saved!\n'))
+      .then(() => {
+        Con.PrintSuccess('Navigation: navigation graph saved!\n');
+        if (Navigation.nav_build_process?.value) {
+          Cmd.ExecuteString('quit');
+        }
+      })
       .catch((err) => Con.PrintError('Navigation: failed to save navigation graph: ' + err + '\n'));
 
     if (R) {

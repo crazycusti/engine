@@ -51,8 +51,10 @@ export class ModelRenderer {
    * Called when model is first loaded or needs rebuilding.
    * Uses global `gl` from registry.
    * @param {import('../../common/model/BaseModel.mjs').BaseModel} _model The model to prepare
+   * @param {boolean} isWorldModel Whether this model is the world model
    */
-  prepareModel(_model) {
+  // eslint-disable-next-line no-unused-vars
+  prepareModel(_model, isWorldModel = false) {
     throw new NotImplementedError('ModelRenderer.prepareModel must be implemented');
   }
 

@@ -127,8 +127,10 @@ export class MeshModelRenderer extends ModelRenderer {
   /**
    * Prepare mesh model for rendering (build display lists, upload to GPU).
    * @param {import('../../common/model/MeshModel.mjs').MeshModel} model The mesh model to prepare
+   * @param {boolean} isWorldModel Whether this model is the world model
    */
-  prepareModel(model) {
+  // eslint-disable-next-line no-unused-vars
+  prepareModel(model, isWorldModel = false) {
     const m = model;
 
     // Clean up existing buffers if present
