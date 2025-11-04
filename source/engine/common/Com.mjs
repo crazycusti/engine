@@ -279,12 +279,26 @@ export default class COM {
     return true;
   };
 
-  static GetNetpath(filename, gameDir) {
+  static GetNetpath(filename, gameDir = null) {
+    if (gameDir === null) {
+      gameDir = this.GetGamedir();
+    }
+
     if (registry.urlFns && typeof registry.urlFns.cdnURL === 'function') {
       return registry.urlFns.cdnURL(filename, gameDir);
     }
 
     return `${location.protocol}//${location.host}/qfs/${filename}`;
+  }
+
+  /**
+   * Get the current game directory
+   * @returns {string} game name, e.g. 'id1'
+   */
+  static GetGamedir() {
+    return this.searchpaths.length > 0
+      ? this.searchpaths[this.searchpaths.length - 1].filename
+      : defaultGame;
   }
 
   /**
@@ -303,9 +317,7 @@ export default class COM {
     eventBus.publish('com.fs.being', filename);
 
     // Determine file path based on active game directory
-    const gameDir = this.searchpaths.length > 0
-      ? this.searchpaths[this.searchpaths.length - 1].filename
-      : defaultGame;
+    const gameDir = this.GetGamedir();
     const netpath = this.GetNetpath(filename, gameDir);
 
     // 1) Try localStorage first
@@ -346,9 +358,7 @@ export default class COM {
     eventBus.publish('com.fs.being', filename);
 
     // Determine file path based on active game directory
-    const gameDir = this.searchpaths.length > 0
-      ? this.searchpaths[this.searchpaths.length - 1].filename
-      : defaultGame;
+    const gameDir = this.GetGamedir();
     const netpath = this.GetNetpath(filename, gameDir);
 
     // 1) Try localStorage first
