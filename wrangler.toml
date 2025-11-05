@@ -8,3 +8,7 @@ preview_urls = false
 [assets]
 directory = "dist"
 binding = "ASSETS"
+
+[[routes]]
+pattern = "play.quakeshack.dev"
+custom_domain = true

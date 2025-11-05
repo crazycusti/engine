@@ -99,7 +99,7 @@ export class ServerMessages {
     const message = client.message;
 
     MSG.WriteByte(message, Protocol.svc.print);
-    MSG.WriteString(message, `\x02\nVERSION ${Def.productVersion} SERVER (${SV.server.gameVersion})\n`);
+    MSG.WriteString(message, `\x02\nVERSION ${Host.version.string} SERVER (${SV.server.gameVersion})\n`);
 
     MSG.WriteByte(message, Protocol.svc.serverdata);
     MSG.WriteByte(message, Protocol.version);

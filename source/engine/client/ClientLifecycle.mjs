@@ -9,9 +9,10 @@ import { MoveVars, Pmove } from '../common/Pmove.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-let { PR, S } = registry;
+let { Host, PR, S } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
+  Host = registry.Host;
   PR = registry.PR;
   S = registry.S;
 });
@@ -35,11 +36,11 @@ export default class ClientLifecycle {
     CL.gameCapabilities = PR.capabilities;
 
     if (!PR.QuakeJS?.identification) {
-      document.title = `${Def.productName} (${Def.productVersion})`;
+      document.title = `${Def.productName} (${Host.version.string})`;
       return;
     }
 
-    document.title = `${PR.QuakeJS.identification.name} (${PR.QuakeJS.identification.version.join('.')}) on ${Def.productName} (${Def.productVersion})`;
+    document.title = `${PR.QuakeJS.identification.name} (${PR.QuakeJS.identification.version.join('.')}) on ${Def.productName} (${Host.version.string})`;
 
     if (PR.QuakeJS.ClientGameAPI) {
       PR.QuakeJS.ClientGameAPI.Init(ClientEngineAPI);

@@ -108,7 +108,7 @@ function parseServerData(CL) {
       throw new HostError('Server is running game ' + game + ', not ' + COM.game + '\n');
     }
 
-    document.title = `${game} on ${Def.productName} (${Def.productVersion})`;
+    document.title = `${game} on ${Def.productName} (${Host.version.string})`;
   }
 
   CL.state.maxclients = MSG.ReadByte();

@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => ({
     ),
     '__BUILD_MODE__': JSON.stringify(mode),
     '__BUILD_TIMESTAMP__': JSON.stringify(new Date().toISOString()),
+    '__BUILD_COMMIT_HASH__': JSON.stringify(process.env.WORKERS_CI_COMMIT_SHA || null),
   },
   resolve: {
     alias: {

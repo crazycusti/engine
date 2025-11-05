@@ -85,6 +85,11 @@ Host.FindMaxClients = function() {
 };
 
 Host.InitLocal = function() {
+  const commitHash = registry.buildConfig?.commitHash;
+  const version = commitHash ? `${Def.productVersion}+${commitHash}` : Def.productVersion;
+
+  Host.version = new Cvar('version', version, Cvar.FLAG.READONLY);
+
   Host.InitCommands();
   Host.framerate = new Cvar('host_framerate', '0');
   Host.speeds = new Cvar('host_speeds', '0');
@@ -546,7 +551,7 @@ Host.Status_f = function() {
   }
   print('hostname: ' + NET.hostname.string + '\n');
   // TODO: add NET.listenAddress or anything here, e.g. -ip and -port OR what for instance WebRTC’s session ID is
-  print('version : ' + Def.productVersion + ' (' + SV.server.gameVersion + ')\n');
+  print('version : ' + Host.version.string + ' (' + SV.server.gameVersion + ')\n');
   print('map     : ' + SV.server.mapname + '\n');
   print('game    : ' + SV.server.gameName + '\n');
   print('edicts  : ' + SV.server.num_edicts + ' used of ' + SV.server.edicts.length + ' allocated\n');
@@ -1043,14 +1048,6 @@ Host.Name_f = function(...names) { // signon 2, step 1
   MSG.WriteByte(msg, Protocol.svc.updatename);
   MSG.WriteByte(msg, Host.client.num);
   MSG.WriteString(msg, newName);
-};
-
-Host.Version_f = function() {
-  Con.Print('Version ' + Def.productVersion + '\n');
-
-  if (registry.buildConfig) {
-    Con.Print('Built datetime: ' + registry.buildConfig.timestamp + '\n');
-  }
 };
 
 Host.Say_f = function(teamonly, message) {
@@ -1556,7 +1553,6 @@ Host.InitCommands = function() {
   Cmd.AddCommand('reconnect', Host.Reconnect_f);
   Cmd.AddCommand('name', Host.Name_f);
   Cmd.AddCommand('noclip', Host.Noclip_f);
-  Cmd.AddCommand('version', Host.Version_f);
   Cmd.AddCommand('say', Host.Say_All_f);
   Cmd.AddCommand('say_team', Host.Say_Team_f);
   Cmd.AddCommand('tell', Host.Tell_f);

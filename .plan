@@ -330,6 +330,10 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-11-05
+
+* more CI/CD related improvements
+
 ### 2025-11-04
 
 * fixed an issue with blending deluxemaps

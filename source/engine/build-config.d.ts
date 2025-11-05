@@ -6,6 +6,8 @@ export interface BuildConfig {
   mode: string;
   /** Build timestamp */
   timestamp: string;
+  /** Git commit hash during build */
+  commitHash: string | null;
 };
 
 /**
