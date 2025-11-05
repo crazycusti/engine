@@ -8,7 +8,3 @@ preview_urls = false
 [assets]
 directory = "dist"
 binding = "ASSETS"
-
-# Environment variables (set in Cloudflare dashboard):
-# VITE_SIGNALING_URL = "https://api.quakeshack.dev/signaling"
-# VITE_CDN_URL_PATTERN = "https://cdn.quakeshack.dev/{gameDir}/{filename}"
