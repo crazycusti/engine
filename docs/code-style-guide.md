@@ -105,6 +105,8 @@ Mod.type.brush;            // CORRECT!
 
 **Important:** Even in files that already have registry access, always set up the destructuring prolog at the top of the file. Never use `registry.ModuleName` syntax anywhere in the code.
 
+**Also**: Do not carry things from the registry in context objects or anything like that. Things being put on the registry are always considered being a singleton.
+
 ### What Goes in the Registry
 
 **Only modules that need to avoid circular dependencies** should be in the registry.
@@ -123,6 +125,12 @@ eventBus.subscribe('gl.ready', () => {
   gl = GL.gl;
 });
 ```
+
+### What is not in the Registry
+
+There are a couple of classes that are not in the registry, such as `Cmd` and `Cvar` since they are encapsulated enough to not rely on the registry pattern.
+
+Whenever there is no circular dependency, there’s no need for the registry anymore.
 
 ### Event Bus Usage
 
@@ -273,7 +281,7 @@ _renderOpaqueSurfaces(clmodel) {
 
 ### Variables
 - Use descriptive names, not abbreviations
-- Prefer `clmodel` over `m` for model
+- Prefer `model` (or `clmodel` in client context) over `m` for model
 - Prefer `entity` or `e` over `ent`
 
 ### Constants
@@ -340,6 +348,7 @@ export const modelRendererRegistry = new ModelRendererRegistry();
 2. **Minimize state changes** - Setup once, render many
 3. **Use streaming buffers** - For dynamic geometry (sprites)
 4. **Cache expensive calculations** - Store in entity or model
+5. **Language features over function calls** – e.g. always use `for (const i of list)` over `list.forEach(…)`
 
 ## Common Pitfalls to Avoid
 
