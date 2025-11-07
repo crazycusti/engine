@@ -145,7 +145,7 @@ export default class Con {
   }
 
   static DrawInput() {
-    if ((Key.dest.value !== Key.dest.console) && (Con.forcedup !== true)) {
+    if (Key.dest.value !== Key.dest.console) {
       return;
     }
     let text = ']' + Key.edit_line + String.fromCharCode(10 + ((Host.realtime * 4.0) & 1));
@@ -184,6 +184,12 @@ export default class Con {
     lines = Math.floor(lines * VID.height * 0.005);
     Draw.ConsoleBackground(lines);
     Con.vislines = lines;
+
+    if (CL.cls.changelevel) {
+      // do not draw console during level changes
+      return;
+    }
+
     const width = (VID.width / 8) - 2;
     let rows;
     let y = lines - 16;

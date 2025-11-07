@@ -330,6 +330,11 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-11-07
+
+* started playing around with menu refactoring
+* need to redo the console/menu flow, it’s not coherant anymore
+
 ### 2025-11-05
 
 * more CI/CD related improvements

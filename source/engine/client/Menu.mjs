@@ -37,6 +37,7 @@ M.state =
   quit: 9,
 
   alert: 10,
+  test: 11,
 
   value: 0,
 };
@@ -136,7 +137,11 @@ M.Main_Draw = function() {
 M.Main_Key = function(k) {
   switch (k) {
     case Key.k.escape:
-      Key.dest.value = Key.dest.game;
+      if (CL.cls.state === CL.active.connected) {
+        Key.dest.value = Key.dest.game;
+      } else {
+        Key.dest.value = Key.dest.console;
+      }
       M.state.value = M.state.none;
       CL.cls.demonum = M.save_demonum;
       if ((CL.cls.demonum !== -1) && (CL.cls.demoplayback !== true) && (CL.cls.state !== CL.active.connected)) {
@@ -950,6 +955,36 @@ M.Alert_Key = function(k) {
   }
 };
 
+const testMenu = null;
+
+M.Test_Draw = function() {
+  // M.Print(160 - 48, 100, 'Mmm... this is nice!');
+  testMenu.draw();
+};
+
+M.Test_Key = function(k) {
+  if (k === Key.k.enter || k === Key.k.escape) {
+    Key.dest.value = Key.dest.game;
+    M.state.value = M.state.none;
+    testMenu.deactivate();
+    return;
+  }
+
+  testMenu.handleInput(k);
+};
+
+M.Menu_Test_f = function() {
+  if (M.state.value === M.state.test) {
+    return;
+  }
+  M.wasInMenus = (Key.dest.value === Key.dest.menu);
+  Key.dest.value = Key.dest.menu;
+  M.state.value = M.state.test;
+  M.entersound = true;
+
+  testMenu.activate();
+};
+
 M.Quit_Draw = function() {
   if (M.wasInMenus === true) {
     M.state.value = M.quit_prevstate;
@@ -996,6 +1031,7 @@ M.Init = async function() {
   Cmd.AddCommand('menu_keys', M.Menu_Keys_f);
   Cmd.AddCommand('help', M.Menu_Help_f);
   Cmd.AddCommand('menu_quit', M.Menu_Quit_f);
+  Cmd.AddCommand('menu_test', M.Menu_Test_f);
 
   M.sfx_menu1 = S.PrecacheSound('misc/menu1.wav');
   M.sfx_menu2 = S.PrecacheSound('misc/menu2.wav');
@@ -1014,6 +1050,7 @@ M.Init = async function() {
 
   M.qplaque = Draw.LoadPicFromLumpDeferred('qplaque');
 
+  // eslint-disable-next-line require-atomic-updates
   M.menudot = await Promise.all([
     Draw.LoadPicFromLump('menudot1'),
     Draw.LoadPicFromLump('menudot2'),
@@ -1023,7 +1060,9 @@ M.Init = async function() {
     Draw.LoadPicFromLump('menudot6'),
   ]);
 
+  // eslint-disable-next-line require-atomic-updates
   M.ttl_main = await Draw.LoadPicFromLump('ttl_main');
+  // eslint-disable-next-line require-atomic-updates
   M.mainmenu = await Draw.LoadPicFromLump('mainmenu');
 
   M.ttl_sgl = Draw.LoadPicFromLumpDeferred('ttl_sgl');
@@ -1074,16 +1113,12 @@ M.Init = async function() {
 };
 
 M.Draw = function() {
-  if ((M.state.value === M.state.none) || (Key.dest.value !== Key.dest.menu)) {
+  if (M.state.value === M.state.none || Key.dest.value !== Key.dest.menu) {
     return;
   }
 
-  if (M.recursiveDraw !== true) {
-    if (SCR.con_current !== 0) {
-      Draw.ConsoleBackground(VID.height);
-    } else {
-      Draw.FadeScreen();
-    }
+  if (!M.recursiveDraw) {
+    Draw.FadeScreen();
   } else {
     M.recursiveDraw = false;
   }
@@ -1118,6 +1153,9 @@ M.Draw = function() {
       break;
     case M.state.alert:
       M.Alert_Draw();
+      break;
+    case M.state.test:
+      M.Test_Draw();
       break;
   }
   if (M.entersound === true) {
@@ -1157,6 +1195,9 @@ M.Keydown = function(key) {
       return;
     case M.state.alert:
       M.Alert_Key(key);
+      return;
+    case M.state.test:
+      M.Test_Key(key);
       return;
   }
 };

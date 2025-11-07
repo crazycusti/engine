@@ -314,7 +314,8 @@ export default class CL {
     }
 
     if (this.cls.changelevel) {
-      Draw.String(VID.width / 2 - 64, VID.height / 2 - 16, 'Loading', 2);
+      Draw.BlackScreen();
+      Draw.String(VID.width / 2 - 64, VID.height / 2 - 16, 'Loading', 2); // TODO: use the loading graphic
     }
   }
 
