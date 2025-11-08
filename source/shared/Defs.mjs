@@ -167,9 +167,13 @@ export const channel = Object.freeze({
  * @enum {number}
  */
 export const attn = Object.freeze({
+  /** whole map */
   ATTN_NONE: 0,
+  /** around 1,000 units */
   ATTN_NORM: 1,
+  /** around 500 units */
   ATTN_IDLE: 2,
+  /** around 300 units */
   ATTN_STATIC: 3,
 });
 

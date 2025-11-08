@@ -1,6 +1,7 @@
 import Cvar from '../common/Cvar.mjs';
 import { HostError } from '../common/Errors.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { formatIP } from './Misc.mjs';
 
 let { COM, Con, NET, Sys, SV } = registry;
 
@@ -19,10 +20,14 @@ export class QSocket {
   static STATE_DISCONNECTING = 'disconnecting';
   static STATE_DISCONNECTED = 'disconnected';
 
-  constructor(time, driver) {
+  /**
+   * @param {BaseDriver} driver - The driver instance (direct reference, not index)
+   * @param {number} time - Connection time
+   */
+  constructor(driver, time) {
+    this.driver = driver; // Direct reference to driver instance
     this.connecttime = time;
     this.lastMessageTime = time;
-    this.driver = driver;
     this.address = null;
     this.state = QSocket.STATE_NEW;
 
@@ -37,45 +42,51 @@ export class QSocket {
     return `QSocket(${this.address}, ${this.state})`;
   }
 
-  /**
-   *
-   * @returns {BaseDriver} the driver for this socket
-   */
-  _getDriver() {
-    console.assert(NET.drivers[this.driver], 'QSocket needs a valid driver');
-
-    return NET.drivers[this.driver]; // FIXME: global ref
-  }
-
   GetMessage() {
-    return this._getDriver().GetMessage(this);
+    return this.driver.GetMessage(this);
   }
 
   SendMessage(data) {
-    return this._getDriver().SendMessage(this, data);
+    return this.driver.SendMessage(this, data);
   }
 
   SendUnreliableMessage(data) {
-    return this._getDriver().SendUnreliableMessage(this, data);
+    return this.driver.SendUnreliableMessage(this, data);
   }
 
   CanSendMessage() {
-    return this._getDriver().CanSendMessage(this);
+    return this.driver.CanSendMessage(this);
   }
 
   Close() {
-    return this._getDriver().Close(this);
+    return this.driver.Close(this);
   }
 };
 
 export class BaseDriver {
-  constructor() {
+  /**
+   * @param {string} name - Unique driver name (e.g., 'loop', 'websocket', 'webrtc')
+   */
+  constructor(name) {
+    this.name = name;
     this.initialized = false;
-    this.driverlevel = null;
   }
 
-  Init(driverlevel) {
-    this.driverlevel = driverlevel;
+  Init() {
+    return false;
+  }
+
+  Shutdown() {
+    this.initialized = false;
+  }
+
+  /**
+   * Check if this driver can handle the given host string
+   * @param {string} host - Host string to check
+   * @returns {boolean} true if this driver can handle the host
+   */
+  // eslint-disable-next-line no-unused-vars
+  canHandle(host) {
     return false;
   }
 
@@ -124,27 +135,37 @@ export class BaseDriver {
     return true; // Default: always listen
   }
 
-  Listen() {
+  // eslint-disable-next-line no-unused-vars
+  Listen(shouldListen) {
+  }
+
+  /**
+   * @returns {string|null} the address this driver is listening on, or null if not applicable
+   */
+  GetListenAddress() {
+    return null;
   }
 };
 
 export class LoopDriver extends BaseDriver {
   constructor() {
-    super();
+    super('loop');
     this._server = null;
     this._client = null;
     this.localconnectpending = false;
   }
 
-  Init(driverlevel) {
-    this.driverlevel = driverlevel;
-
+  Init() {
     this._server = null;
     this._client = null;
     this.localconnectpending = false;
 
     this.initialized = true;
     return true;
+  }
+
+  canHandle(host) {
+    return host === 'local';
   }
 
   Connect(host) {
@@ -156,8 +177,7 @@ export class LoopDriver extends BaseDriver {
     this.localconnectpending = true;
 
     if (this._server === null) {
-      this._server = NET.NewQSocket();
-      this._server.driver = this.driverlevel;
+      this._server = NET.NewQSocket(this);
       this._server.address = 'local server';
     }
 
@@ -165,8 +185,7 @@ export class LoopDriver extends BaseDriver {
     this._server.canSend = true;
 
     if (this._client === null) {
-      this._client = NET.NewQSocket();
-      this._client.driver = this.driverlevel;
+      this._client = NET.NewQSocket(this);
       this._client.address = 'local client';
     }
 
@@ -278,16 +297,26 @@ export class LoopDriver extends BaseDriver {
     sock.state = QSocket.STATE_DISCONNECTED;
   }
 
-  Listen() {
+  // eslint-disable-next-line no-unused-vars
+  Listen(shouldListen) {
   }
 };
 
 export class WebSocketDriver extends BaseDriver {
-  Init(driverlevel) {
-    super.Init(driverlevel);
+  constructor() {
+    super('websocket');
+    this.newConnections = [];
+    this.wss = null;
+  }
+
+  Init() {
     this.initialized = true;
     this.newConnections = [];
     return true;
+  }
+
+  canHandle(host) {
+    return /^wss?:\/\//i.test(host);
   }
 
   Connect(host) {
@@ -304,7 +333,7 @@ export class WebSocketDriver extends BaseDriver {
     }
 
     // we can open a QSocket
-    const sock = NET.NewQSocket(); // TODO: what about (NET.time, this.driverlevel);
+    const sock = NET.NewQSocket(this);
 
     try {
       sock.address = url.toString();
@@ -481,7 +510,7 @@ export class WebSocketDriver extends BaseDriver {
   _OnConnectionServer(ws, req) {
     Con.DPrint('WebSocketDriver._OnConnectionServer: received new connection\n');
 
-    const sock = NET.NewQSocket();
+    const sock = NET.NewQSocket(this);
 
     if (!sock) {
       Con.PrintError('WebSocketDriver._OnConnectionServer: failed to allocate new socket, dropping client\n');
@@ -490,9 +519,8 @@ export class WebSocketDriver extends BaseDriver {
       return;
     }
 
-    sock.driver = this.driverlevel;
     sock.driverdata = ws;
-    sock.address = NET.FormatIP((req.headers['x-forwarded-for'] || req.socket.remoteAddress), req.socket.remotePort);
+    sock.address = formatIP((req.headers['x-forwarded-for'] || req.socket.remoteAddress), req.socket.remotePort);
 
     // these event handlers will feed into the message buffer structures
     sock.receiveMessage = [];
@@ -561,6 +589,20 @@ export class WebSocketDriver extends BaseDriver {
     this.wss.on('connection', this._OnConnectionServer.bind(this));
     this.newConnections = [];
   }
+
+  GetListenAddress() {
+    if (!this.wss) {
+      return null;
+    }
+
+    const addr = this.wss.address();
+
+    if (typeof addr === 'string') {
+      return addr;
+    }
+
+    return formatIP(addr.address, addr.port);
+  }
 };
 
 /**
@@ -571,7 +613,7 @@ export class WebSocketDriver extends BaseDriver {
  */
 export class WebRTCDriver extends BaseDriver {
   constructor() {
-    super();
+    super('webrtc');
     this.signalingUrl = null;
     this.signalingWs = null;
     this.sessionId = null;
@@ -592,9 +634,7 @@ export class WebRTCDriver extends BaseDriver {
     ];
   }
 
-  Init(driverlevel) {
-    super.Init(driverlevel);
-
+  Init() {
     // WebRTC only makes sense in browser environment
     if (registry.isDedicatedServer) {
       // Don't initialize in dedicated server mode
@@ -617,6 +657,10 @@ export class WebRTCDriver extends BaseDriver {
     this.initialized = true;
     Con.DPrint(`WebRTCDriver: Initialized with signaling at ${this.signalingUrl}\n`);
     return true;
+  }
+
+  canHandle(host) {
+    return /^webrtc:\/\//i.test(host) || host === 'host';
   }
 
   /**
@@ -651,8 +695,7 @@ export class WebRTCDriver extends BaseDriver {
     }
 
     // Create a QSocket for tracking this connection attempt
-    const sock = NET.NewQSocket();
-    sock.driver = this.driverlevel;
+    const sock = NET.NewQSocket(this);
     sock.state = QSocket.STATE_CONNECTING;
     sock.address = shouldCreateSession ? 'WebRTC Host' : `WebRTC Session ${sessionId}`;
 
@@ -737,7 +780,7 @@ export class WebRTCDriver extends BaseDriver {
     // Call any pending onSignalingReady callbacks
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const sock = NET.activeSockets[i];
-      if (sock && sock.driver === this.driverlevel && sock.driverdata?.onSignalingReady) {
+      if (sock && sock.driver === this && sock.driverdata?.onSignalingReady) {
         sock.driverdata.onSignalingReady();
         delete sock.driverdata.onSignalingReady;
       }
@@ -960,7 +1003,7 @@ export class WebRTCDriver extends BaseDriver {
 
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const sock = NET.activeSockets[i];
-      if (sock && sock.driver === this.driverlevel && sock.state === QSocket.STATE_CONNECTING) {
+      if (sock && sock.driver === this && sock.state === QSocket.STATE_CONNECTING) {
         // If the error mentions a session ID, try to match it
         if (sock.driverdata?.sessionId && message.error.includes(sock.driverdata.sessionId)) {
           failedSocket = sock;
@@ -1013,7 +1056,7 @@ export class WebRTCDriver extends BaseDriver {
     let sock = null;
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const s = NET.activeSockets[i];
-      if (s && s.driver === this.driverlevel && s.driverdata?.isHost && !s.driverdata?.sessionId) {
+      if (s && s.driver === this && s.driverdata?.isHost && !s.driverdata?.sessionId) {
         sock = s;
         break;
       }
@@ -1077,8 +1120,7 @@ export class WebRTCDriver extends BaseDriver {
     // If we're the host, create a new socket for this peer and initiate connection
     if (this.isHost) {
       // Create a QSocket for this peer connection
-      const peerSock = NET.NewQSocket();
-      peerSock.driver = this.driverlevel;
+      const peerSock = NET.NewQSocket(this);
       peerSock.state = QSocket.STATE_CONNECTING;
       peerSock.address = `WebRTC Peer ${message.peerId}`;
 
@@ -1405,7 +1447,7 @@ export class WebRTCDriver extends BaseDriver {
   _FindSocketBySession(sessionId) {
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const sock = NET.activeSockets[i];
-      if (sock && sock.driver === this.driverlevel && sock.driverdata?.sessionId === sessionId) {
+      if (sock && sock.driver === this && sock.driverdata?.sessionId === sessionId) {
         return sock;
       }
     }
@@ -1419,7 +1461,7 @@ export class WebRTCDriver extends BaseDriver {
   _FindSocketByPeerId(peerId) {
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const sock = NET.activeSockets[i];
-      if (sock && sock.driver === this.driverlevel && sock.driverdata?.peerId === peerId) {
+      if (sock && sock.driver === this && sock.driverdata?.peerId === peerId) {
         return sock;
       }
     }
@@ -1612,8 +1654,7 @@ export class WebRTCDriver extends BaseDriver {
       }
 
       // Create a QSocket for tracking this host session
-      const sock = NET.NewQSocket();
-      sock.driver = this.driverlevel;
+      const sock = NET.NewQSocket(this);
       sock.state = QSocket.STATE_CONNECTING;
       sock.address = 'WebRTC Host';
 
@@ -1659,10 +1700,10 @@ export class WebRTCDriver extends BaseDriver {
       this._StopPingInterval();
       this._StopServerInfoSubscriptions();
 
-      // Close all sockets (host and peers)
+      // Close all sockets (host and peers) that belong to this driver
       for (let i = NET.activeSockets.length - 1; i >= 0; i--) {
         const sock = NET.activeSockets[i];
-        if (sock && sock.driver === this.driverlevel && sock.driverdata) {
+        if (sock && sock.driver === this && sock.driverdata) {
           // Close all peer connections
           if (sock.driverdata.peerConnections) {
             for (const pc of sock.driverdata.peerConnections.values()) {
@@ -1702,6 +1743,14 @@ export class WebRTCDriver extends BaseDriver {
       this.isHost = false;
       this.creatingSession = false;
     }
+  }
+
+  GetListenAddress() {
+    if (this.sessionId) {
+      return `webrtc://${this.sessionId}`;
+    }
+
+    return null;
   }
 };
 

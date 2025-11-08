@@ -4,6 +4,8 @@ import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { SzBuffer } from './MSG.mjs';
 import { BaseDriver, LoopDriver, QSocket, WebRTCDriver, WebSocketDriver } from './NetworkDrivers.mjs';
+import { DriverRegistry } from './DriverRegistry.mjs';
+import { InviteCommand } from './ConsoleCommands.mjs';
 
 const NET = {};
 
@@ -19,72 +21,76 @@ eventBus.subscribe('registry.frozen', () => {
   Sys = registry.Sys;
 });
 
-NET.FormatIP = function(ip, port) {
-  return ip.includes(':') ? `[${ip}]:${port}` : `${ip}:${port}`;
-};
-
-NET.activeSockets = [];
+NET.activeSockets = /** @type {QSocket[]} */ ([]);
 NET.message = new SzBuffer(16384, 'NET.message');
 NET.activeconnections = 0;
 NET.listening = false;
+NET.driverRegistry = /** @type {DriverRegistry} */ (null);
 
-/** @returns {QSocket} new QSocket */
-NET.NewQSocket = function() {
+/**
+ * @param {BaseDriver} driver responsible driver
+ * @returns {QSocket} new QSocket
+ */
+NET.NewQSocket = function(driver) {
   let i;
   for (i = 0; i < NET.activeSockets.length; i++) {
     if (NET.activeSockets[i].state === QSocket.STATE_DISCONNECTED) {
       break;
     }
   }
-  NET.activeSockets[i] = new QSocket(NET.time, NET.driverlevel);
+  NET.activeSockets[i] = new QSocket(driver, NET.time);
   return NET.activeSockets[i];
 };
 
-NET.Connect = function(host) {
+/**
+ * @param {string} address server address
+ * @returns {QSocket|null} socket or null on failure
+ */
+NET.Connect = function(address) {
   NET.time = Sys.FloatTime();
 
-  if (host === 'local') {
-    NET.driverlevel = 0; // Loop Driver
-    return NET.drivers[NET.driverlevel].Connect(host);
+  const driver = NET.driverRegistry.getClientDriver(address);
+
+  if (!driver) {
+    Con.PrintWarning(`No suitable network driver found for host: ${address}\n`);
+    return null;
   }
 
-  for (NET.driverlevel = 1; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    const dfunc = /** @type {BaseDriver} */ (NET.drivers[NET.driverlevel]);
-    if (dfunc.initialized !== true) {
-      continue;
-    }
-    let ret = dfunc.Connect(host);
-    if (ret === 0) {
-      CL.cls.state = CL.active.connecting;
-      Con.Print('trying...\n');
-      NET.start_time = NET.time;
-      NET.reps = 0;
-    }
-    if (ret != null) {
-      return ret;
-    }
+  const ret = driver.Connect(address);
+
+  if (ret === 0) {
+    CL.cls.state = CL.active.connecting;
+    Con.Print('trying...\n');
+    NET.start_time = NET.time;
+    NET.reps = 0;
   }
-  return null;
+
+  return ret;
 };
 
+/**
+ * Checks all initialized drivers for new connections to handle
+ * @returns {QSocket|null} new connection socket or null if none
+ */
 NET.CheckNewConnections = function() {
   NET.time = Sys.FloatTime();
-  let dfunc; let ret;
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    dfunc = NET.drivers[NET.driverlevel];
-    if (dfunc.initialized !== true) {
-      continue;
-    }
-    ret = dfunc.CheckNewConnections();
-    if (ret != null) {
+
+  // Check all initialized drivers for new connections
+  for (const driver of NET.driverRegistry.getInitializedDrivers()) {
+    const ret = driver.CheckNewConnections();
+    if (ret !== null) {
       return ret;
     }
   }
+
   return null;
 };
 
+/**
+ * @param {QSocket} sock connection handle
+ */
 NET.Close = function(sock) {
-  if (sock == null) {
+  if (!sock) {
     return;
   }
   if (sock.state === QSocket.STATE_DISCONNECTED) {
@@ -94,6 +100,10 @@ NET.Close = function(sock) {
   sock.Close();
 };
 
+/**
+ * @param {QSocket} sock connection handle
+ * @returns {number} channel number or -1 on failure
+ */
 NET.GetMessage = function(sock) {
   if (sock === null) {
     return -1;
@@ -104,7 +114,7 @@ NET.GetMessage = function(sock) {
   }
   NET.time = Sys.FloatTime();
   const ret = sock.GetMessage();
-  if (sock.driver !== 0) { // FIXME: hardcoded check for loopback driver
+  if (sock.driver instanceof LoopDriver) { // FIXME: hardcoded check for loopback driver
     if (ret === 0) {
       if ((NET.time - sock.lastMessageTime) > NET.messagetimeout.value) {
         Con.DPrint(`NET.GetMessage: message timeout for ${sock.address}\n`);
@@ -119,7 +129,7 @@ NET.GetMessage = function(sock) {
 };
 
 NET.SendMessage = function(sock, data) {
-  if (sock == null) {
+  if (!sock) {
     return -1;
   }
   if (sock.state === QSocket.STATE_DISCONNECTED) {
@@ -132,10 +142,9 @@ NET.SendMessage = function(sock, data) {
 };
 
 /**
- *
  * @param {QSocket} sock socket
  * @param {SzBuffer} data message
- * @returns
+ * @returns {number} -1 on failure, 1 on success
  */
 NET.SendUnreliableMessage = function(sock, data) {
   if (sock === null) {
@@ -151,25 +160,30 @@ NET.SendUnreliableMessage = function(sock, data) {
   return sock.SendUnreliableMessage(data);
 };
 
+/**
+ * Check if a socket can send messages
+ * @param {QSocket} sock - The socket to check
+ * @returns {boolean} true if the socket can send messages, false otherwise
+ */
 NET.CanSendMessage = function(sock) {
-  if (sock == null) {
-    return null;
+  if (!sock) {
+    return false;
   }
   if (sock.state === QSocket.STATE_DISCONNECTED) {
-    return null;
+    return false;
   }
   NET.time = Sys.FloatTime();
   return sock.CanSendMessage();
 };
 
-NET.SendToAll = function(data) {
+NET.SendToAll = function(data) { // FIXME: Host.client
   let i; let count = 0; const state1 = []; const state2 = [];
   for (i = 0; i < SV.svs.maxclients; i++) {
     Host.client = SV.svs.clients[i];
-    if (Host.client.netconnection == null) {
+    if (!Host.client.netconnection) {
       continue;
     }
-    if (Host.client.active !== true) {
+    if (!Host.client.active) {
       state1[i] = state2[i] = true;
       continue;
     }
@@ -226,30 +240,41 @@ NET.Init = function() {
 
   Cmd.AddCommand('maxplayers', NET.MaxPlayers_f);
   Cmd.AddCommand('listen', NET.Listen_f);
-  Cmd.AddCommand('net_drivers', NET.Drivers_f);
 
-  NET.drivers = [new LoopDriver(), new WebSocketDriver(), new WebRTCDriver()];
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    NET.drivers[NET.driverlevel].Init(NET.driverlevel);
+  if (!registry.isDedicatedServer) {
+    Cmd.AddCommand('invite', InviteCommand);
   }
+
+  if (!registry.isDedicatedServer) {
+    eventBus.subscribe('server.spawned', () => {
+      setTimeout(() => {
+        if (!NET.listening) {
+          return;
+        }
+
+        Con.PrintSuccess('Server is now listening for connections!\nType in "invite" to get a shareable link.\n');
+      }, 3000);
+    });
+  }
+
+  NET.driverRegistry = new DriverRegistry();
+  NET.driverRegistry.register('loopback', new LoopDriver());
+  NET.driverRegistry.register('websocket', new WebSocketDriver());
+  NET.driverRegistry.register('webrtc', new WebRTCDriver());
+  NET.driverRegistry.initialize();
 };
 
 NET.Shutdown = function() {
   NET.time = Sys.FloatTime();
+
   for (let i = 0; i < NET.activeSockets.length; i++) {
     NET.Close(NET.activeSockets[i]);
   }
+
+  NET.driverRegistry.shutdown();
 };
 
-NET.Drivers_f = function() {
-  for (const driver of NET.drivers) {
-    Con.Print(`${driver.constructor.name}\n`);
-    Con.Print(`...initialized: ${driver.initialized ? 'yes' : 'no'}\n`);
-    Con.Print('\n');
-  }
-};
-
-NET.Listen_f = function(isListening) {
+NET.Listen_f = function(isListening) { // TODO: turn into Cvar with hooks
   if (isListening === undefined) {
     Con.Print('"listen" is "' + (NET.listening ? 1 : 0) + '"\n');
     return;
@@ -257,18 +282,26 @@ NET.Listen_f = function(isListening) {
 
   NET.listening = +isListening ? true : false;
 
-  for (NET.driverlevel = 0; NET.driverlevel < NET.drivers.length; NET.driverlevel++) {
-    const driver = NET.drivers[NET.driverlevel];
-
-    if (!driver.initialized) {
-      continue;
-    }
-
-    // Let each driver decide if it should listen based on environment
+  for (const driver of NET.driverRegistry.getInitializedDrivers()) {
     if (driver.ShouldListen()) {
       driver.Listen(NET.listening);
     }
   }
+};
+
+/**
+ * @returns {string|null} listen address or null if not listening
+ */
+NET.GetListenAddress = function() {
+  // Try to get listen address from any driver that's listening
+  for (const driver of NET.driverRegistry.getInitializedDrivers()) {
+    const addr = driver.GetListenAddress();
+    if (addr) {
+      return addr;
+    }
+  }
+
+  return null;
 };
 
 NET.MaxPlayers_f = function(maxplayers) { // TODO: turn into Cvar with hooks

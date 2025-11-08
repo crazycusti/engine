@@ -330,6 +330,14 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-11-08
+
+* added `invite` console command to get a shareable link
+  * using `prompt` like a caveman
+  * https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share is special…
+* I need to think of a setTimeout infrastructure scoped to a valid game
+* now that I got vite for the frontend build process, I can go nuts with smaller files and cleaning up the code base
+
 ### 2025-11-07
 
 * started playing around with menu refactoring
