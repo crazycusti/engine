@@ -307,7 +307,7 @@ export default class COM {
    * @deprecated this blocks the main thread – use async version instead
    */
   static LoadFile(filename) {
-    console.trace('sync IO requested', filename);
+    console.warn('COM.LoadFile: sync IO requested', filename);
 
     filename = filename.toLowerCase();
 

@@ -155,6 +155,7 @@ export default class SV {
   /** state across maps */
   static svs = {
     changelevel_issued: false,
+    /** @type {ServerClient[]} */
     clients: [],
     maxclients: 0,
     maxclientslimit: 32,
@@ -381,7 +382,7 @@ export default class SV {
     return Mod.ForName('maps/' + mapname + '.bsp') !== null;
   }
 
-  static SpawnServer(mapname) {
+  static async SpawnServer(mapname) {
     // Ensure hostname is set
     if (NET.hostname.string.trim() === '') {
       NET.hostname.set('UNNAMED');
@@ -389,8 +390,6 @@ export default class SV {
 
     eventBus.publish('server.spawning', { mapname });
     Con.DPrint('SpawnServer: ' + mapname + '\n');
-
-    SV.svs.changelevel_issued = false;
 
     // If server is already active, notify clients about map change
     if (SV.server.active) {
@@ -406,12 +405,13 @@ export default class SV {
     SV.#initializeEdicts();
 
     // Load world model
-    if (!SV.#loadWorldModel(mapname)) {
+    if (!await SV.#loadWorldModel(mapname)) {
       return false;
     }
 
     // Setup area nodes for spatial partitioning
-    SV.areanodes = [];
+    // eslint-disable-next-line require-atomic-updates
+    SV.areanodes.length = 0;
     SV.area.createAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
 
     // Setup model and sound precache
@@ -443,8 +443,16 @@ export default class SV {
       return false;
     }
 
+    // Wait on all precached models to load
+    await SV.WaitForPrecachedResources();
+
+    // Populate all edicts by the entities file
+    await ED.LoadFromFile(SV.server.worldmodel.entities);
+
     // Finalize and notify clients
     SV.#finalizeServerSpawn(mapname);
+
+    SV.svs.changelevel_issued = false;
 
     return true;
   }
@@ -481,6 +489,9 @@ export default class SV {
       Con.Print('Server shut down due to a crash!\n');
       return;
     }
+
+    // reset all static server state
+    SV.svs.changelevel_issued = false;
 
     Con.Print('Server shut down.\n');
   }
@@ -659,14 +670,13 @@ export default class SV {
    * @param {string} mapname name of the new map
    */
   static #notifyClientsOfMapChange(mapname) {
-    const reconnect = new SzBuffer(128);
-    reconnect.writeByte(Protocol.svc.changelevel);
-    reconnect.writeString(mapname);
-    NET.SendToAll(reconnect);
-
     // Make sure that all client states are partially reset and ready for a new map
     for (const client of SV.svs.clients) {
-      client.changelevel();
+      if (!client.active) {
+        continue;
+      }
+
+      client.changelevel(mapname);
     }
 
     // Shut down navigation, since map has changed
@@ -685,6 +695,8 @@ export default class SV {
     SV.server.gameVersion = `${(PR.QuakeJS ? `${PR.QuakeJS.identification.version.join('.')} QuakeJS` : `${PR.crc} CRC`)}`;
     SV.server.gameName = PR.QuakeJS ? PR.QuakeJS.identification.name : COM.game;
     SV.server.gameCapabilities = PR.QuakeJS ? PR.QuakeJS.identification.capabilities : PR.capabilities;
+
+    Con.DPrint('Game progs loaded\n');
   }
 
   /**
@@ -692,7 +704,7 @@ export default class SV {
    * Preallocates edicts and resets server state variables.
    */
   static #initializeEdicts() {
-    SV.server.edicts = [];
+    SV.server.edicts.length = 0;
 
     // Preallocating up to Def.limits.edicts, we can extend that later during runtime
     for (let i = 0; i < Def.limits.edicts; i++) {
@@ -714,16 +726,18 @@ export default class SV {
     SV.server.time = 1.0;
     SV.server.lastcheck = 0;
     SV.server.lastchecktime = 0.0;
+
+    Con.DPrint('Edicts initialized\n');
   }
 
   /**
    * Loads and initializes the world model for the given map.
    * @param {string} mapname name of the map to load
-   * @returns {boolean} true if successful, false if map couldn't be loaded
+   * @returns {Promise<boolean>} true if successful, false if map couldn't be loaded
    */
-  static #loadWorldModel(mapname) {
+  static async #loadWorldModel(mapname) {
     SV.server.mapname = mapname;
-    SV.server.worldmodel = Mod.ForName('maps/' + mapname + '.bsp');
+    SV.server.worldmodel = await Mod.ForNameAsync('maps/' + mapname + '.bsp');
 
     if (SV.server.worldmodel === null) {
       Con.PrintWarning('SV.SpawnServer: Cannot start server, unable to load map ' + mapname + '\n');
@@ -732,6 +746,9 @@ export default class SV {
     }
 
     SV.pmove.setWorldmodel(SV.server.worldmodel);
+
+    Con.DPrint('World model loaded\n');
+
     return true;
   }
 
@@ -750,6 +767,8 @@ export default class SV {
       SV.server.model_precache[i + 1] = '*' + i;
       SV.server.models[i + 1] = Mod.ForName('*' + i);
     }
+
+    Con.DPrint('Model precache setup complete\n');
   }
 
   /**
@@ -768,6 +787,8 @@ export default class SV {
       }
     }
 
+    Con.DPrint('Player entities setup complete\n');
+
     return true;
   }
 
@@ -779,6 +800,8 @@ export default class SV {
     for (let i = 0; i <= Def.limits.lightstyles; i++) {
       SV.server.lightstyles[i] = '';
     }
+
+    Con.DPrint('Light styles initialized\n');
   }
 
   /**
@@ -807,6 +830,8 @@ export default class SV {
         console.assert(SV.server.edicts[1].entity[field] !== undefined, `Undefined clientdata field ${field}`);
       }
     }
+
+    Con.DPrint('Clientdata fields setup complete\n');
   }
 
   /**
@@ -836,6 +861,8 @@ export default class SV {
         SV.server.clientEntityFields[classname] = clientEntityField;
       }
     }
+
+    Con.DPrint('Extended entity fields setup complete\n');
   }
 
   /**
@@ -858,7 +885,23 @@ export default class SV {
 
     // Invoke the spawn function for the worldspawn
     SV.server.gameAPI.spawnPreparedEntity(ent);
+
+    Con.DPrint('Worldspawn entity spawned\n');
+
     return true;
+  }
+
+  static async WaitForPrecachedResources() {
+    for (let i = 0; i < SV.server.models.length; i++) {
+      const model = SV.server.models[i];
+
+      if (model instanceof Promise) {
+        // eslint-disable-next-line require-atomic-updates
+        SV.server.models[i] = await model;
+      }
+    }
+
+    Con.DPrint('Pending precached resources loaded\n');
   }
 
   /**
@@ -866,9 +909,6 @@ export default class SV {
    * @param {string} mapname name of the spawned map
    */
   static #finalizeServerSpawn(mapname) {
-    // Populate all edicts by the entities file
-    ED.LoadFromFile(SV.server.worldmodel.entities);
-
     SV.server.active = true;
     SV.server.loading = false;
 

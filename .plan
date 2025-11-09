@@ -330,6 +330,13 @@ class MainMenu extends BaseMenu {
 
 ## Log
 
+### 2025-11-10
+
+* some of the stuff is utterly cursed, this time:
+  * handling loading precached resources async and keeping the engine in a state to not break things
+  * I don’t know why NET.SendToAll even exists in the first place, removed it (probably later I’m gonna regret it)
+  * making sure that async `Cmd.Exec_f` is being processed in order
+
 ### 2025-11-08
 
 * added `invite` console command to get a shareable link

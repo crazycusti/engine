@@ -50,6 +50,11 @@ eventBus.subscribe('com.ready', () => {
   if (COM.rogue) {
     CommonEngineAPI.gameFlavors.push(GameFlavors.rogue);
   }
+
+  if (COM.registered.value === 1) {
+    ServerEngineAPI.registered = true;
+    ClientEngineAPI.registered = true;
+  }
 });
 
 /** @enum {string} */
@@ -60,9 +65,19 @@ export const GameFlavors = Object.freeze({
 });
 
 export class CommonEngineAPI {
+  /**
+   * Indicates whether the game is registered (not shareware).
+   * @type {boolean} true if the game is registered, false if it is shareware
+   */
+  static registered = false;
+
   /** @type {GameFlavors[]} */
   static gameFlavors = [];
 
+  /**
+   * Appends text to the command buffer.
+   * @param {string} text command strings to be added to the Cmd.text buffer
+   */
   static AppendConsoleText(text) {
     Cmd.text += text;
   }
@@ -122,14 +137,6 @@ export class CommonEngineAPI {
    */
   static ParseQC(qcContent) {
     return Mod.ParseQC(qcContent);
-  }
-
-  /**
-   * Indicates whether the game is registered (not shareware).
-   * @returns {boolean} true if the game is registered, false if it is shareware
-   */
-  static get registered() {
-    return COM.registered.value !== 0;
   }
 };
 
@@ -261,8 +268,6 @@ export class ServerEngineAPI extends CommonEngineAPI {
     if (SV.svs.changelevel_issued) {
       return;
     }
-
-    SV.svs.changelevel_issued = true;
 
     Cmd.text += `changelevel ${mapname}\n`;
   }
@@ -421,7 +426,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     }
 
     SV.server.model_precache.push(modelName);
-    SV.server.models.push(Mod.ForName(modelName, true));
+    SV.server.models.push(Mod.ForNameAsync(modelName, true));
   }
 
   /**
@@ -558,6 +563,19 @@ export class ServerEngineAPI extends CommonEngineAPI {
 };
 
 export class ClientEngineAPI extends CommonEngineAPI {
+  /**
+   * Make sure to free the variable in shutdown().
+   * @see {@link Cvar}
+   * @param {string} name name of the variable
+   * @param {string} value value
+   * @param {number} flags optional flags
+   * @param {?string} description optional description
+   * @returns {Cvar} the created variable
+   */
+  static RegisterCvar(name, value, flags = 0, description = null) {
+    return new Cvar(name, value, flags | Cvar.FLAG.GAME | Cvar.FLAG.CLIENT, description);
+  }
+
   /**
    * @param {string} name command name
    * @param {Function} callback callback function

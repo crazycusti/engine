@@ -117,7 +117,12 @@ export class ServerClient {
     }
   }
 
-  changelevel() {
+  changelevel(mapname) {
+    const reconnect = new SzBuffer(128);
+    reconnect.writeByte(Protocol.svc.changelevel);
+    reconnect.writeString(mapname);
+    this.netconnection.SendMessage(reconnect);
+
     this._entityStates.clear();
     this.cmd.reset();
     this.lastcmd.reset();

@@ -32,6 +32,8 @@ export default class Cvar {
     DEFERRED: 32, // TODO: implement
     /** variable cannot be changed unless sv_cheats is set to 1 */
     CHEAT: 64,
+    /** variable has been registered from the client code */
+    CLIENT: 128,
   });
 
   // TODO: add things like onChange, onPreChange so that we can hook into changes of the variable

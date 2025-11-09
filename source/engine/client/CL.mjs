@@ -36,6 +36,7 @@ export default class CL {
   static pmove = new Pmove();
 
   static #clientDemos = new ClientDemos();
+  /** @type {ClientConnection} */
   static #connection = null;
 
   /** @type {gameCapabilities[]} */

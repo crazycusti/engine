@@ -123,3 +123,5 @@ export default class Q {
     return new Promise(resolve => setTimeout(resolve, msec));
   }
 };
+
+export const AsyncFunction = (async function() {}).constructor;

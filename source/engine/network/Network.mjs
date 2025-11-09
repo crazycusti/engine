@@ -176,56 +176,6 @@ NET.CanSendMessage = function(sock) {
   return sock.CanSendMessage();
 };
 
-NET.SendToAll = function(data) { // FIXME: Host.client
-  let i; let count = 0; const state1 = []; const state2 = [];
-  for (i = 0; i < SV.svs.maxclients; i++) {
-    Host.client = SV.svs.clients[i];
-    if (!Host.client.netconnection) {
-      continue;
-    }
-    if (!Host.client.active) {
-      state1[i] = state2[i] = true;
-      continue;
-    }
-    if (Host.client.netconnection.driver === 0) {
-      NET.SendMessage(Host.client.netconnection, data);
-      state1[i] = state2[i] = true;
-      continue;
-    }
-    count++;
-    state1[i] = state2[i] = false;
-  }
-  const start = Sys.FloatTime();
-  for (; count !== 0; ) {
-    count = 0;
-    for (i = 0; i < SV.svs.maxclients; i++) {
-      Host.client = SV.svs.clients[i];
-      if (state1[i] !== true) {
-        if (NET.CanSendMessage(Host.client.netconnection)) {
-          state1[i] = true;
-          NET.SendMessage(Host.client.netconnection, data);
-        } else {
-          NET.GetMessage(Host.client.netconnection);
-        }
-        count++;
-        continue;
-      }
-      if (state2[i] !== true) {
-        if (NET.CanSendMessage(Host.client.netconnection)) {
-          state2[i] = true;
-        } else {
-          NET.GetMessage(Host.client.netconnection);
-        }
-        count++;
-      }
-    }
-    if ((Sys.FloatTime() - start) > 5.0) {
-      return count;
-    }
-  }
-  return count;
-};
-
 NET.Init = function() {
   NET.time = Sys.FloatTime();
 

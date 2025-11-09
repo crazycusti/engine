@@ -222,12 +222,6 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
       break;
     }
   } while (count !== 0);
-  // const buf = {data: new ArrayBuffer(4), cursize: 1};
-  // (new Uint8Array(buf.data))[0] = Protocol.svc.disconnect;
-  // count = NET.SendToAll(buf);
-  // if (count !== 0) {
-  //   Con.Print('Host.ShutdownServer: NET.SendToAll failed for ' + count + ' clients\n');
-  // }
   for (i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
     if (client.active) {
@@ -286,8 +280,7 @@ Host.ScheduleInFuture = function(name, callback, whenInSeconds) {
   });
 };
 
-Host._Frame = function() {
-  // Math.random();
+Host._Frame = async function() {
   Host.realtime = Sys.FloatTime();
   Host.frametime = Host.realtime - Host.oldrealtime;
   Host.oldrealtime = Host.realtime;
@@ -304,7 +297,7 @@ Host._Frame = function() {
   // check all scheduled things for the next frame
   while (Host._scheduledForNextFrame.length > 0) {
     const callback = Host._scheduledForNextFrame.shift();
-    callback();
+    await callback();
   }
 
   // check what’s scheduled in future
@@ -313,7 +306,7 @@ Host._Frame = function() {
       continue;
     }
 
-    callback();
+    await callback();
     Host._scheduleInFuture.delete(name);
   }
 
@@ -361,7 +354,7 @@ Host._Frame = function() {
 
   CL.SendCmd();
 
-  if (SV.server.active === true) {
+  if (SV.server.active && !SV.svs.changelevel_issued) {
     if (Host.speeds.value !== 0) {
       console.profile('Host.ServerFrame');
     }
@@ -433,13 +426,13 @@ Host.HandleCrash = function(e) {
   Sys.Quit();
 };
 
-Host.Frame = function() {
+Host.Frame = async function() {
   if (inHandleCrash) {
     return;
   }
 
   try {
-    Host._Frame();
+    await Host._Frame();
   } catch (e) {
     Host.HandleCrash(e);
   }
@@ -717,10 +710,10 @@ Host.Map_f = function(mapname, ...spawnparms) {
   if (this.client) {
     return;
   }
-  if (!SV.HasMap(mapname)) {
-    Con.Print(`No such map: ${mapname}\n`);
-    return;
-  }
+  // if (!SV.HasMap(mapname)) {
+  //   Con.Print(`No such map: ${mapname}\n`);
+  //   return;
+  // }
   if (!registry.isDedicatedServer) {
     CL.cls.demonum = -1;
     CL.Disconnect();
@@ -740,8 +733,8 @@ Host.Map_f = function(mapname, ...spawnparms) {
     CL.cls.spawnparms = spawnparms.join(' ');
   }
 
-  Host.ScheduleForNextFrame(() => {
-    SV.SpawnServer(mapname);
+  Host.ScheduleForNextFrame(async () => {
+    await SV.SpawnServer(mapname);
 
     if (!registry.isDedicatedServer) {
       CL.SetConnectingStep(null, null);
@@ -768,9 +761,11 @@ Host.Changelevel_f = function(mapname) {
     return;
   }
 
-  if (!SV.HasMap(mapname)) {
-    throw new HostError(`No such map: ${mapname}`);
-  }
+  // if (!SV.HasMap(mapname)) {
+  //   throw new HostError(`No such map: ${mapname}`);
+  // }
+
+  SV.svs.changelevel_issued = true;
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
@@ -781,9 +776,15 @@ Host.Changelevel_f = function(mapname) {
     MSG.WriteString(client.message, mapname);
   }
 
-  Host.ScheduleForNextFrame(() => {
+  Host.ScheduleForNextFrame(async () => {
     SV.SaveSpawnparms();
-    SV.SpawnServer(mapname);
+
+    console.info('Host.Changelevel_f: changing level to ' + mapname);
+
+    await SV.SpawnServer(mapname);
+
+    console.info('Host.Changelevel_f: spawned server for changelevel to ' + mapname);
+
     if (!registry.isDedicatedServer) {
       CL.SetConnectingStep(null, null);
     }
@@ -917,7 +918,7 @@ Host.Savegame_f = function(savename) {
   }
 };
 
-Host.Loadgame_f = function (savename) {
+Host.Loadgame_f = async function (savename) {
   if (this.client) {
     return;
   }
@@ -933,7 +934,7 @@ Host.Loadgame_f = function (savename) {
   const name = COM.DefaultExtension(savename, '.json');
   Con.Print('Loading game from ' + name + '...\n');
   const data = COM.LoadTextFile(name);
-  if (data == null) {
+  if (data === null) {
     Con.PrintError('ERROR: couldn\'t open.\n');
     return;
   }
@@ -956,7 +957,7 @@ Host.Loadgame_f = function (savename) {
     }
   }
 
-  SV.SpawnServer(gamestate.mapname);
+  await SV.SpawnServer(gamestate.mapname);
 
   if (!SV.server.active) {
     if (!registry.isDedicatedServer) {

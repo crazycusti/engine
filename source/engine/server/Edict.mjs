@@ -252,7 +252,7 @@ export class ED {
    * Loads entities from a file.
    * @param {string} data - The data to load.
    */
-  static LoadFromFile(data) {
+  static async LoadFromFile(data) {
     let inhibit = 0;
     let ent = null;
     SV.server.gameAPI.time = SV.server.time;
@@ -287,6 +287,8 @@ export class ED {
         inhibit++;
         continue;
       }
+
+      await SV.WaitForPrecachedResources();
 
       const spawned = SV.server.gameAPI.spawnPreparedEntity(ent);
 

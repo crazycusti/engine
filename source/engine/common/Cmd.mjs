@@ -96,17 +96,53 @@ class ForwardCommand extends ConsoleCommand {
   }
 };
 
+class ExecSlot {
+  constructor(filename) {
+    this.filename = filename;
+    this.content = null;
+    this.isReady = false;
+  }
+}
+
 export default class Cmd {
   static alias = [];
   static functions = [];
   static text = '';
   static #wait = false;
 
+  /** @type {ExecSlot[]} */
+  static #execSlots = [];
+
+  static HasPendingCommands() {
+    return this.#wait === true || this.text.length > 0 || this.#execSlots.length > 0;
+  }
+
   static Wait_f() {
-    Cmd.#wait = true;
+    this.#wait = true;
   }
 
   static Execute() {
+    // go through all pending exec slots
+    while (this.#execSlots.length > 0) {
+      const slot = this.#execSlots[0];
+
+      if (slot.isReady === false) {
+        // as long as the first exec slot is not ready, we
+        // cannot proceed with any command, we want to keep order
+        return;
+      }
+
+      Con.Print('execing ' + slot.filename + '\n');
+      Cmd.text += slot.content;
+      this.#execSlots.shift();
+
+      // if the exec caused a wait, we stop processing here
+      if (Cmd.#wait === true) {
+        Cmd.#wait = false;
+        return;
+      }
+    }
+
     let line = ''; let quotes = false;
     while (Cmd.text.length !== 0) {
       const c = Cmd.text[0];
@@ -163,19 +199,23 @@ export default class Cmd {
     }
   }
 
-  static Exec_f(filename) {
-    if (!filename) {
-      Con.Print('exec <filename> : execute a script file\n');
-      return;
+  static Exec_f = class ExecConsoleCommand extends ConsoleCommand {
+    async run(filename) {
+      if (!filename) {
+        Con.Print('exec <filename> : execute a script file\n');
+        return;
+      }
+      const slot = new ExecSlot(filename);
+      Cmd.#execSlots.push(slot);
+      const f = await COM.LoadTextFileAsync(filename);
+      if (f === null) {
+        Con.PrintWarning('couldn\'t exec ' + filename + '\n');
+        return;
+      }
+      slot.isReady = true;
+      slot.content = f;
     }
-    const f = COM.LoadTextFile(filename);
-    if (f === null) {
-      Con.Print('couldn\'t exec ' + filename + '\n');
-      return;
-    }
-    Con.Print('execing ' + filename + '\n');
-    Cmd.text = f + Cmd.text;
-  }
+  };
 
   static Echo_f = class EchoConsoleCommand extends ConsoleCommand {
     run() {
