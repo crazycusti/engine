@@ -114,7 +114,7 @@ class SoundBaseChannel {
     return this;
   }
 
-  // eslint-disable-next-line no-unused-vars
+  // eslint-disable-next-line no-unused-vars, @typescript-eslint/require-await
   static async decodeAudioData(rawData) {
     return null;
   }
@@ -415,6 +415,7 @@ class AudioContextChannel extends SoundBaseChannel {
 }
 
 class AudioElementChannel extends SoundBaseChannel {
+  // eslint-disable-next-line @typescript-eslint/require-await
   static async decodeAudioData(rawData) {
     return new Audio(`data:audio/wav;base64,${Q.btoa(new Uint8Array(rawData))}`);
   }

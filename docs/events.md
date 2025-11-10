@@ -30,7 +30,7 @@ The engine has an event bus.
 | client.chat.message | 1. name, 2. message, 3. whether is a direct message or not. | Chat message received. |
 | client.disconnected | - | Essentially the game stopped. |
 | client.connecting | 1. address | Trying to connect to a server. |
-| client.connected | 1. address | Connection established. Does not mean it’s an active game now, we are loading assets next. |
+| client.signon | 1. signon number | Triggered on each signon reply step. |
 
 ### Console
 

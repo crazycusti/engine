@@ -3,11 +3,11 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 
-let { CL, Con, Host, Mod, R } = registry;
+let { Con, R } = registry;
 let gl = null;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ CL, Con, Host, Mod, R } = registry);
+  ({ Con, R } = registry);
 });
 
 eventBus.subscribe('gl.ready', () => {
@@ -31,6 +31,7 @@ export class MeshModelRenderer extends ModelRenderer {
    * Setup rendering state for mesh models.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   setupRenderState(_pass = 0) {
     // Mesh models bind their own buffers and state per-entity
     // No shared setup needed at this level
@@ -40,6 +41,7 @@ export class MeshModelRenderer extends ModelRenderer {
    * Cleanup rendering state after rendering mesh models.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     // No shared cleanup needed
   }

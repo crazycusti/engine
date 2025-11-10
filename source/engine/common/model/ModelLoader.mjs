@@ -5,6 +5,7 @@ import { NotImplementedError } from '../Errors.mjs';
  * Each format (BSP, MDL, SPR, OBJ, IQM, etc.) should implement this interface.
  */
 export class ModelLoader {
+  // eslint-disable-next-line jsdoc/require-returns-check
   /**
    * Get the magic number(s) that identify this format.
    * Magic numbers are read from the first 4 bytes of the file.
@@ -14,6 +15,7 @@ export class ModelLoader {
     throw new NotImplementedError('ModelLoader.getMagicNumbers must be implemented');
   }
 
+  // eslint-disable-next-line jsdoc/require-returns-check
   /**
    * Get the file extension(s) this loader supports.
    * Used as a fallback when magic number detection isn't conclusive.
@@ -43,6 +45,7 @@ export class ModelLoader {
     return false;
   }
 
+  // eslint-disable-next-line jsdoc/require-returns-check
   /**
    * Load the model from the buffer.
    * @param {ArrayBuffer} buffer The file buffer
@@ -54,6 +57,7 @@ export class ModelLoader {
     throw new NotImplementedError('ModelLoader.load must be implemented');
   }
 
+  // eslint-disable-next-line jsdoc/require-returns-check
   /**
    * Get a human-readable name for this loader.
    * @returns {string} Loader name (e.g., "BSP29", "Quake MDL", "Sprite")

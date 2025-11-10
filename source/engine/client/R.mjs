@@ -10,7 +10,6 @@ import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
 import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
-import { ClientEdict } from './ClientEntities.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';

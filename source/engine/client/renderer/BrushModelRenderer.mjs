@@ -3,11 +3,11 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 
-let { CL, Con, Host, Mod, R } = registry;
+let { CL, Host, R } = registry;
 let gl = null;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ CL, Con, Host, Mod, R } = registry);
+  ({ CL, Host, R } = registry);
 });
 
 eventBus.subscribe('gl.ready', () => {
@@ -32,6 +32,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Binds shared textures and prepares GL state for brush rendering.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   setupRenderState(_pass = 0) {
     // Brush models bind their own buffers and state per-entity
     // No shared setup needed at this level
@@ -421,7 +422,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Bind PBR texture maps (luminance, normal, specular) for a brush texture.
    * @private
    * @param {WebGLProgram} program The shader program
-   * @param {BrushModelTexture} texture The brush texture with optional PBR maps
+   * @param {import('../R.mjs').BrushModelTexture} texture The brush texture with optional PBR maps
    */
   _bindPBRTextures(program, texture) {
     for (const [slot, samplerId] of Object.entries({
@@ -697,6 +698,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Cleanup rendering state after brush models
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     // Brush models clean up their own state per-entity
     // No shared cleanup needed at this level

@@ -1,7 +1,6 @@
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Defs from '../../shared/Defs.mjs';
-import * as Def from './../common/Def.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
 

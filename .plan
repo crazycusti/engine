@@ -96,6 +96,8 @@ Grouped by sections and then sorted by priority (more or less).
 * cleaned up this file, removed many todos to cure me from being overwhelmed
 * loading more resources in parallel
 * removed the byte-by-byte “pop check”, replaced it with a simple checksum check
+* some tslint/eslint cleaning
+* force close menu when the game starts
 
 ### 2025-11-08
 

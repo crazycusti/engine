@@ -10,13 +10,12 @@ const Sbar = {};
 
 export default Sbar;
 
-let { CL, COM, Draw, Host, SCR } = registry;
+let { CL, COM, Draw, SCR } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   COM = registry.COM;
   Draw = registry.Draw;
-  Host = registry.Host;
   SCR = registry.SCR;
 });
 

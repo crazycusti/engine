@@ -3,11 +3,19 @@ import { ClientEngineAPI, ServerEngineAPI } from "../engine/common/GameAPIs.mjs"
 import { ServerEdict } from "../engine/server/Edict.mjs";
 import Vector from "./Vector.mjs";
 
-export type SerializableType = (string | number | boolean | Vector);
+export type ClientEngineAPI = Readonly<typeof ClientEngineAPI>;
+export type ServerEngineAPI = Readonly<typeof ServerEngineAPI>;
+export type ServerEdict = Readonly<ServerEdict>;
 
-export type GLTexture = import("../engine/client/GL.mjs").GLTexture;
+export type GLTexture = Readonly<import("../engine/client/GL.mjs").GLTexture>;
+export type Cvar = Readonly<import("../engine/common/Cvar.mjs").default>;
+
+export type SerializableType = (string | number | boolean | Vector | ServerEdict | SerializableType[] | null);
 
 export type ClientdataMap = Record<string, SerializableType>;
+
+export type EdictValueType = (string | number | boolean | Vector | null);
+export type EdictData = Record<string, EdictValueType>;
 
 export type ViewmodelConfig = {
   visible: boolean;
@@ -101,7 +109,7 @@ export interface ServerGameInterface {
 
   getClientEntityFields(): Record<string, string[]>;
 
-  prepareEntity(edict: ServerEdict, classname: string, initialData?: any): boolean;
+  prepareEntity(edict: ServerEdict, classname: string, initialData?: EdictData): boolean;
   spawnPreparedEntity(edict: ServerEdict): boolean;
 
   serialize(): any;

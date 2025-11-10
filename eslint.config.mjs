@@ -2,6 +2,8 @@ import globals from 'globals';
 import pluginJs from '@eslint/js';
 import jsdoc from 'eslint-plugin-jsdoc';
 import stylistic from '@stylistic/eslint-plugin';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -10,13 +12,16 @@ export default [
     ignores: ['vite.config.mjs', '.env*', 'dist/**'],
     languageOptions: {
       globals: globals.browser,
+      parser: tsparser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
+        project: './jsconfig.json',
       },
     },
     plugins: {
       '@stylistic': stylistic,
+      '@typescript-eslint': tseslint,
     },
     rules: {
       'max-len': 'off',
@@ -56,6 +61,19 @@ export default [
       'jsdoc/require-param-description': 'off',
       'no-global-assign': 'warn',
       // "no-param-reassign": ["warn", { "props": true }], -- too many false positives
+
+      // TypeScript ESLint rules for JSDoc type checking
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/no-redundant-type-constituents': 'warn',
     },
   },
   pluginJs.configs.recommended,

@@ -753,8 +753,8 @@ export class WebRTCDriver extends BaseDriver {
         this._ProcessPendingSignaling();
       };
 
-      this.signalingWs.onmessage = (event) => {
-        this._OnSignalingMessage(JSON.parse(event.data));
+      this.signalingWs.onmessage = async (event) => {
+        await this._OnSignalingMessage(JSON.parse(event.data));
       };
 
       this.signalingWs.onerror = (error) => {
@@ -943,7 +943,7 @@ export class WebRTCDriver extends BaseDriver {
    * Handle messages from signaling server
    * @param message
    */
-  _OnSignalingMessage(message) {
+  async _OnSignalingMessage(message) {
     switch (message.type) {
       case 'session-created':
         this._OnSessionCreated(message);
@@ -962,15 +962,15 @@ export class WebRTCDriver extends BaseDriver {
         break;
 
       case 'offer':
-        this._OnOffer(message);
+        await this._OnOffer(message);
         break;
 
       case 'answer':
-        this._OnAnswer(message);
+        await this._OnAnswer(message);
         break;
 
       case 'ice-candidate':
-        this._OnIceCandidate(message);
+        await this._OnIceCandidate(message);
         break;
 
       case 'session-closed':

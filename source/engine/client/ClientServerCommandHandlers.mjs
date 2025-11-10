@@ -203,7 +203,7 @@ function parseServerData(CL) {
 
   CL.connection.processingServerDataState = 1;
 
-  (async () => {
+  void (async () => {
     const models = [null];
     const sounds = [null];
 

@@ -11,12 +11,11 @@ const NET = {};
 
 export default NET;
 
-let { CL, Con, Host, SV, Sys } = registry;
+let { CL, Con, SV, Sys } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   Con = registry.Con;
-  Host = registry.Host;
   SV = registry.SV;
   Sys = registry.Sys;
 });

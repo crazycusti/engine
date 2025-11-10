@@ -3,14 +3,9 @@ import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 
 let { CL, R } = registry;
-let gl = null;
 
 eventBus.subscribe('registry.frozen', () => {
   ({ CL, R } = registry);
-});
-
-eventBus.subscribe('gl.ready', () => {
-  gl = GL.gl;
 });
 
 /**
@@ -152,6 +147,7 @@ export class SpriteModelRenderer extends ModelRenderer {
    * Flushes the stream buffer to draw all sprites.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     // Flush accumulated sprite geometry
     GL.StreamFlush();
@@ -173,6 +169,7 @@ export class SpriteModelRenderer extends ModelRenderer {
    * Sprites don't allocate GPU resources.
    * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} _model The sprite model to cleanup
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupModel(_model) {
     // Sprites don't have GPU resources to clean up
   }

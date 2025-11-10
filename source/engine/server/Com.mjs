@@ -205,6 +205,7 @@ export default class NodeCOM extends COM {
     }
   }
 
+  // eslint-disable-next-line no-unused-vars
   static WriteFile(filename, data, len) { // FIXME: len is actually required
     const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
 

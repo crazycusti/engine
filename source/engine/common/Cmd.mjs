@@ -25,6 +25,7 @@ export class ConsoleCommand {
   /** @type {string[]} Arguments including the name. */
   argv = [];
 
+  /** @returns {void|Promise<void>} Hint: function can be async */
   run() {
     console.assert(false, 'ConsoleCommand.run() must be overridden');
   }

@@ -23,6 +23,7 @@ export class ModelRenderer {
    * Called once before rendering multiple entities of the same type.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent, etc.)
    */
+  // eslint-disable-next-line no-unused-vars
   setupRenderState(_pass = 0) {
     throw new NotImplementedError('ModelRenderer.setupRenderState must be implemented');
   }
@@ -33,6 +34,7 @@ export class ModelRenderer {
    * @param {import('../ClientEntities.mjs').ClientEdict} _entity The entity being rendered
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent, etc.)
    */
+  // eslint-disable-next-line no-unused-vars
   render(_model, _entity, _pass = 0) {
     throw new NotImplementedError('ModelRenderer.render must be implemented');
   }
@@ -42,6 +44,7 @@ export class ModelRenderer {
    * Called once after rendering multiple entities of the same type.
    * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent, etc.)
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     throw new NotImplementedError('ModelRenderer.cleanupRenderState must be implemented');
   }
@@ -64,6 +67,7 @@ export class ModelRenderer {
    * Uses global `gl` from registry.
    * @param {import('../../common/model/BaseModel.mjs').BaseModel} _model The model to cleanup
    */
+  // eslint-disable-next-line no-unused-vars
   cleanupModel(_model) {
     // Default implementation: do nothing (override if needed)
   }

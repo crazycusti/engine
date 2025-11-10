@@ -69,7 +69,7 @@ export default class VID {
     eventBus.publish('vid.ready');
   };
 
-  static async Shutdown() {
+  static Shutdown() {
     VID.mainwindow.style.display = 'none';
 
     window.removeEventListener('resize', VID.Resize);

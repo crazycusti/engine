@@ -8,34 +8,7 @@ import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
 
-/** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} Id1BaseEntity */
-/** @typedef {Id1BaseEntity} BaseEntity */
-
-/**
- * @typedef {object} LegacyQuakeEntityFields
- * @property {?BaseEntity} [enemy] Active combat target chosen by the entity AI.
- * @property {?BaseEntity} [goalentity] Navigation or goal entity currently pursued.
- * @property {?BaseEntity} [groundentity] Entity the actor is resting on.
- * @property {number} [gravity] Per-entity gravity scaling factor.
- * @property {Vector} [v_angle] View angles used for input-derived directions.
- * @property {number} [impulse] Latest Quake impulse command applied to the entity.
- * @property {boolean} [button0] Primary action button state forwarded from the client.
- * @property {boolean} [button1] Secondary action button state forwarded from the client.
- * @property {boolean} [button2] Tertiary action button state forwarded from the client.
- * @property {Vector} [view_ofs] Camera/viewpoint offset relative to origin.
- * @property {number} [ideal_yaw] Desired yaw used by AI steering helpers.
- * @property {number} [team] Team identifier for teamplay rules.
- * @property {number} [colormap] Player-specific color map index for rendering.
- * @property {?BaseEntity} [chain] Linked entity used by legacy chaining logic.
- * @property {number} [health] Current health value used by server-side selection logic.
- * @property {number} [takedamage] Damage reaction mode (`Defs.damage.*`).
- * @property {number} [sounds] Legacy ambient sound channel index.
- * @property {number} [serverflags] Level progression bitmask forwarded by the game API.
- * @property {string[]} [clientdataFields] Dynamic clientdata descriptor list for this entity.
- * @property {(data: string) => void} [restoreSpawnParameters] Restores cached spawn parameters from server strings.
- */
-
-/** @typedef {BaseEntity & LegacyQuakeEntityFields} ServerEntity */
+/** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
 
 let { CL, COM, Con, Host, Mod, PR, SV } = registry;
 
@@ -316,8 +289,8 @@ export class ServerEdict {
     };
     this.leafnums = [];
     this.freetime = 0.0;
-  /** @type {?ServerEntity} */
-  this.entity = null;
+    /** @type {BaseEntity|null} entity managed by the game code */
+    this.entity = null;
   }
 
   clear() {

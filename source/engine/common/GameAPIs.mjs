@@ -21,11 +21,10 @@ import W from './W.mjs';
 /** @typedef {import('./Pmove.mjs').Trace} Trace */
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
 
-let { CL, COM, Con, Draw, Host, R, S, SCR, SV, V} = registry;
+let { CL, Con, Draw, Host, R, S, SCR, SV, V} = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
-  COM = registry.COM;
   Con = registry.Con;
   Draw = registry.Draw;
   Host = registry.Host;
@@ -430,10 +429,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   /**
-   * Spawns a new Entity, not an Edict
-   * @param {string} classname
-   * @param {{[key: string]: any}} initialData
-   * @returns
+   * Spawns an Edict, not an entity.
+   * @param {string} classname classname of the entity to spawn, needs to be registered
+   * @param {Record<string, any>} initialData key-value pairs to initialize the entity with, will be handled by the game code
+   * @returns {ServerEdict|null} the spawned edict (NOT ENTITY), or null on failure
    */
   static SpawnEntity(classname, initialData = {}) {
     const edict = ED.Alloc();
@@ -453,7 +452,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
       throw e;
     }
 
-    return edict.entity;
+    return edict;
   }
 
   static IsLoading() {

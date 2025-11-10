@@ -237,7 +237,7 @@ export default class ClientConnection {
         this.setConnectingStep(90, 'Waiting for server data');
         MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
         MSG.WriteString(this.cls.message, 'prespawn');
-        return;
+        break;
       case 2:
         eventBus.publish('client.server-info.ready', Object.assign({}, this.cls.serverInfo));
         this.setConnectingStep(95, 'Setting client state');
@@ -247,12 +247,12 @@ export default class ClientConnection {
         MSG.WriteString(this.cls.message, 'color ' + (this.identityCvars.color.value >> 4) + ' ' + (this.identityCvars.color.value & 15) + '\n');
         MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
         MSG.WriteString(this.cls.message, 'spawn ' + this.cls.spawnparms);
-        return;
+        break;
       case 3:
         this.setConnectingStep(100, 'Joining the game!');
         MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
         MSG.WriteString(this.cls.message, 'begin');
-        return;
+        break;
       case 4:
         this.setConnectingStep(null, null);
         SCR.EndLoadingPlaque();
@@ -260,10 +260,12 @@ export default class ClientConnection {
         SCR.con_current = 0;
         this.cls.changelevel = false;
         S.LoadPendingFiles();
-        return;
+        break;
       default:
         throw new HostError('Received invalid signon state: ' + this.cls.signon);
     }
+
+    eventBus.publish('client.signon', this.cls.signon);
   }
 
   readFromServer(CL) {
