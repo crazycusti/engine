@@ -1097,7 +1097,7 @@ export function parseServerMessage(CL) {
     MSG.BeginReading();
   }
 
-  while (CL.cls.state > CL.active.disconnected) {
+  while (CL.cls.state > Def.clientConnectionState.disconnected) {
     if (CL.connection.processingServerDataState > 0) {
       break;
     }

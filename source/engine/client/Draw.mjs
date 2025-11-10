@@ -70,32 +70,13 @@ export default class Draw {
    * @returns {Promise<void>}
    */
   static async Init() {
-    Draw.#gfxWad = await W.LoadFile('gfx.wad');
-    const conchars = Draw.#gfxWad.getLumpMipmap('CONCHARS', 0);
-    Draw.#chars = GLTexture.FromLumpTexture(conchars).lockTextureMode('GL_NEAREST');
-    // eslint-disable-next-line require-atomic-updates
-    Draw.#conback = await (async () => {
-      const lump = await W.LoadLump('gfx/conback.lmp');
-      if (lump === null) {
-        throw new MissingResourceError('gfx/conback.lmp');
-      }
+    // Load gfx.wad and essential lumps in parallel
+    const [gfxWad, conback, loading] = await Promise.all([
+      W.LoadFile('gfx.wad'),
+      W.LoadLump('gfx/conback.lmp'),
+      W.LoadLump('gfx/loading.lmp'),
 
-      // we are writing the version into the conback texture
-      const version = Host.version.string;
-      const color = ClientEngineAPI.IndexToRGB(95);
-      for (let i = 0; i < version.length; i++) {
-        charToConback(lump.data, conchars.data, version.charCodeAt(i), 59829 - ((version.length - i) * 8), color);
-      }
-
-      return GLTexture.FromLumpTexture(lump).lockTextureMode('GL_NEAREST');
-    })();
-    Draw.#loading = await W.LoadLump('gfx/loading.lmp');
-    const elem = document.getElementById('loading');
-    if (elem) {
-      Draw.#loadingElem = /** @type {HTMLImageElement} */ (elem);
-      Draw.#loadingElem.src = Draw.#loading.toDataURL();
-    }
-    await Promise.all([
+      // also load all shaders we need
       GL.CreateProgram('fill',
         ['uOrtho'],
         [['aPosition', gl.FLOAT, 2], ['aColor', gl.UNSIGNED_BYTE, 4, true]],
@@ -109,6 +90,34 @@ export default class Draw {
         [['aPosition', gl.FLOAT, 2], ['aTexCoord', gl.FLOAT, 2]],
         ['tTexture', 'tTrans']),
     ]);
+
+    Draw.#gfxWad = gfxWad;
+    Draw.#loading = loading;
+
+    const conchars = Draw.#gfxWad.getLumpMipmap('CONCHARS', 0);
+    Draw.#chars = GLTexture.FromLumpTexture(conchars).lockTextureMode('GL_NEAREST');
+
+    Draw.#conback = (() => {
+      if (conback === null) {
+        throw new MissingResourceError('gfx/conback.lmp');
+      }
+
+      // we are writing the version into the conback texture
+      const version = Host.version.string;
+      const color = ClientEngineAPI.IndexToRGB(95);
+      for (let i = 0; i < version.length; i++) {
+        charToConback(conback.data, conchars.data, version.charCodeAt(i), 59829 - ((version.length - i) * 8), color);
+      }
+
+      return GLTexture.FromLumpTexture(conback).lockTextureMode('GL_NEAREST');
+    })();
+
+    const elem = document.getElementById('loading');
+    if (elem) {
+      Draw.#loadingElem = /** @type {HTMLImageElement} */ (elem);
+      Draw.#loadingElem.src = Draw.#loading.toDataURL();
+    }
+
     eventBus.subscribe('com.fs.being', Draw.BeginDisc);
     eventBus.subscribe('com.fs.end', Draw.EndDisc);
     VID.mainwindow.style.backgroundImage = 'url("' + Draw.#gfxWad.getLumpMipmap('BACKTILE', 0).toDataURL() + '")';

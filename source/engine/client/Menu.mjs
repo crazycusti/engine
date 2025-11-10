@@ -958,12 +958,11 @@ M.Alert_Key = function(k) {
 const testMenu = null;
 
 M.Test_Draw = function() {
-  // M.Print(160 - 48, 100, 'Mmm... this is nice!');
   testMenu.draw();
 };
 
 M.Test_Key = function(k) {
-  if (k === Key.k.enter || k === Key.k.escape) {
+  if (k === Key.k.escape) {
     Key.dest.value = Key.dest.game;
     M.state.value = M.state.none;
     testMenu.deactivate();

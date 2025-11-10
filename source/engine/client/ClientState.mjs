@@ -24,6 +24,7 @@ const clientGameEvents = [
 
 class ClientStaticState {
   signon = 0;
+  /** @type {Def.clientConnectionState} */
   state = 0;
   spawnparms = '';
   changelevel = false;

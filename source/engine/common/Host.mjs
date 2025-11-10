@@ -77,7 +77,7 @@ Host.FindMaxClients = function() {
   SV.svs.maxclientslimit = Def.limits.clients;
   SV.svs.clients = [];
   if (!registry.isDedicatedServer) {
-    CL.cls.state = CL.active.disconnected;
+    CL.cls.state = Def.clientConnectionState.disconnected;
   }
   for (let i = 0; i < SV.svs.maxclientslimit; i++) {
     SV.svs.clients.push(new ServerClient(i));
