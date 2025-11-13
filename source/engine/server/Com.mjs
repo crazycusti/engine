@@ -1,6 +1,6 @@
 /* global Buffer */
 
-import { promises as fsPromises, openSync, readSync, closeSync, existsSync, readFileSync, writeFileSync, constants } from 'fs';
+import { promises as fsPromises, openSync, readSync, closeSync, existsSync, readFileSync, writeFileSync, constants, writeFile } from 'fs';
 
 import Q from '../../shared/Q.mjs';
 import { CRC16CCITT as CRC } from '../common/CRC.mjs';
@@ -206,11 +206,11 @@ export default class NodeCOM extends COM {
   }
 
   // eslint-disable-next-line no-unused-vars
-  static WriteFile(filename, data, len) { // FIXME: len is actually required
+  static async WriteFile(filename, data, len) { // FIXME: len is actually required, needs to be async
     const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
 
     try {
-      writeFileSync(filepath, data);
+      await writeFile(filepath, data);
     } catch (e) {
       Sys.Print('COM.WriteFile: failed on ' + filename + ', ' + e.message + '\n');
       return false;

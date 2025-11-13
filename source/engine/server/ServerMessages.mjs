@@ -3,6 +3,8 @@ import * as Protocol from '../network/Protocol.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { ServerEngineAPI } from '../common/GameAPIs.mjs';
+import { ServerClient } from './Client.mjs';
 
 let { COM, Con, Host, Mod, NET, PR, SV } = registry;
 
@@ -94,6 +96,11 @@ export class ServerMessages {
     MSG.WriteCoordVector(datagram, edict.entity.origin.copy().add(edict.entity.mins.copy().add(edict.entity.maxs).multiply(0.5)));
   }
 
+  /**
+   * Sends the serverdata message to a specific client.
+   * Needs to be done in order to complete the signon process step 1.
+   * @param {ServerClient} client client
+   */
   sendServerData(client) {
     const message = client.message;
 
@@ -146,14 +153,18 @@ export class ServerMessages {
       MSG.WriteByte(message, 0);
     }
 
-    MSG.WriteByte(message, Protocol.svc.cdtrack);
-    MSG.WriteByte(message, SV.server.edicts[0].entity.sounds);
-    MSG.WriteByte(message, SV.server.edicts[0].entity.sounds);
+    // sounds on worldspawn defines the cd track
+    const cdtrack = /** @type {number} */ (/** @type {import('./Edict.mjs').WorldspawnEntity} */(SV.server.edicts[0].entity).sounds);
+
+    // only play cd track automatically if set in worldspawn
+    if (typeof cdtrack === 'number') {
+      ServerEngineAPI.PlayTrack(cdtrack);
+    }
 
     MSG.WriteByte(message, Protocol.svc.setview);
     MSG.WriteShort(message, client.edict.num);
 
-    const serverCvars = Array.from(Cvar.Filter((cvar) => (cvar.flags & Cvar.FLAG.SERVER) !== 0));
+    const serverCvars = Array.from(Cvar.Filter((/** @type {Cvar} */ cvar) => (cvar.flags & Cvar.FLAG.SERVER) !== 0));
     if (serverCvars.length > 0) {
       MSG.WriteByte(client.message, Protocol.svc.cvar);
       MSG.WriteByte(client.message, serverCvars.length);

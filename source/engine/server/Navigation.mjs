@@ -235,12 +235,14 @@ export class Navigation {
 
   #shutdownWorker() {
     if (this.#worker) {
-      this.#worker.shutdown();
+      this.#worker.shutdown().catch((err) => {
+        Con.PrintError(`Failed to shutdown the navigation worker: ${err}\n`);
+      });
     }
   }
 
   #subscribePathResponse() {
-    this.#pathResponseEventListener = eventBus.subscribe('nav.path.response', (id, path) => {
+    this.#pathResponseEventListener = eventBus.subscribe('nav.path.response', (/** @type {string} */ id, /** @type {Vector[]} */ path) => {
       const vecpath = path ? path.map((p) => new Vector(...p)) : null;
 
       // since all events are global, we need to check what’s intended for us
@@ -502,7 +504,7 @@ export class Navigation {
     }
 
     const out = new Uint8Array(bytes);
-    COM.WriteFile(filename, out, out.length);
+    await COM.WriteFile(filename, out, out.length);
 
     if (registry.isDedicatedServer) {
       // tell the worker thread to reload the data

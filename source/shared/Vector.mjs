@@ -73,7 +73,7 @@ export class Quaternion extends Array {
    * @returns {string} Quake-style string of this quaternion
    */
   toString() {
-    return `${this.map((e) => e.toFixed(1)).join(' ')}`;
+    return `${this.map((/** @type {number} */ e) => e.toFixed(1)).join(' ')}`;
   }
 };
 

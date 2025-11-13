@@ -37,6 +37,8 @@ export default class WorkerManager {
         if (!success) {
           Con.PrintWarning('WorkerManager: Dummy worker shut down with errors.\n');
         }
+      }).catch((err) => {
+        Con.PrintError(`Failed to shutdown the dummy worker: ${err}\n`);
       });
     });
   }

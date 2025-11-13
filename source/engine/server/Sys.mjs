@@ -223,7 +223,7 @@ export default class Sys {
       port: listenPort,
       host: listenAddress || undefined,
     }, () => {
-      Sys.Print(`Webserver listening on port ${listenPort} (${listenAddress}\n`);
+      Sys.Print(`Webserver listening on port ${listenPort} (${listenAddress || 'all interfaces'})\n`);
 
       NET.server = server;
     });

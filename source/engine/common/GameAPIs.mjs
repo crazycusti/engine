@@ -485,10 +485,14 @@ export class ServerEngineAPI extends CommonEngineAPI {
     MSG.WriteCoordVector(SV.server.datagram, endOrigin);
   }
 
-  static PlayTrack(id1, id2) {
+  /**
+   * Makes all clients play the specified audio track.
+   * @param {number} track audio track number
+   */
+  static PlayTrack(track) {
     MSG.WriteByte(SV.server.datagram, Protocol.svc.cdtrack);
-    MSG.WriteByte(SV.server.datagram, id1);
-    MSG.WriteByte(SV.server.datagram, id2);
+    MSG.WriteByte(SV.server.datagram, track);
+    MSG.WriteByte(SV.server.datagram, 0); // unused
   }
 
   /**

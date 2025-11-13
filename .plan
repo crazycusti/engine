@@ -64,6 +64,7 @@ Grouped by sections and then sorted by priority (more or less).
 * look into loading of Classic Doom assets, to make a game mash-up of sorts
 * look into things like https://github.com/schteppe/cannon.js and https://github.com/kripken/ammo.js
 * play around with skybox support etc.
+* add IQM support
 
 ## Resources
 
@@ -84,8 +85,14 @@ Grouped by sections and then sorted by priority (more or less).
   * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
 * https://www.jagregory.com/abrash-black-book/ the 3d bible
 * https://q1tools.github.io/ set of handy Quake 1 tools
+* https://sepia.imageonline.co/
 
 ## Log
+
+### 2025-11-13
+
+* made vite spit out smaller chunks and deduplicate shared code
+* made the game code more hackable, the goal is to be able to extent all classes easily
 
 ### 2025-11-10
 

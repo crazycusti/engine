@@ -56,6 +56,24 @@ export default defineConfig(({ mode }) => ({
         entryFileNames: '[name]-[hash].js',
         chunkFileNames: '[name]-[hash].js',
         assetFileNames: '[name]-[hash][extname]',
+        manualChunks(id) {
+          // bundle shared code into a single chunk
+          if (id.includes('/source/shared/')) {
+            return 'shared';
+          }
+
+          // keep game modules as separate chunks (they are dynamically loaded by the PR code)
+          if (id.includes('/source/game/')) {
+            // extract the gamedir name
+            const gameMatch = id.match(/\/source\/game\/([^/]+)\//);
+            if (gameMatch) {
+              return `game-${gameMatch[1]}`;
+            }
+          }
+
+          // anything else
+          return null;
+        },
       },
     },
     copyPublicDir: true,
@@ -63,7 +81,9 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1000,
     minify: mode === 'production' ? 'esbuild' : false,
   },
-  plugins: [gameModulePreloadPlugin()],
+  plugins: [
+    gameModulePreloadPlugin(),
+  ],
   define: {
     '__BUILD_SIGNALING_URL__': JSON.stringify(
       process.env.VITE_SIGNALING_URL || '',

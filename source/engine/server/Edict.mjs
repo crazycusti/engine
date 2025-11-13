@@ -9,6 +9,7 @@ import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
 
 /** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
+/** @typedef {import('../../game/id1/entity/Worldspawn.mjs').WorldspawnEntity} WorldspawnEntity */
 
 let { CL, COM, Con, Host, Mod, PR, SV } = registry;
 
@@ -243,6 +244,7 @@ export class ED {
         throw new Error(`ED.LoadFromFile: found ${parsed.token} when expecting {`);
       }
 
+      /** @type {import('source/shared/GameInterfaces').EdictData} */
       const initialData = {};
       ent = ent ? ED.Alloc() : SV.server.edicts[0];
       data = ED.ParseEdict(data, ent, initialData);
@@ -253,7 +255,9 @@ export class ED {
         continue;
       }
 
-      const maySpawn = SV.server.gameAPI.prepareEntity(ent, initialData.classname, initialData);
+      // console.assert(ent.num === 0 && initialData.classname === 'worldspawn', 'Edict 0 must be worldspawn');
+
+      const maySpawn = SV.server.gameAPI.prepareEntity(ent, /** @type {string} */(initialData.classname), initialData);
 
       if (!maySpawn) {
         ED.Free(ent);

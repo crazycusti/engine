@@ -111,7 +111,7 @@ export default class Q {
    * @returns {Promise<void>} Promise that resolves on next tick.
    */
   static yield() {
-    return new Promise(resolve => setTimeout(resolve, 0));
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   /**
@@ -120,7 +120,7 @@ export default class Q {
    * @returns {Promise<void>} Promise that resolves after the delay.
    */
   static sleep(msec) {
-    return new Promise(resolve => setTimeout(resolve, msec));
+    return new Promise((resolve) => setTimeout(resolve, msec));
   }
 };
 
