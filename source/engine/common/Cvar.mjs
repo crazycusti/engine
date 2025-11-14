@@ -1,6 +1,7 @@
 import { registry, eventBus } from '../registry.mjs';
 import Cmd from './Cmd.mjs';
 import Q from '../../shared/Q.mjs';
+import { cvarFlags } from '../../shared/Defs.mjs';
 
 let { CL, Con } = registry;
 
@@ -16,25 +17,7 @@ export default class Cvar {
   /** @type {Record<string, Cvar>} @private */
   static _vars = {};
 
-  static FLAG = Object.freeze({
-    NONE: 0,
-    /** archive will make the engine write the modified variable to local storage or file (dedicated only) */
-    ARCHIVE: 1,
-    /** server will make changes be broadcast to all clients */
-    SERVER: 2,
-    /** readonly cannot be changed by the user, only through the API */
-    READONLY: 4,
-    /** value won’t be shown in broadcast message */
-    SECRET: 8,
-    /** variable declared by the game code */
-    GAME: 16,
-    /** variable will be changed upon next map */
-    DEFERRED: 32, // TODO: implement
-    /** variable cannot be changed unless sv_cheats is set to 1 */
-    CHEAT: 64,
-    /** variable has been registered from the client code */
-    CLIENT: 128,
-  });
+  static FLAG = cvarFlags;
 
   // TODO: add things like onChange, onPreChange so that we can hook into changes of the variable
 

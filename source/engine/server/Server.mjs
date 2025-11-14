@@ -364,7 +364,9 @@ export default class SV {
   }
 
   static SaveSpawnparms() {
-    SV.svs.serverflags = SV.server.gameAPI.serverflags;
+    if ('serverflags' in SV.server.gameAPI) {
+      SV.svs.serverflags = SV.server.gameAPI.serverflags;
+    }
 
     for (let i = 0; i < SV.svs.maxclients; i++) {
       /** @type {ServerClient} */

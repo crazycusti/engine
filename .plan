@@ -42,6 +42,10 @@ Grouped by sections and then sorted by priority (more or less).
 * [_] flush messages more often, increase update rate
 * [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 
+### Random issues
+
+* [_] a not precached resource will cause dropping Promises, game code needs model right away
+
 ## Ideas
 
 ### More multiplayer features
@@ -88,6 +92,13 @@ Grouped by sections and then sorted by priority (more or less).
 * https://sepia.imageonline.co/
 
 ## Log
+
+### 2025-11-14
+
+* airplane mode:
+  * send pause command to all new clients when server is paused
+  * fixed a couple of weird glitches with HUD
+  * made game code way more extensible
 
 ### 2025-11-13
 

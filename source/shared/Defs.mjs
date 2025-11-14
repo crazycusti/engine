@@ -181,10 +181,10 @@ export const attn = Object.freeze({
  * Mins/max of available hulls.
  * @readonly
  */
-export const hull = [
+export const hull = Object.freeze([
   [new Vector(-16.0, -16.0, -24.0).freeze(), new Vector(16.0, 16.0, 32.0).freeze()],
   [new Vector(-32.0, -32.0, -24.0).freeze(), new Vector(32.0, 32.0, 64.0).freeze()],
-];
+]);
 
 /**
  * @readonly
@@ -251,4 +251,24 @@ export const gameCapabilities = Object.freeze({
   CAP_SPAWNPARMS_LEGACY: 'CAP_SPAWNPARMS_LEGACY',
   /** prevents chat messages from being handled by the engine, client code will handle that */
   CAP_CHAT_MANAGED: 'CAP_CHAT_MANAGED',
+});
+
+export const cvarFlags = Object.freeze({
+  NONE: 0,
+  /** archive will make the engine write the modified variable to local storage or file (dedicated only) */
+  ARCHIVE: 1,
+  /** server will make changes be broadcast to all clients */
+  SERVER: 2,
+  /** readonly cannot be changed by the user, only through the API */
+  READONLY: 4,
+  /** value won’t be shown in broadcast message */
+  SECRET: 8,
+  /** variable declared by the game code */
+  GAME: 16,
+  /** variable will be changed upon next map */
+  DEFERRED: 32, // TODO: implement
+  /** variable cannot be changed unless sv_cheats is set to 1 */
+  CHEAT: 64,
+  /** variable has been registered from the client code */
+  CLIENT: 128,
 });

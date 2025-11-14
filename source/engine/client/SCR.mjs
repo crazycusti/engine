@@ -383,7 +383,9 @@ SCR.UpdateScreen = function() {
       SCR.DrawTurtle();
       SCR.DrawPause();
       SCR.DrawCenterString();
-      CL.DrawHUD();
+      if (CL.cls.signon === 4) {
+        CL.DrawHUD();
+      }
       SCR.DrawConsole();
       CL.Draw();
       M.Draw();

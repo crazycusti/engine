@@ -173,6 +173,12 @@ export class ServerMessages {
       }
     }
 
+    // make sure the client knows about the paused state
+    if (SV.server.paused) {
+      MSG.WriteByte(client.message, Protocol.svc.setpause);
+      MSG.WriteByte(client.message, 1);
+    }
+
     MSG.WriteByte(message, Protocol.svc.signonnum);
     MSG.WriteByte(message, 1);
 
