@@ -43,23 +43,23 @@ M.state =
 };
 
 M.DrawCharacter = function(cx, cy, num) {
-  Draw.Character(cx + Math.floor(VID.width / 2) - 160, cy + Math.floor(VID.height / 2) - 100, num);
+  Draw.Character(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, num, 2.0);
 };
 
 M.Print = function(cx, cy, str) {
-  Draw.StringWhite(cx + Math.floor(VID.width / 2) - 160, cy + Math.floor(VID.height / 2) - 100, str);
+  Draw.StringWhite(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, str, 2.0);
 };
 
 M.PrintWhite = function(cx, cy, str) {
-  Draw.String(cx + Math.floor(VID.width / 2) - 160, cy + Math.floor(VID.height / 2) - 100, str);
+  Draw.String(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, str, 2.0);
 };
 
 M.DrawPic = function(x, y, pic) {
-  Draw.Pic(x + Math.floor(VID.width / 2) - 160, y + Math.floor(VID.height / 2) - 100, pic);
+  Draw.Pic(x * 2 + Math.floor(VID.width / 2) - 320, y * 2 + Math.floor(VID.height / 2) - 200, pic, 2.0);
 };
 
 M.DrawPicTranslate = function(x, y, pic, top, bottom) {
-  Draw.PicTranslate(x + Math.floor(VID.width / 2) - 160, y + Math.floor(VID.height / 2) - 100, pic, top, bottom);
+  Draw.PicTranslate(x * 2 + Math.floor(VID.width / 2) - 320, y * 2 + Math.floor(VID.height / 2) - 200, pic, top, bottom, 2.0);
 };
 
 M.DrawTextBox = function(x, y, width, lines) {
@@ -540,7 +540,7 @@ M.MultiPlayer_Key = function(k) {
 
 // Options menu
 M.options_cursor = 0;
-M.options_items = 11;
+M.options_items = 12;
 
 M.Menu_Options_f = function() {
   Key.dest.value = Key.dest.menu;
