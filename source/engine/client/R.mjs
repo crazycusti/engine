@@ -2005,14 +2005,14 @@ R.DrawParticles = function() {
 };
 
 R.AllocParticles = function(count) {
-  const allocated = []; let i;
-  for (i = 0; i < R.numparticles; i++) {
+  const allocated = [];
+  for (let i = 0; i < R.numparticles; i++) {
     if (count === 0) {
       return allocated;
     }
     if (R.particles[i].die < CL.state.time) {
       allocated[allocated.length] = i;
-      --count;
+      count--;
     }
   }
   return allocated;
