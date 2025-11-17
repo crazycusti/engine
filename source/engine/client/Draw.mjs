@@ -14,8 +14,7 @@ eventBus.subscribe('registry.frozen', () => {
   Host = registry.Host;
 });
 
-/** @type {WebGL2RenderingContext} */
-let gl = null;
+let gl = /** @type {WebGL2RenderingContext} */ (null);
 
 eventBus.subscribe('gl.ready', () => {
   gl = GL.gl;

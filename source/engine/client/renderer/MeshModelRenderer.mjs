@@ -4,14 +4,19 @@ import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 
 let { Con, R } = registry;
-let gl = null;
 
 eventBus.subscribe('registry.frozen', () => {
   ({ Con, R } = registry);
 });
 
+let gl = /** @type {WebGL2RenderingContext} */ (null);
+
 eventBus.subscribe('gl.ready', () => {
   gl = GL.gl;
+});
+
+eventBus.subscribe('gl.shutdown', () => {
+  gl = null;
 });
 
 /**

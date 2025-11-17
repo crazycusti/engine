@@ -5,7 +5,7 @@ import GL from '../GL.mjs';
 import W from '../../common/W.mjs';
 
 let { CL, Host, R } = registry;
-let gl = null;
+let gl = /** @type {WebGL2RenderingContext} */ (null);
 
 eventBus.subscribe('registry.frozen', () => {
   ({ CL, Host, R } = registry);
@@ -13,6 +13,10 @@ eventBus.subscribe('registry.frozen', () => {
 
 eventBus.subscribe('gl.ready', () => {
   gl = GL.gl;
+});
+
+eventBus.subscribe('gl.shutdown', () => {
+  gl = null;
 });
 
 /**

@@ -22,8 +22,7 @@ eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
 });
 
-/** @type {WebGL2RenderingContext} */
-let gl = null;
+let gl = /** @type {WebGL2RenderingContext} */ (null);
 
 eventBus.subscribe('gl.ready', () => {
   gl = GL.gl;
