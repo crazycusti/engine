@@ -53,9 +53,9 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       input: resolve(__dirname, 'public/index.html'),
       output: {
-        entryFileNames: '[name]-[hash].js',
-        chunkFileNames: '[name]-[hash].js',
-        assetFileNames: '[name]-[hash][extname]',
+        entryFileNames: 'libs/[name]-[hash].js',
+        chunkFileNames: 'libs/[name]-[hash].js',
+        assetFileNames: 'libs/[name]-[hash][extname]',
         manualChunks(id) {
           // bundle shared code into a single chunk
           if (id.includes('/source/shared/')) {

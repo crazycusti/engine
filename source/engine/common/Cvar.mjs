@@ -175,21 +175,13 @@ export default class Cvar {
 
     console.assert(variable !== undefined, 'variable must be registered', name);
 
+    if (!variable) {
+      return null;
+    }
+
     variable.set(value);
 
     return variable;
-  }
-
-  /**
-   * Sets the value of the console variable to a floating-point number.
-   * @param {string} name name of the variable
-   * @param {number} value new value
-   * @deprecated use Set instead
-   * @see {@link Cvar#Set}
-   * @returns {Cvar} variable
-   */
-  static SetValue(name, value) {
-    return Cvar.Set(name, value);
   }
 
   /**

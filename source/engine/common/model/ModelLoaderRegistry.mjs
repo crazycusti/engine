@@ -66,7 +66,4 @@ export class ModelLoaderRegistry {
   clear() {
     this.loaders = [];
   }
-}
-
-// Create a singleton instance
-export const modelLoaderRegistry = new ModelLoaderRegistry();
+};

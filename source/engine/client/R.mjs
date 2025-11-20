@@ -1305,7 +1305,7 @@ const solidskytexture = new GLTexture('r_solidsky', 128, 128);
 const alphaskytexture = new GLTexture('r_alphasky', 128, 128);
 
 R.InitTextures = function() {
-  if (Host.dedicated.value) {
+  if (registry.isDedicatedServer) {
     return;
   }
 

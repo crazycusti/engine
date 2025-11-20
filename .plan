@@ -35,6 +35,8 @@ Grouped by sections and then sorted by priority (more or less).
 * [_] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
 * [_] `CL.state.intermission`/`ExitIntermission`: unsure what happens next on DS
 * [_] remove C style code that is almost verbatim from Quake
+* [_] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
+* [_] reorganize shaders
 
 ### Network improvements
 
@@ -49,10 +51,19 @@ Grouped by sections and then sorted by priority (more or less).
 ### Rendering improvements
 
 * [_] lerp view model animations
+* [_] water transparency should be configured through other means such as worldspawnInfo
 
 ### Random issues
 
 * [_] a not precached resource will cause dropping Promises, game code needs model right away
+* [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
+
+### LibreQuake support
+
+* [_] investigate issues with missing/broken bmodels in some of the maps
+* [_] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
+* [_] add fog support
+* [_] try to get QuakeC’s progs.dat going
 
 ## Ideas
 
@@ -100,6 +111,23 @@ Grouped by sections and then sorted by priority (more or less).
 * https://sepia.imageonline.co/
 
 ## Log
+
+### 2025-11-19
+
+* I’m considering moving the shaders into the code base, now that I could compile them in
+
+### 2025-11-18
+
+* airplane mode:
+  * trying to get librequake working
+    * copying over `shaders/`
+    * link better-quake.rc to quake.rc
+    * there are some weird issues with the progs.dat, using my QuakeJS game code works
+    * some sounds seem to be malformed causing the wav file loader to complain
+    * some of the maps seem to have some issues (bmodels look weird?)
+  * `Cvar.SetValue` is gone
+  * cleaning up here and there
+  * started looking into making the worker infrastructure available to the browser as well
 
 ### 2025-11-15
 

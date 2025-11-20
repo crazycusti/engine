@@ -194,12 +194,12 @@ SCR.CalcRefdef = function() {
 };
 
 SCR.SizeUp_f = function() {
-  Cvar.SetValue('viewsize', SCR.viewsize.value + 10);
+  Cvar.Set('viewsize', SCR.viewsize.value + 10);
   SCR.recalc_refdef = true;
 };
 
 SCR.SizeDown_f = function() {
-  Cvar.SetValue('viewsize', SCR.viewsize.value - 10);
+  Cvar.Set('viewsize', SCR.viewsize.value - 10);
   SCR.recalc_refdef = true;
 };
 
@@ -247,7 +247,7 @@ SCR.DrawNet = function() {
 
 SCR.DrawPause = function() {
   if ((SCR.showpause.value !== 0) && (CL.state.paused === true)) {
-    Draw.Pic((VID.width - SCR.pause.width) / 2, (VID.height - 48 - SCR.pause.height) / 2, SCR.pause);
+    Draw.Pic((VID.width - SCR.pause.width * 2) / 2, (VID.height - 48 - SCR.pause.height * 2) / 2, SCR.pause, 2);
   }
 };
 

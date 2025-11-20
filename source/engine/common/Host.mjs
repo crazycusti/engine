@@ -98,7 +98,7 @@ Host.InitLocal = function() {
   Host.pausable = new Cvar('pausable', '1', Cvar.FLAG.SERVER);
   Host.teamplay = new Cvar('teamplay', '0', Cvar.FLAG.SERVER); // actually a game cvar, but we need it here, since a bunch of server code is using it
 
-  // dedicated server settings
+  /** @deprecated use registry.isDedicatedServer instead, this is only made available to the game code */
   Host.dedicated = new Cvar('dedicated', registry.isDedicatedServer ? '1' : '0', Cvar.FLAG.READONLY, 'Set to 1, if running in dedicated server mode.');
 
   eventBus.subscribe('cvar.changed', (name) => {
@@ -1022,6 +1022,10 @@ Host.Name_f = function(...names) { // signon 2, step 1
     return;
   }
 
+  if (!SV.server.active) { // ???
+    return;
+  }
+
   let newName = names.join(' ').trim().substring(0, 15);
 
   if (!registry.isDedicatedServer && !this.client) {
@@ -1149,19 +1153,23 @@ Host.Color_f = function(...argv) { // signon 2, step 2 // FIXME: Host.client
   }
   const playercolor = (top << 4) + bottom;
 
-  if (!this.client) {
-    Cvar.SetValue('_cl_color', playercolor);
+  if (!registry.isDedicatedServer && !this.client) {
+    Cvar.Set('_cl_color', playercolor);
     if (CL.cls.state === CL.active.connected) {
       this.forward();
     }
     return;
   }
 
-  Host.client.colors = playercolor;
-  Host.client.edict.entity.team = bottom + 1;
+  if (!this.client) {
+    return;
+  }
+
+  this.client.colors = playercolor;
+  this.client.edict.entity.team = bottom + 1;
   const msg = SV.server.reliable_datagram;
   MSG.WriteByte(msg, Protocol.svc.updatecolors);
-  MSG.WriteByte(msg, Host.client.num);
+  MSG.WriteByte(msg, this.client.num);
   MSG.WriteByte(msg, playercolor);
 };
 
@@ -1471,17 +1479,17 @@ Host.FindViewthing = function() {
   return null;
 };
 
-Host.Viewmodel_f = function(model) {
+Host.Viewmodel_f = async function(model) {
   if (model === undefined) {
     Con.Print('Usage: viewmodel <model>\n');
     return;
   }
   const ent = Host.FindViewthing();
-  if (ent == null) {
+  if (ent) {
     return;
   }
-  const m = Mod.ForName(model);
-  if (m == null) {
+  const m = await Mod.ForNameAsync(model);
+  if (!m) {
     Con.Print('Can\'t load ' + model + '\n');
     return;
   }
@@ -1495,7 +1503,7 @@ Host.Viewframe_f = function(frame) {
     return;
   }
   const ent = Host.FindViewthing();
-  if (ent == null) {
+  if (!ent) {
     return;
   }
   const m = CL.state.model_precache[ent.entity.modelindex >> 0];
@@ -1508,7 +1516,7 @@ Host.Viewframe_f = function(frame) {
 
 Host.Viewnext_f = function() {
   const ent = Host.FindViewthing();
-  if (ent == null) {
+  if (!ent) {
     return;
   }
   const m = CL.state.model_precache[ent.entity.modelindex >> 0];
@@ -1522,7 +1530,7 @@ Host.Viewnext_f = function() {
 
 Host.Viewprev_f = function() {
   const ent = Host.FindViewthing();
-  if (ent == null) {
+  if (!ent) {
     return;
   }
   const m = CL.state.model_precache[ent.entity.modelindex >> 0];

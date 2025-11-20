@@ -5,10 +5,9 @@
  */
 
 export default {
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async fetch(request, env) {
 		// Serve static assets via the ASSETS binding
-		// With not_found_handling = "single-page-application",
-		// requests that don't match assets will automatically return index.html
 		return env.ASSETS.fetch(request);
 	},
 };

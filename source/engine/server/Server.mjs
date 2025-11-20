@@ -381,6 +381,7 @@ export default class SV {
   }
 
   static HasMap(mapname) {
+    console.trace('SV.HasMap called');
     return Mod.ForName('maps/' + mapname + '.bsp') !== null;
   }
 

@@ -2,6 +2,7 @@ import { eventBus, registry } from '../registry.mjs';
 import { parentPort } from 'node:worker_threads';
 import NodeCOM from './Com.mjs';
 import Mod from '../common/Mod.mjs';
+import Sys from '../common/Sys.mjs';
 
 class Con {
   static Print(message) {
@@ -33,12 +34,16 @@ class Con {
   }
 }
 
-class Sys {
+class WorkerSys extends Sys  {
   static Print(message) {
     parentPort.postMessage({
       event: 'worker.con.print',
       data: [message],
     });
+  }
+
+  static FloatTime() {
+    return Date.now() / 1000;
   }
 }
 
@@ -53,14 +58,23 @@ class Sys {
  * Usage: `WorkerFramework.Init();` at the top of the worker script.
  */
 export default class WorkerFramework {
-  static Init() {
+  static #InitRegistry() {
     registry.isDedicatedServer = true;
     registry.Con = Con;
-    registry.Sys = Sys;
+    registry.Sys = WorkerSys;
     registry.COM = NodeCOM;
     registry.Mod = Mod;
 
     eventBus.publish('registry.frozen');
+  }
+
+  static #InitModules() {
+    Mod.Init();
+  }
+
+  static Init() {
+    this.#InitRegistry();
+    this.#InitModules();
 
     eventBus.subscribe('worker.framework.init', (comParams) => {
       NodeCOM.searchpaths = comParams[0];

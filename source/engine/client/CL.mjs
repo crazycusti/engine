@@ -347,12 +347,12 @@ export default class CL {
   }
 
   static ServerInfo_f() { // private
-    if (this.cls.state !== this.active.connected) {
+    if (CL.cls.state !== CL.active.connected) {
       Con.Print('Can\'t "serverinfo", not connected\n');
       return;
     }
 
-    for (const [key, value] of Object.entries(this.cls.serverInfo)) {
+    for (const [key, value] of Object.entries(CL.cls.serverInfo)) {
       Con.Print(`${key}: ${value}\n`);
     }
   }

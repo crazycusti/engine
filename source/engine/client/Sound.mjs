@@ -856,48 +856,54 @@ const S = {
     let cueFound = false;
     let totalSamples = null;
 
-    while (p < data.byteLength) {
-      const chunkId = view.getUint32(p, true);
-      const chunkSize = view.getUint32(p + 4, true);
-      switch (chunkId) {
-        case 0x20746d66: // 'fmt '
-          if (view.getInt16(p + 8, true) !== 1) {
-            Con.Print(`S.LoadSound: ${sfx.name} is not in Microsoft PCM format\n`);
-            sfx.state = SFX.STATE.FAILED;
-            return false;
-          }
-          fmt = {
-            channels: view.getUint16(p + 10, true),
-            samplesPerSec: view.getUint32(p + 12, true),
-            avgBytesPerSec: view.getUint32(p + 16, true),
-            blockAlign: view.getUint16(p + 20, true),
-            bitsPerSample: view.getUint16(p + 22, true),
-          };
-          break;
-        case 0x61746164: // 'data'
-          dataOfs = p + 8;
-          dataLen = chunkSize;
-          break;
-        case 0x20657563: // 'cue '
-          cueFound = true;
-          loopstart = view.getUint32(p + 32, true);
-          break;
-        case 0x5453494c: // 'LIST'
-          if (cueFound === true) {
-            // 'cue' chunk was found earlier, so let's interpret the 'LIST' chunk
-            cueFound = false;
-            if (view.getUint32(p + 28, true) === 0x6b72616d) { // 'mark'
-              totalSamples = loopstart + view.getUint32(p + 24, true);
+    try {
+      while (p < data.byteLength) {
+        const chunkId = view.getUint32(p, true);
+        const chunkSize = view.getUint32(p + 4, true);
+        switch (chunkId) {
+          case 0x20746d66: // 'fmt '
+            if (view.getInt16(p + 8, true) !== 1) {
+              Con.Print(`S.LoadSound: ${sfx.name} is not in Microsoft PCM format\n`);
+              sfx.state = SFX.STATE.FAILED;
+              return false;
             }
-          }
-          break;
-        default:
-          break;
+            fmt = {
+              channels: view.getUint16(p + 10, true),
+              samplesPerSec: view.getUint32(p + 12, true),
+              avgBytesPerSec: view.getUint32(p + 16, true),
+              blockAlign: view.getUint16(p + 20, true),
+              bitsPerSample: view.getUint16(p + 22, true),
+            };
+            break;
+          case 0x61746164: // 'data'
+            dataOfs = p + 8;
+            dataLen = chunkSize;
+            break;
+          case 0x20657563: // 'cue '
+            cueFound = true;
+            loopstart = view.getUint32(p + 32, true);
+            break;
+          case 0x5453494c: // 'LIST'
+            if (cueFound === true) {
+              // 'cue' chunk was found earlier, so let's interpret the 'LIST' chunk
+              cueFound = false;
+              if (view.getUint32(p + 28, true) === 0x6b72616d) { // 'mark'
+                totalSamples = loopstart + view.getUint32(p + 24, true);
+              }
+            }
+            break;
+          default:
+            break;
+        }
+        p += (chunkSize + 8);
+        if (p & 1) { // pad if needed
+          p += 1;
+        }
       }
-      p += (chunkSize + 8);
-      if (p & 1) { // pad if needed
-        p += 1;
-      }
+    } catch(e) {
+      Con.Print(`S.LoadSound: unable to read ${sfx.name}, ${e.message} \n`);
+      sfx.state = SFX.STATE.FAILED;
+      return false;
     }
 
     if (!fmt) {

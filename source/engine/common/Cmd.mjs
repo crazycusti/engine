@@ -1,3 +1,4 @@
+import { AsyncFunction } from '../../shared/Q.mjs';
 import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
@@ -98,28 +99,27 @@ class ForwardCommand extends ConsoleCommand {
 };
 
 class ExecSlot {
-  constructor(filename) {
+  constructor(/** @type {string} */ filename) {
     this.filename = filename;
     this.content = null;
     this.isReady = false;
   }
-}
+};
 
 export default class Cmd {
-  static alias = [];
-  static functions = [];
+  static alias = /** @type {{ name: string, value: string }[]} */([]);
+  static functions = /** @type {{ name: string, command: typeof ConsoleCommand }[]} */([]);
   static text = '';
-  static #wait = false;
+  static wait = false;
 
-  /** @type {ExecSlot[]} */
-  static #execSlots = [];
+  static #execSlots = /** @type {ExecSlot[]} */([]);
 
   static HasPendingCommands() {
-    return this.#wait === true || this.text.length > 0 || this.#execSlots.length > 0;
+    return this.wait === true || this.text.length > 0 || this.#execSlots.length > 0;
   }
 
   static Wait_f() {
-    this.#wait = true;
+    Cmd.wait = true;
   }
 
   static Execute() {
@@ -127,19 +127,24 @@ export default class Cmd {
     while (this.#execSlots.length > 0) {
       const slot = this.#execSlots[0];
 
-      if (slot.isReady === false) {
+      if (!slot.isReady) {
         // as long as the first exec slot is not ready, we
         // cannot proceed with any command, we want to keep order
         return;
       }
 
-      Con.Print('execing ' + slot.filename + '\n');
-      Cmd.text += slot.content;
+      if (slot.content !== null) {
+        Con.Print('execing ' + slot.filename + '\n');
+        Cmd.text += slot.content;
+      } else {
+        Con.PrintWarning('couldn\'t exec ' + slot.filename + '\n');
+      }
+
       this.#execSlots.shift();
 
       // if the exec caused a wait, we stop processing here
-      if (Cmd.#wait === true) {
-        Cmd.#wait = false;
+      if (Cmd.wait) {
+        Cmd.wait = false;
         return;
       }
     }
@@ -158,8 +163,8 @@ export default class Cmd {
           continue;
         }
         Cmd.ExecuteString(line);
-        if (Cmd.#wait === true) {
-          Cmd.#wait = false;
+        if (Cmd.wait) {
+          Cmd.wait = false;
           return;
         }
         line = '';
@@ -209,12 +214,12 @@ export default class Cmd {
       const slot = new ExecSlot(filename);
       Cmd.#execSlots.push(slot);
       const f = await COM.LoadTextFileAsync(filename);
+      slot.isReady = true;
+      slot.content = f;
       if (f === null) {
         Con.PrintWarning('couldn\'t exec ' + filename + '\n');
         return;
       }
-      slot.isReady = true;
-      slot.content = f;
     }
   };
 
@@ -247,7 +252,7 @@ export default class Cmd {
   }
 
   static Init() {
-    Cmd.functions = [];
+    Cmd.functions.length = 0;
 
     Cmd.AddCommand('stuffcmds', Cmd.StuffCmds_f);
     Cmd.AddCommand('exec', Cmd.Exec_f);
@@ -258,7 +263,7 @@ export default class Cmd {
   }
 
   static Shutdown() {
-    Cmd.functions = [];
+    Cmd.functions.length = 0;
   }
 
   static TokenizeString(text) {
@@ -350,6 +355,13 @@ export default class Cmd {
         handler.command = cmdname;
         handler.argv = argv;
 
+        if (handler.run instanceof AsyncFunction) {
+          handler.run.apply(handler, cmdargs).catch((err) => {
+            Con.PrintError(`Error executing command "${cmdname}":\n${err?.message || err}\n`);
+          });
+          return;
+        }
+
         // Temporarily set Host.client for backward compatibility with commands that still use it
         const savedHostClient = Host.client;
         if (client) {
@@ -387,4 +399,4 @@ export default class Cmd {
 
     Con.Print('Unknown command "' + cmdname + '"\n');
   }
-}
+};

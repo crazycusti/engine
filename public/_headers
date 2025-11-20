@@ -5,9 +5,9 @@
   X-XSS-Protection: 1; mode=block
   Referrer-Policy: strict-origin-when-cross-origin
 
-# Cache hashed assets forever
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
+# Cache compiled code for 30 days
+/libs/*
+  Cache-Control: public, max-age=2592000, immutable
 
 # Never cache the entry point
 /index.html

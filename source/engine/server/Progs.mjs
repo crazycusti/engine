@@ -5,7 +5,7 @@ import { HostError, MissingResourceError } from '../common/Errors.mjs';
 import Q from '../../shared/Q.mjs';
 import Vector from '../../shared/Vector.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import { ED } from './Edict.mjs';
+import { ED, ServerEdict } from './Edict.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import PF, { etype, ofs } from './ProgsAPI.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
@@ -558,7 +558,7 @@ class ProgsEntity {
 
 PR.CheckEmptyString = function(s) {
   const c = s.charCodeAt(0);
-  if ((Q.isNaN(c) === true) || (c <= 32)) {
+  if (Q.isNaN(c) || c <= 32) {
     PR.RunError('Bad string');
   }
 };
@@ -839,7 +839,7 @@ PR.LoadProgs = function() {
   for (i = 0; i < num; i++) {
     PR.strings[i] = view.getUint8(ofs + i);
   }
-  PR.string_temp = PR.NewString('', 128); // allocates 128 bytes
+  PR.string_temp = PR.NewString('', 1024); // allocates 1024 bytes for temp strings
   PR.string_heap_start = PR.strings.length + 4;
   PR.string_heap_current = PR.string_heap_start;
 
@@ -904,6 +904,7 @@ PR.LoadProgs = function() {
 
       if (!SV.server.gameAPI[classname]) {
         Con.PrintWarning(`No spawn function for edict ${edict.num}: ${classname}\n`);
+        // debugger;
         return false;
       }
 
@@ -919,7 +920,7 @@ PR.LoadProgs = function() {
 
         switch (field.type & 0x7fff) {
           case etype.ev_entity:
-            edict.entity[key] = value instanceof SV.Edict ? value : {num: Q.atoi(value)};
+            edict.entity[key] = value instanceof ServerEdict ? value : {num: Q.atoi(value)};
             break;
 
           case etype.ev_vector:
@@ -1014,6 +1015,9 @@ PR.LoadProgs = function() {
 
 /** @type {Cvar[]} */
 PR._cvars = [];
+
+/** @type {import('./GameLoader').GameModuleInterface|null} */
+PR.QuakeJS = null;
 
 PR.Init = async function() {
   try {
@@ -1137,7 +1141,7 @@ PR.StackTrace = function() {
   }
   PR.stack[PR.depth] = [PR.xstatement, PR.xfunction];
   let f; let file;
-  for (; PR.depth >= 0; --PR.depth) {
+  for (; PR.depth >= 0; PR.depth--) {
     f = PR.stack[PR.depth][1];
     if (!f) {
       Con.Print('<NO FUNCTION>\n');
@@ -1526,7 +1530,6 @@ PR.SetString = function(ofs, s, length = null) {
 /**
  * @param s
  * @param length
- * @deprecated
  */
 PR.NewString = function(s, length) {
   const ofs = PR.strings.length;
@@ -1549,8 +1552,8 @@ PR.NewString = function(s, length) {
 };
 
 PR.TempString = function(string) {
-  if (string.length > 127) {
-    string = string.substring(0, 127);
+  if (string.length > 1023) {
+    string = string.substring(0, 1023);
   }
   for (let i = 0; i < string.length; i++) {
     PR.strings[PR.string_temp + i] = string.charCodeAt(i);

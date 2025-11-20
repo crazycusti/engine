@@ -3,7 +3,7 @@ import GL from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { MissingResourceError } from './Errors.mjs';
 import Q from '../../shared/Q.mjs';
-import { modelLoaderRegistry } from './model/ModelLoaderRegistry.mjs';
+import { ModelLoaderRegistry } from './model/ModelLoaderRegistry.mjs';
 import { AliasMDLLoader } from './model/loaders/AliasMDLLoader.mjs';
 import { SpriteSPRLoader } from './model/loaders/SpriteSPRLoader.mjs';
 import { BSP29Loader } from './model/loaders/BSP29Loader.mjs';
@@ -32,13 +32,6 @@ eventBus.subscribe('gl.shutdown', () => {
   gl = null;
 });
 
-/**
- * Mod.BaseModel - See model/BaseModel.mjs
- * Mod.BrushModel - See model/BSP.mjs
- * Mod.SpriteModel - See model/SpriteModel.mjs
- * Mod.AliasModel - See model/AliasModel.mjs
- */
-
 // Re-export model classes for backward compatibility
 export { AliasModel } from './model/AliasModel.mjs';
 export { BrushModel } from './model/BSP.mjs';
@@ -58,44 +51,32 @@ Mod.hull = {
   crouch: 3,
 };
 
-Mod.version = { brush: 29, sprite: 1, alias: 6, bsp2: 844124994 };
+Mod.known = /** @type {BaseModel[]} */ ([]);
 
-Mod.known = [];
-
-// Initialize model loader registry at module load time
-// This must happen before any models are loaded
-(function initializeLoaders() {
-  const aliasLoader = new AliasMDLLoader();
-  const spriteLoader = new SpriteSPRLoader();
-  const bsp29Loader = new BSP29Loader();
-  const bsp2Loader = new BSP2Loader();
-  const objLoader = new WavefrontOBJLoader();
-
-  // Register BSP2 before BSP29 so it's checked first (more specific format)
-  modelLoaderRegistry.register(bsp2Loader);
-  modelLoaderRegistry.register(bsp29Loader);
-  modelLoaderRegistry.register(aliasLoader);
-  modelLoaderRegistry.register(spriteLoader);
-  modelLoaderRegistry.register(objLoader);
-})();
+Mod.modelLoaderRegistry = new ModelLoaderRegistry();
 
 Mod.Init = function () {
   Mod.novis = new Array(1024);
   Mod.novis.fill(0xff);
+
+  // Register BSP2 before BSP29 so it’s checked first (more specific format)
+  Mod.modelLoaderRegistry.register(new BSP2Loader());
+  Mod.modelLoaderRegistry.register(new BSP29Loader());
+  Mod.modelLoaderRegistry.register(new AliasMDLLoader());
+  Mod.modelLoaderRegistry.register(new SpriteSPRLoader());
+  Mod.modelLoaderRegistry.register(new WavefrontOBJLoader());
 };
 
 Mod.PointInLeaf = function (p, model) { // public method, static access? (PF, R, S use it)
-  // eslint-disable-next-line eqeqeq
-  if (model == null) {
+  if (!model) {
     throw new Error('Mod.PointInLeaf: bad model');
   }
-  // eslint-disable-next-line eqeqeq
-  if (model.nodes == null) {
-    throw new Error('Mod.PointInLeaf: bad model');
+  if (!model.nodes) {
+    throw new Error('Mod.PointInLeaf: bad model, missing nodes');
   }
   let node = model.nodes[0];
   let normal;
-  for (; ;) {
+  while (true) {
     if (node.contents < 0) {
       return node;
     }
@@ -186,7 +167,7 @@ Mod.FindName = function (name) { // private method (refactor into _RegisterModel
 
 Mod.LoadModelFromBuffer = function (loadmodel, buffer) {
   // Use the new loader registry system
-  return modelLoaderRegistry.load(buffer, loadmodel.name, loadmodel);
+  return Mod.modelLoaderRegistry.load(buffer, loadmodel.name, loadmodel);
 };
 
 /**
@@ -235,6 +216,9 @@ Mod.LoadModelAsync = async function (mod, crash) { // private method
  * @deprecated use Mod.LoadModelAsync instead
  */
 Mod.ForName = function (name, crash = false) { // public method
+  if (name[0] !== '*') {
+    console.trace('Mod.ForName called', name);
+  }
   return Mod.LoadModel(Mod.FindName(name), crash);
 };
 
@@ -246,48 +230,6 @@ Mod.ForName = function (name, crash = false) { // public method
 Mod.ForNameAsync = async function (name, crash = false) { // public method
   return await Mod.LoadModelAsync(Mod.FindName(name), crash);
 };
-
-/*
-===============================================================================
-
-          BRUSHMODEL LOADING (Handled by BSP29Loader.mjs)
-
-===============================================================================
-*/
-
-// BSP loading has been moved to model/loaders/BSP29Loader.mjs
-// The ModelLoaderRegistry automatically routes .bsp files to BSP29Loader
-
-/*
-===============================================================================
-
-          ALIAS MODEL LOADING (Handled by AliasMDLLoader.mjs)
-
-===============================================================================
-*/
-
-// Alias model loading has been moved to model/loaders/AliasMDLLoader.mjs
-// The ModelLoaderRegistry automatically routes .mdl files to AliasMDLLoader
-
-/*
-===============================================================================
-
-          SPRITE MODEL LOADING (Handled by SpriteSPRLoader.mjs)
-
-===============================================================================
-*/
-
-// Sprite model loading has been moved to model/loaders/SpriteSPRLoader.mjs
-// The ModelLoaderRegistry automatically routes .spr files to SpriteSPRLoader
-
-/*
-===============================================================================
-
-          QUAKE C PARSING (For future model format support)
-
-===============================================================================
-*/
-
 
 /** @typedef {import('../../shared/GameInterfaces.d.ts').ParsedQC} ParsedQC_t */
 /** @augments ParsedQC_t */

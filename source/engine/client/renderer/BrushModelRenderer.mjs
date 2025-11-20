@@ -199,8 +199,7 @@ export class BrushModelRenderer extends ModelRenderer {
         // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
         const threshold = R.pbr_lod_threshold.value;
         const screenCoverageEstimate = cmds[2] / 3; // Rough proxy
-        const usePBR = threshold === 0 ? false :
-                       (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+        const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
 
         gl.uniform1i(program.uPerformDotLighting,
           (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);
@@ -309,8 +308,7 @@ export class BrushModelRenderer extends ModelRenderer {
 
         const threshold = R.pbr_lod_threshold.value;
         const screenCoverageEstimate = cmds[2] / 3;
-        const usePBR = threshold === 0 ? false :
-                       (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+        const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
 
         gl.uniform1i(program.uPerformDotLighting,
           (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);

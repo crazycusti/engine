@@ -237,7 +237,8 @@ export default class COM {
     Con.Print('Files are served from the unified virtual filesystem.\n');
   }
 
-  static WriteFile(filename, data, len) {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  static async WriteFile(filename, data, len) {
     filename = filename.toLowerCase();
     const dest = [];
     for (let i = 0; i < len; i++) {
