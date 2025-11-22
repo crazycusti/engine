@@ -314,7 +314,8 @@ export default class Vector extends Array {
   }
 
   /**
-   * @returns {Vector} [pitch, yaw, 0]
+   * Convert this directional vector into pitch and yaw angles and returns them.
+   * @returns {Vector} Vector containing [pitch, yaw, 0]
    */
   toAngles() {
     const angles = new Vector();

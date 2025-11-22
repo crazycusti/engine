@@ -86,7 +86,7 @@
 					signalingURL,
 					cdnURL,
 				}, buildConfig).then(() => {
-					if (document.getElementById('error').textContent === '') {
+					if (document.getElementById('error').textContent === '' && buildConfig.mode === 'production') {
 						location.href = 'https://www.quakeshack.dev';
 					}
 				}).catch((err) => {

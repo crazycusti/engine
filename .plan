@@ -6,1154 +6,1160 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Modern JavaScript
 
-* [_] `COM` we need to completely get rid of synchroneously loading files, it’s flagged as deprecated
-* [_] since IO is no longer blocking, things need to be more aware of stuff still stuck on loading
-* [_] considering replacing Sys.Print and Con.Print with console.info, console.warn, etc.
-* [_] use more Exceptions and better Exception classes, also more console.asserts
-* [_] use more generator functions when possible
+- [_] `COM` we need to completely get rid of synchroneously loading files, it’s flagged as deprecated
+- [_] since IO is no longer blocking, things need to be more aware of stuff still stuck on loading
+- [_] considering replacing Sys.Print and Con.Print with console.info, console.warn, etc.
+- [_] use more Exceptions and better Exception classes, also more console.asserts
+- [_] use more generator functions when possible
 
 ### UI/UX improvements
 
-* [_] M: better multiplayer menus
-  * [_] setup a profile when new player
-  * [_] better create game menu
-  * [_] integrate with server browser
-* [_] M: make it more readible on high DPI screens
-* [_] UI: textboxes should act more like text boxes
-* [_] CL: finished demos trigger a `Host.Error` (lost connection), needs fixing
-* [_] M: introduce a password required dialog to join password protected servers
-* [_] M: touch support (how to escape etc) and mouse support
-* [_] M: rewrite the code using the new framework
-* [_] IN: proper virtual joystick and keyboard/UI
+- [_] M: better multiplayer menus
+  - [_] setup a profile when new player
+  - [_] better create game menu
+  - [_] integrate with server browser
+- [_] M: make it more readible on high DPI screens
+- [_] UI: textboxes should act more like text boxes
+- [_] CL: finished demos trigger a `Host.Error` (lost connection), needs fixing
+- [_] M: introduce a password required dialog to join password protected servers
+- [_] M: touch support (how to escape etc) and mouse support
+- [_] M: rewrite the code using the new framework
+- [_] IN: proper virtual joystick and keyboard/UI
 
 ### Code smell
 
-* [_] CL: go over the client API again, too much confusing lingo here and there after me hacking in lots of features
-* [_] SV: cleanup the `SV.WriteEntitiesToClient` mess a bit, make it more flexible
-* [_] cleanup `charCodeAt` everywhere
-* [_] completely get rid of `Host.client`
-* [_] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
-* [_] `CL.state.intermission`/`ExitIntermission`: unsure what happens next on DS
-* [_] remove C style code that is almost verbatim from Quake
-* [_] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
-* [_] reorganize shaders
+- [_] CL: go over the client API again, too much confusing lingo here and there after me hacking in lots of features
+- [_] SV: cleanup the `SV.WriteEntitiesToClient` mess a bit, make it more flexible
+- [_] cleanup `charCodeAt` everywhere
+- [_] completely get rid of `Host.client`
+- [_] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
+- [_] `CL.state.intermission`/`ExitIntermission`: unsure what happens next on DS
+- [_] remove C style code that is almost verbatim from Quake
+- [_] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
+- [_] reorganize shaders
 
 ### Network improvements
 
-* [_] port QuakeWorld netcode
-* [_] flush messages more often, increase update rate
-* [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
+- [_] port QuakeWorld netcode
+- [_] flush messages more often, increase update rate
+- [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 
 ### Life improvements
 
-* [_] unregister Cvars and Commands registered by the game code
+- [_] unregister Cvars and Commands registered by the game code
 
 ### Rendering improvements
 
-* [_] lerp view model animations
-* [_] water transparency should be configured through other means such as worldspawnInfo
+- [_] lerp view model animations
+- [_] water transparency should be configured through other means such as worldspawnInfo
 
 ### Random issues
 
-* [_] a not precached resource will cause dropping Promises, game code needs model right away
-* [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
+- [_] a not precached resource will cause dropping Promises, game code needs model right away
+- [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
 
 ### LibreQuake support
 
-* [_] investigate issues with missing/broken bmodels in some of the maps
-* [_] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
-* [_] add fog support
-* [_] try to get QuakeC’s progs.dat going
+- [_] investigate issues with missing/broken bmodels in some of the maps
+- [_] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
+- [_] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
+- [_] try to get QuakeC’s progs.dat going
 
 ## Ideas
 
 ### More multiplayer features
 
-* have some sort of user registration/tracking
-* collect K/D ratios, accuracy etc.
-* upload avatars for users? at least the colors or maybe different skins
-* sv_timelimit, sv_maplist
-* idle kick
-* ask player to set a username when they have their default name
-* increase limit to 32 players (like QW)
-* pausable --> already exists, but needs improvement
+- have some sort of user registration/tracking
+- collect K/D ratios, accuracy etc.
+- upload avatars for users? at least the colors or maybe different skins
+- sv_timelimit, sv_maplist
+- idle kick
+- ask player to set a username when they have their default name
+- increase limit to 32 players (like QW)
+- pausable --> already exists, but needs improvement
 
 ### Random thoughts, ideas, etc.
 
-* voice chat? (not WebRTC based)
-* make it Quake2 compatible?
-  * not that trivial, since Quake2 game code is ia32/native
-  * we could port over features though
-* look into loading of Classic Doom assets, to make a game mash-up of sorts
-* look into things like https://github.com/schteppe/cannon.js and https://github.com/kripken/ammo.js
-* play around with skybox support etc.
-* add IQM support
+- voice chat? (not WebRTC based)
+- make it Quake2 compatible?
+  - not that trivial, since Quake2 game code is ia32/native
+  - we could port over features though
+- look into loading of Classic Doom assets, to make a game mash-up of sorts
+- look into things like https://github.com/schteppe/cannon.js and https://github.com/kripken/ammo.js
+- play around with skybox support etc.
+- add IQM support
 
 ## Resources
 
-* https://quake.fandom.com/wiki/Console_Commands_(Q1)
-* https://quakewiki.org/wiki/Quake_BSP_Format
-  * some insights on the evolution of BSP formats
-* https://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
-  * mentions the formula on how to calculate light levels
-* https://github.com/gpujs/gpu.js
-  * library to offload calculations to the GPU
-* https://github.com/id-Software/Quake-Tools/tree/master/qutils
-  * Official Quake Utils
-* https://idtech.space/
-  * https://code.idtech.space/ all id tech related code (without leaks)
-* stuff for building maps
-  * https://github.com/ericwa/ericw-tools – compile maps with q3map2 features
-  * https://developer.valvesoftware.com/wiki/MAP_(file_format) – we are using Valve 220
-  * https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
-* https://www.jagregory.com/abrash-black-book/ the 3d bible
-* https://q1tools.github.io/ set of handy Quake 1 tools
-* https://sepia.imageonline.co/
+- https://quake.fandom.com/wiki/Console_Commands_(Q1)
+- https://quakewiki.org/wiki/Quake_BSP_Format
+  - some insights on the evolution of BSP formats
+- https://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
+  - mentions the formula on how to calculate light levels
+- https://github.com/gpujs/gpu.js
+  - library to offload calculations to the GPU
+- https://github.com/id-Software/Quake-Tools/tree/master/qutils
+  - Official Quake Utils
+- https://idtech.space/
+  - https://code.idtech.space/ all id tech related code (without leaks)
+- stuff for building maps
+  - https://github.com/ericwa/ericw-tools – compile maps with q3map2 features
+  - https://developer.valvesoftware.com/wiki/MAP_(file_format) – we are using Valve 220
+  - https://netradiant.gitlab.io/ – pretty good fork of GtkRadiant
+- https://www.jagregory.com/abrash-black-book/ the 3d bible
+- https://q1tools.github.io/ set of handy Quake 1 tools
+- https://sepia.imageonline.co/
 
 ## Log
 
+### 2025-11-22
+
+- navigation code is no longer trying direct links against hull0, since they exclude clipping brushes
+- everything needs to be scaled 2x
+
 ### 2025-11-19
 
-* I’m considering moving the shaders into the code base, now that I could compile them in
+- I’m considering moving the shaders into the code base, now that I could compile them in
 
 ### 2025-11-18
 
-* airplane mode:
-  * trying to get librequake working
-    * copying over `shaders/`
-    * link better-quake.rc to quake.rc
-    * there are some weird issues with the progs.dat, using my QuakeJS game code works
-    * some sounds seem to be malformed causing the wav file loader to complain
-    * some of the maps seem to have some issues (bmodels look weird?)
-  * `Cvar.SetValue` is gone
-  * cleaning up here and there
-  * started looking into making the worker infrastructure available to the browser as well
+- airplane mode:
+  - trying to get librequake working
+    - copying over `shaders/`
+    - link better-quake.rc to quake.rc
+    - there are some weird issues with the progs.dat, using my QuakeJS game code works
+    - some sounds seem to be malformed causing the wav file loader to complain
+    - some of the maps seem to have some issues (bmodels look weird?)
+  - `Cvar.SetValue` is gone
+  - cleaning up here and there
+  - started looking into making the worker infrastructure available to the browser as well
 
 ### 2025-11-15
 
-* 2x scale menu
+- 2x scale menu
 
 ### 2025-11-14
 
-* airplane mode:
-  * send pause command to all new clients when server is paused
-  * fixed a couple of weird glitches with HUD
-  * made game code way more extensible
+- airplane mode:
+  - send pause command to all new clients when server is paused
+  - fixed a couple of weird glitches with HUD
+  - made game code way more extensible
 
 ### 2025-11-13
 
-* made vite spit out smaller chunks and deduplicate shared code
-* made the game code more hackable, the goal is to be able to extent all classes easily
+- made vite spit out smaller chunks and deduplicate shared code
+- made the game code more hackable, the goal is to be able to extent all classes easily
 
 ### 2025-11-10
 
-* some of the stuff is utterly cursed, this time:
-  * handling loading precached resources async and keeping the engine in a state to not break things
-  * I don’t know why NET.SendToAll even exists in the first place, removed it (probably later I’m gonna regret it)
-  * making sure that async `Cmd.Exec_f` is being processed in order
-* cleaned up this file, removed many todos to cure me from being overwhelmed
-* loading more resources in parallel
-* removed the byte-by-byte “pop check”, replaced it with a simple checksum check
-* some tslint/eslint cleaning
-* force close menu when the game starts
+- some of the stuff is utterly cursed, this time:
+  - handling loading precached resources async and keeping the engine in a state to not break things
+  - I don’t know why NET.SendToAll even exists in the first place, removed it (probably later I’m gonna regret it)
+  - making sure that async `Cmd.Exec_f` is being processed in order
+- cleaned up this file, removed many todos to cure me from being overwhelmed
+- loading more resources in parallel
+- removed the byte-by-byte “pop check”, replaced it with a simple checksum check
+- some tslint/eslint cleaning
+- force close menu when the game starts
 
 ### 2025-11-08
 
-* added `invite` console command to get a shareable link
-  * using `prompt` like a caveman
-  * https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share is special…
-* I need to think of a setTimeout infrastructure scoped to a valid game
-* now that I got vite for the frontend build process, I can go nuts with smaller files and cleaning up the code base
+- added `invite` console command to get a shareable link
+  - using `prompt` like a caveman
+  - https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share is special…
+- I need to think of a setTimeout infrastructure scoped to a valid game
+- now that I got vite for the frontend build process, I can go nuts with smaller files and cleaning up the code base
 
 ### 2025-11-07
 
-* started playing around with menu refactoring
-* need to redo the console/menu flow, it’s not coherant anymore
+- started playing around with menu refactoring
+- need to redo the console/menu flow, it’s not coherant anymore
 
 ### 2025-11-05
 
-* more CI/CD related improvements
+- more CI/CD related improvements
 
 ### 2025-11-04
 
-* fixed an issue with blending deluxemaps
-* some typing compliance issues
-* asked Claude to explain DrawSkyBox, it’s neatly commented now
-  * I’m thinking of having Source engine style skyboxes
-* prepared a few more things for serving files from a CDN
-* added -noserver and nav_build_process to integrate baking the nav mesh in a streamlined build process
-* introduced vite and wrangler for a more streamlined deployment process
-* rebuilt nav files for episode 1 (this time without waypoints, just the graph)
-* navigation works again in browser servers
-* some here and theres such as documentation, Dockerfile, deleted some old files etc.
+- fixed an issue with blending deluxemaps
+- some typing compliance issues
+- asked Claude to explain DrawSkyBox, it’s neatly commented now
+  - I’m thinking of having Source engine style skyboxes
+- prepared a few more things for serving files from a CDN
+- added -noserver and nav_build_process to integrate baking the nav mesh in a streamlined build process
+- introduced vite and wrangler for a more streamlined deployment process
+- rebuilt nav files for episode 1 (this time without waypoints, just the graph)
+- navigation works again in browser servers
+- some here and theres such as documentation, Dockerfile, deleted some old files etc.
 
 ### 2025-11-01
 
-* added WebRTC and master server (for lobbies) support
-* a couple of optimizations around loading and serving files
+- added WebRTC and master server (for lobbies) support
+- a couple of optimizations around loading and serving files
 
 ### 2025-10-25
 
-* bumped up lightmap limit to 2048
-* fixed a weird bug when setting cvars to an empty string causing NaN values
-* added BSP2 support
-* added LIGHTGRID_OCTREE support
+- bumped up lightmap limit to 2048
+- fixed a weird bug when setting cvars to an empty string causing NaN values
+- added BSP2 support
+- added LIGHTGRID_OCTREE support
 
 ### 2025-10-24
 
-* noticed performance issues with certain brushes in certain situations when you go up close, super strange
-* I let Claude Sonnet 4.5 refactor the whole model rendering stuff according to my rules, it went much better than with GPT-5-Codex
-* had to clean up unused stuff from shaders since different platforms are optimizing things away
-* started working on a Wavefront OBJ loader
-* version bump to 1.1.5: CL refactor, SV refactor, Mod refactor.
-* paved the way for semi-transparent brushes etc.
+- noticed performance issues with certain brushes in certain situations when you go up close, super strange
+- I let Claude Sonnet 4.5 refactor the whole model rendering stuff according to my rules, it went much better than with GPT-5-Codex
+- had to clean up unused stuff from shaders since different platforms are optimizing things away
+- started working on a Wavefront OBJ loader
+- version bump to 1.1.5: CL refactor, SV refactor, Mod refactor.
+- paved the way for semi-transparent brushes etc.
 
 ### 2025-10-19
 
-* let GPT-5-Codex refactor Server.mjs into smaller files, ended up in a chaos and I spend time together with Claude Sonnet 4.5 to finish it
+- let GPT-5-Codex refactor Server.mjs into smaller files, ended up in a chaos and I spend time together with Claude Sonnet 4.5 to finish it
 
 ### 2025-10-18
 
-* brush model lighting fixes applied
-* avelocity can be applied to push type things, however everything else is not implemented yet
-* let GPT-5-Codex refactor CL.mjs into smaller files, it did not go soo badly
+- brush model lighting fixes applied
+- avelocity can be applied to push type things, however everything else is not implemented yet
+- let GPT-5-Codex refactor CL.mjs into smaller files, it did not go soo badly
 
 ### 2025-10-14
 
-* reading out worldspawn’s config is implemented, lmscale is now read out from the map
-* other small fixes, cleaning up shaders
+- reading out worldspawn’s config is implemented, lmscale is now read out from the map
+- other small fixes, cleaning up shaders
 
 ### 2025-10-12
 
-* current WIP: lmscale
-  * needs to be configurable (aka. reading out the _lmscale from worldspawn)
+- current WIP: lmscale
+  - needs to be configurable (aka. reading out the \_lmscale from worldspawn)
 
 ### 2025-10-10
 
-* need to clean up the whole texture loading spiel
-  * `GLTexture` holds only just one texture/sampler
-  * `Material` should hold a whole pack of textures for luminance, diffuse, etc.
-  * also I need to release the textures’ alpha channels to carry luminance
-  * WAD2 and WAD3 loader need to spit out different textures
-    * diffuse (the regular texels)
-    * luminance (for bright colors)
-* put back deprecated support for `~` prefix in WAD3 (last 32 indexed colors are deemed fullbright)
-* introduced a simple JSON based format for materials: per BSP texture define a bunch of textures
-* `Face` got `normal` now that is properly calculated which is passed down to the shaders
-* introduced optional normal mapping, first prototype though, missing things:
-  * multiple light sources
-  * world light sources
-  * should neatly integrate with the lightmaps
-* need to fix skychain
-* need to work on this horrendous way of creating those vertex buffer chains
-* `.lit` files are no longer used, the BSP loader now supports BSPX format
-* I need to free the texture’s alpha channel (being used for luminance) so that I can use alpha-blended textures
+- need to clean up the whole texture loading spiel
+  - `GLTexture` holds only just one texture/sampler
+  - `Material` should hold a whole pack of textures for luminance, diffuse, etc.
+  - also I need to release the textures’ alpha channels to carry luminance
+  - WAD2 and WAD3 loader need to spit out different textures
+    - diffuse (the regular texels)
+    - luminance (for bright colors)
+- put back deprecated support for `~` prefix in WAD3 (last 32 indexed colors are deemed fullbright)
+- introduced a simple JSON based format for materials: per BSP texture define a bunch of textures
+- `Face` got `normal` now that is properly calculated which is passed down to the shaders
+- introduced optional normal mapping, first prototype though, missing things:
+  - multiple light sources
+  - world light sources
+  - should neatly integrate with the lightmaps
+- need to fix skychain
+- need to work on this horrendous way of creating those vertex buffer chains
+- `.lit` files are no longer used, the BSP loader now supports BSPX format
+- I need to free the texture’s alpha channel (being used for luminance) so that I can use alpha-blended textures
 
 ### 2025-10-07
 
-* turns out navmesh queries are insanely slow, especially if you run things on a Raspberry Pi lol
-* coming up with a worker infrastructure:
-  * abstracting away differences between node.js and browsers
-  * messages will be passed over the event bus
-  * some stub versions of Con, Sys, COM, making sure that I/O works, maybe even SV with basic information
+- turns out navmesh queries are insanely slow, especially if you run things on a Raspberry Pi lol
+- coming up with a worker infrastructure:
+  - abstracting away differences between node.js and browsers
+  - messages will be passed over the event bus
+  - some stub versions of Con, Sys, COM, making sure that I/O works, maybe even SV with basic information
 
 ### 2025-10-05
 
-* added support for transparent textures starting with `{`
-* added default game and basedir in Defs (intended for standalone modding support)
-* some code cleanup
+- added support for transparent textures starting with `{`
+- added default game and basedir in Defs (intended for standalone modding support)
+- some code cleanup
 
 ### 2025-10-01
 
-* added simple linear fog
-  * currently only exposed as Cvars
-  * needs to be configurable through "fog" on worldspawn and game API sometime
-* simplified some rendering related functions
+- added simple linear fog
+  - currently only exposed as Cvars
+  - needs to be configurable through "fog" on worldspawn and game API sometime
+- simplified some rendering related functions
 
 ### 2025-09-30
 
-* awful hack to load WAD3 textures from BSP29 if the palette color field equals 256
-* added support for transparent textures, a bit ugly due to the alpha channel being used for fullbright texels as well
-* added `fullscreen` console command (for mobile devices)
+- awful hack to load WAD3 textures from BSP29 if the palette color field equals 256
+- added support for transparent textures, a bit ugly due to the alpha channel being used for fullbright texels as well
+- added `fullscreen` console command (for mobile devices)
 
 ### 2025-09-28
 
-* fixed player pixel shader
-* added simple lighting to brush models
-* I’m not sure if I broke fullbright colors in textures, I need to double check
-* also animated light interpolation needs to be applied to lighting up entities properly
+- fixed player pixel shader
+- added simple lighting to brush models
+- I’m not sure if I broke fullbright colors in textures, I need to double check
+- also animated light interpolation needs to be applied to lighting up entities properly
 
 ### 2025-09-25
 
-* noclip’d players will no longer touch entities/triggers
-* mainloop will no longer sleep when there are pending console commands
-* sending extended clientdata is not properly propagating for all others (should introduce a global flag, so that some things still obey PVS)
-* A-star lookups are a bit slow, I need to look into parallelizing that using workers
-* A-star paths were too edgy, b-spline it is
+- noclip’d players will no longer touch entities/triggers
+- mainloop will no longer sleep when there are pending console commands
+- sending extended clientdata is not properly propagating for all others (should introduce a global flag, so that some things still obey PVS)
+- A-star lookups are a bit slow, I need to look into parallelizing that using workers
+- A-star paths were too edgy, b-spline it is
 
 ### 2025-09-24
 
-* reorganized the precaching stuff a bit, allowing more dynamic spawning of objects
-* added `FindAllByFilter` deprecating the old methods over time
-* dedicated server will automatically build navmeshes once something is wrong with it
-* increased network buffers
-* `PutClientInServer` vs `ClientConnect` doesn’t make much sense, I added `ClientBegin` which is called _after_ sending `being` marking the player as spawned
-* small fixes on AI, I need to rework the whole finding enemies logic, the code based on the original QuakeC is too iffy
+- reorganized the precaching stuff a bit, allowing more dynamic spawning of objects
+- added `FindAllByFilter` deprecating the old methods over time
+- dedicated server will automatically build navmeshes once something is wrong with it
+- increased network buffers
+- `PutClientInServer` vs `ClientConnect` doesn’t make much sense, I added `ClientBegin` which is called _after_ sending `being` marking the player as spawned
+- small fixes on AI, I need to rework the whole finding enemies logic, the code based on the original QuakeC is too iffy
 
 ### 2025-09-19
 
-* it’s no longer necessary to precache resources, but it’s highly adviced
-  * this change allows spawning entities during gameplay without precache gymnastics
+- it’s no longer necessary to precache resources, but it’s highly adviced
+  - this change allows spawning entities during gameplay without precache gymnastics
 
 ### 2025-09-18
 
-* fly/swim monsters no longer use navmesh
-* in-pain acquired targets will no longer break pain states
-* all in-pain acquired targets will set an enemy now
+- fly/swim monsters no longer use navmesh
+- in-pain acquired targets will no longer break pain states
+- all in-pain acquired targets will set an enemy now
 
 ### 2025-09-17
 
-* implemented monster_wizard
-* hiveminded enemy position upon use on monsters
+- implemented monster_wizard
+- hiveminded enemy position upon use on monsters
 
 ### 2025-09-14
 
-* airplane mode
-  * cleaning up some stuff
-  * replaced that in-house profiling with `console.profile`
+- airplane mode
+  - cleaning up some stuff
+  - replaced that in-house profiling with `console.profile`
 
 ### 2025-09-10
 
-* added dead monsters in water boyancy
-* added monster_fish
-* added cl_nohud cvar
+- added dead monsters in water boyancy
+- added monster_fish
+- added cl_nohud cvar
 
 ### 2025-09-08
 
-* airplane mode: cleaning up code
+- airplane mode: cleaning up code
 
 ### 2025-09-06
 
-* Navigation: made serialization of waypoints optional
-* Mod: started cleaning up that code base to make way to for map formats, adding BSP2 support next
-  * fell down the rabbit hole on this one
-  * I want to change the whole Mod.ForName and precache infrastructure
-  * Server sends to Client modelindex, setup by precache commands
-  * Client only works with modelindex
-  * Rendering code checks what kind of model type is set and renders stuff accordingly
-  * precache to model things should be a map instead of a list
-* index.html: removed error handler
-* Sys: cancel outstanding fetch requests when quitting
-* SV: allocate more edicts on the fly in chunks of 64
-* Def: bumped version to 1.1.2 reflecting the newly added features
-* R: consider lightmaps being available on turbulents
-  * I really need to cleanup the rendering backend, there’s too much duplicate code
+- Navigation: made serialization of waypoints optional
+- Mod: started cleaning up that code base to make way to for map formats, adding BSP2 support next
+  - fell down the rabbit hole on this one
+  - I want to change the whole Mod.ForName and precache infrastructure
+  - Server sends to Client modelindex, setup by precache commands
+  - Client only works with modelindex
+  - Rendering code checks what kind of model type is set and renders stuff accordingly
+  - precache to model things should be a map instead of a list
+- index.html: removed error handler
+- Sys: cancel outstanding fetch requests when quitting
+- SV: allocate more edicts on the fly in chunks of 64
+- Def: bumped version to 1.1.2 reflecting the newly added features
+- R: consider lightmaps being available on turbulents
+  - I really need to cleanup the rendering backend, there’s too much duplicate code
 
 ### 2025-09-02
 
-* quickly added RGB to RecursiveLightPoint while having breakfast coffee
+- quickly added RGB to RecursiveLightPoint while having breakfast coffee
 
 ### 2025-09-01
 
-* added RGB lightmap support (using .lit files)
-  * missing lighting the entities correctly (RecursiveLightPoint)
+- added RGB lightmap support (using .lit files)
+  - missing lighting the entities correctly (RecursiveLightPoint)
 
 ### 2025-08-31
 
-* working more on navigation
-  * tried adding dynamic updates, super janky
-  * added load/save generated navigation, loading binary is much faster than JSON
-* a few tweeks here and there
+- working more on navigation
+  - tried adding dynamic updates, super janky
+  - added load/save generated navigation, loading binary is much faster than JSON
+- a few tweeks here and there
 
 ### 2025-08-30
 
-* working more on navigation
-  * added teleporter links
+- working more on navigation
+  - added teleporter links
 
 ### 2025-08-29
 
-* started working on a navigation mesh, next steps:
-  * desperately need to clean up the code
-  * save the generated mesh to disk (also regenerate when map has changed)
-  * ~~wire it up to the NPC AI~~
-  * missing dynamic links such as teleporters, also no handling of doors and switches
-* ChatGPT is pretty damn good in explaining all of these things and produces somewhat usable code
-* learned about Newell’s method regarding n-gons
-* should add a feature switch for the new pathfinding
-* path lookups are now done through an Octree, could use it later for other stuff too
-* BaseEntity is getting too big, needs proper cleanup at some point, too much logic that could be handled by the engine, too much server code overlap
-* also I need to reconsider WeakRef’ing to entities, I’m not happy with dangling objects that are already kicked out of the game but refered by other entities
+- started working on a navigation mesh, next steps:
+  - desperately need to clean up the code
+  - save the generated mesh to disk (also regenerate when map has changed)
+  - ~~wire it up to the NPC AI~~
+  - missing dynamic links such as teleporters, also no handling of doors and switches
+- ChatGPT is pretty damn good in explaining all of these things and produces somewhat usable code
+- learned about Newell’s method regarding n-gons
+- should add a feature switch for the new pathfinding
+- path lookups are now done through an Octree, could use it later for other stuff too
+- BaseEntity is getting too big, needs proper cleanup at some point, too much logic that could be handled by the engine, too much server code overlap
+- also I need to reconsider WeakRef’ing to entities, I’m not happy with dangling objects that are already kicked out of the game but refered by other entities
 
 ### 2025-08-25
 
-* reducing loadtimes by parallelizing load models/sounds
-* keep new connections alive while loading assets when connection is slow
-* fined tuning lerp and delta encoding
-* need to kick out all this sync NET crap, the whole code is written for synchroneous IO and UDP in mind
+- reducing loadtimes by parallelizing load models/sounds
+- keep new connections alive while loading assets when connection is slow
+- fined tuning lerp and delta encoding
+- need to kick out all this sync NET crap, the whole code is written for synchroneous IO and UDP in mind
 
 ### 2025-08-22
 
-* fixed CDAudio using `music/track-number.opus` matching the format found here: https://github.com/fzwoch/quake_map_source
-* fixed a couple of setting `Cvar.value` attempts
-* spent too much time on adding pause/resume on sound channels
-* that sound cracking came from gainers not set to zero when the file is ready to be used
-* played around with AudioContext graphs: added underwater sound weffect
-* serialized types are now optimized for u8, i16 and i32 as well as float
+- fixed CDAudio using `music/track-number.opus` matching the format found here: https://github.com/fzwoch/quake_map_source
+- fixed a couple of setting `Cvar.value` attempts
+- spent too much time on adding pause/resume on sound channels
+- that sound cracking came from gainers not set to zero when the file is ready to be used
+- played around with AudioContext graphs: added underwater sound weffect
+- serialized types are now optimized for u8, i16 and i32 as well as float
 
 ### 2025-08-21
 
-* fixed chase cam to not go into the void or behind walls
-* since the lerping something is wrong with the sound spatialization, might be the Infinity values
+- fixed chase cam to not go into the void or behind walls
+- since the lerping something is wrong with the sound spatialization, might be the Infinity values
 
 ### 2025-08-19
 
-* added lerping of entity origins, angles and also between frames
-* found a looping state in all monster definitions causing bloating up the main loop
-* absurdly stupid: a missing if caused always to spam entity updates
+- added lerping of entity origins, angles and also between frames
+- found a looping state in all monster definitions causing bloating up the main loop
+- absurdly stupid: a missing if caused always to spam entity updates
 
 ### 2025-08-16
 
-* fixed the ContentShift stuff (after I got it how it worked lol)
-* added infrastructure for updating client entity fields
-* restructured client entities and server entities a bit
-* also exposing the event bus to the server game code, gradually using it to synchronize states and decouple components
+- fixed the ContentShift stuff (after I got it how it worked lol)
+- added infrastructure for updating client entity fields
+- restructured client entities and server entities a bit
+- also exposing the event bus to the server game code, gradually using it to synchronize states and decouple components
 
 ### 2025-08-14
 
-* fixed that “Lost Connection” issue upon connect when the server was idle for more than a minute
+- fixed that “Lost Connection” issue upon connect when the server was idle for more than a minute
 
 ### 2025-08-10
 
-* cleaned up those state definitions, made them static
-* game related cvars are configured by the game now
-* load/save games now encode server/game cvars
-* Serializer is now good enough to be actually useful for our shenanigans
+- cleaned up those state definitions, made them static
+- game related cvars are configured by the game now
+- load/save games now encode server/game cvars
+- Serializer is now good enough to be actually useful for our shenanigans
 
 ### 2025-08-08
 
-* about to clean up more the game <-> engine APIs
-* introduced loadState/saveState to the client game API allowing better handling of savegames
-* added particles to savegames
-* fixed a couple of bugs in the serialization engine
-* some entities were missing fields to be serialized causing stuck doors and platforms, all fixed now
-* added events for serverinfo changes
-* version bump
-* fixed that non-sense blocking Mod.ForName on the client
+- about to clean up more the game <-> engine APIs
+- introduced loadState/saveState to the client game API allowing better handling of savegames
+- added particles to savegames
+- fixed a couple of bugs in the serialization engine
+- some entities were missing fields to be serialized causing stuck doors and platforms, all fixed now
+- added events for serverinfo changes
+- version bump
+- fixed that non-sense blocking Mod.ForName on the client
 
 ### 2025-08-07
 
-* ServerGameAPI.FindInRadius uses area nodes now, cuts down search by 50%
+- ServerGameAPI.FindInRadius uses area nodes now, cuts down search by 50%
 
 ### 2025-08-05
 
-* CL: update origins when received, also for invisible entities
-* this whole loading a map on the client side is a mess, because I made it half-assed async and the rest is not sure what to do in the meantime
+- CL: update origins when received, also for invisible entities
+- this whole loading a map on the client side is a mess, because I made it half-assed async and the rest is not sure what to do in the meantime
 
 ### 2025-08-04
 
-* almost finished the HUD stuff, intermission and finale screens are missing
-* fixed a glitch during changelevels, ServerClient states need to be flushed
-* fixed a couple of game related issues like setting rune items to items
+- almost finished the HUD stuff, intermission and finale screens are missing
+- fixed a glitch during changelevels, ServerClient states need to be flushed
+- fixed a couple of game related issues like setting rune items to items
 
 ### 2025-08-03
 
-* mainly cleaning up some stuff that is now done using client code and client events
+- mainly cleaning up some stuff that is now done using client code and client events
 
 ### 2025-08-02
 
-* went even more wild on serialize/deserialize over the netchan
-* I want to give client code more flexibility on received damage
-  * need another feature flag to not transmit damage
-  * need to expose an API from the engine to the game regarding damage effects
-* I’m moving this obituary code from engine to client, also it should take the event route
-* client event manager needs to be more flexible, multiple listeners etc.
+- went even more wild on serialize/deserialize over the netchan
+- I want to give client code more flexibility on received damage
+  - need another feature flag to not transmit damage
+  - need to expose an API from the engine to the game regarding damage effects
+- I’m moving this obituary code from engine to client, also it should take the event route
+- client event manager needs to be more flexible, multiple listeners etc.
 
 ### 2025-08-01
 
-* small optimization on clientdata
-* client gets to update refdef optionally
+- small optimization on clientdata
+- client gets to update refdef optionally
 
 ### 2025-07-30
 
-* I need to think about releasing client entities, maybe similar to server edicts with the free flag
-  * right now free can be set by the server but will immediately trigger a freeEdict
-  * there should also be a freeEdict path for the client code to release client-only entities
-* prototyped a more flexible way on how to push client data (no longer stats)
-  * works great so far
-  * a bit copypasta, needs a cleanup
-  * I need to change the logic a bit so that only updates will be pushed
-  * there are three things that are required by the engine elsewhere:
-    * health (V’s roll changes, also skips rendering of the view model)
-    * weapon (the view model ID)
-    * weaponframe (what frame of the view model to render)
-  * I should introduce a feature flag for the new clientdata structure, so that updatestat and this can co-exist
-* I need to document the new game capabilities, some of them come with sudden loss of convenience features
+- I need to think about releasing client entities, maybe similar to server edicts with the free flag
+  - right now free can be set by the server but will immediately trigger a freeEdict
+  - there should also be a freeEdict path for the client code to release client-only entities
+- prototyped a more flexible way on how to push client data (no longer stats)
+  - works great so far
+  - a bit copypasta, needs a cleanup
+  - I need to change the logic a bit so that only updates will be pushed
+  - there are three things that are required by the engine elsewhere:
+    - health (V’s roll changes, also skips rendering of the view model)
+    - weapon (the view model ID)
+    - weaponframe (what frame of the view model to render)
+  - I should introduce a feature flag for the new clientdata structure, so that updatestat and this can co-exist
+- I need to document the new game capabilities, some of them come with sudden loss of convenience features
 
 ### 2025-07-29
 
-* moved crosshair duties from V to SCR
-* started making use of game capabilities to switch between some legacy code and new code
-* introduced the expedited datagram to write messages before the big entity delta update run
-* started making use of dispatching and handling client events
-* next up: work on transmitting stats/inventory to the client using events
+- moved crosshair duties from V to SCR
+- started making use of game capabilities to switch between some legacy code and new code
+- introduced the expedited datagram to write messages before the big entity delta update run
+- started making use of dispatching and handling client events
+- next up: work on transmitting stats/inventory to the client using events
 
 ### 2025-07-28
 
-* started adding server messages to streamline server to client events
-  * these will be handled by the client code
-  * however, it’s not done yet, I want to differentiate by expedited (sent out before entities get written), normal and reliable (to be sent on the reliable channel)
-* added identifiers and checks for the current active game
+- started adding server messages to streamline server to client events
+  - these will be handled by the client code
+  - however, it’s not done yet, I want to differentiate by expedited (sent out before entities get written), normal and reliable (to be sent on the reliable channel)
+- added identifiers and checks for the current active game
 
 ### 2025-07-27
 
-* restructured the repos
-* fixed a rendering glitch I introduced
-* added build stuff
+- restructured the repos
+- fixed a rendering glitch I introduced
+- added build stuff
 
 ### 2025-07-25
 
-* again hunting down the living dead (stupid racy scheduled thinks issue)
-* more client stuff:
-  * trying to break apart more client code
-  * played around with some effects here and there
-* definitely getting an idea how I want to have the client API later
+- again hunting down the living dead (stupid racy scheduled thinks issue)
+- more client stuff:
+  - trying to break apart more client code
+  - played around with some effects here and there
+- definitely getting an idea how I want to have the client API later
 
 ### 2025-07-24
 
-* more client stuff:
-  * static entities are now client-side entities with their own logic
-  * wired up pmove on the client side, but it’s still janky af
-  * time to rewrite parsing and prediction of entities
+- more client stuff:
+  - static entities are now client-side entities with their own logic
+  - wired up pmove on the client side, but it’s still janky af
+  - time to rewrite parsing and prediction of entities
 
 ### 2025-07-23
 
-* reorganized the whole client entity structure
-  * client entities can have handlers as well, providing `spawn`, `emit` and `think`
-  * I’m not happy about the naming convention yet, but things work as I like
-  * would be nice if I could merge those client and server entities into one class, but have different methods
-* `ServerEdict.makeStatic` needs compression for class names now, it’s ballooning the signon buffer
+- reorganized the whole client entity structure
+  - client entities can have handlers as well, providing `spawn`, `emit` and `think`
+  - I’m not happy about the naming convention yet, but things work as I like
+  - would be nice if I could merge those client and server entities into one class, but have different methods
+- `ServerEdict.makeStatic` needs compression for class names now, it’s ballooning the signon buffer
 
 ### 2025-07-22
 
-* I should be more careful with things per frame, always to deep-copy hulls on each frame completely made the FPS crumble
-* had to redo some work over at the QuakeVM, because since I deglobalized lots of objects, I had to find another way how to inject private objects
-* emitting temporary entities again
-* breaking up CL into components, making code better maintainable
+- I should be more careful with things per frame, always to deep-copy hulls on each frame completely made the FPS crumble
+- had to redo some work over at the QuakeVM, because since I deglobalized lots of objects, I had to find another way how to inject private objects
+- emitting temporary entities again
+- breaking up CL into components, making code better maintainable
 
 ### 2025-07-21
 
-* started restructuring the messy client code, here are the parts I identified
-  * demos
-  * input
-  * parsing messages
-  * static and temporary entities
-  * prediction code
-  * state handling
+- started restructuring the messy client code, here are the parts I identified
+  - demos
+  - input
+  - parsing messages
+  - static and temporary entities
+  - prediction code
+  - state handling
 
 ### 2025-07-20
 
-* restructured texture handling
-* played around with warp pixel shader
-* cleaned up the Defs more
-* fixed a bug regarding loading a game (AI having no valid goal)
-* worked on `ClientGameAPI`, reorganized `Draw`
+- restructured texture handling
+- played around with warp pixel shader
+- cleaned up the Defs more
+- fixed a bug regarding loading a game (AI having no valid goal)
+- worked on `ClientGameAPI`, reorganized `Draw`
 
 ### 2025-07-19
 
-* started unentangling components
-* improved error handling (no more Sys.Error)
-* there’s a bug in playing back demos, sometimes it won’t clear the client state after having finished
-  * seems to be more convoluted with the way the client state is handled
-* replaced frame interval with an async main loop, makes it easier to handle fatal errors
-* fixed a bug regarding transparency in the Wad3 texture loader
-* added a toolbox class to explore wad files
-* started working on `ClientGameAPI`
+- started unentangling components
+- improved error handling (no more Sys.Error)
+- there’s a bug in playing back demos, sometimes it won’t clear the client state after having finished
+  - seems to be more convoluted with the way the client state is handled
+- replaced frame interval with an async main loop, makes it easier to handle fatal errors
+- fixed a bug regarding transparency in the Wad3 texture loader
+- added a toolbox class to explore wad files
+- started working on `ClientGameAPI`
 
 ### 2025-07-15
 
-* got the dedicated server spawn a map again, but got only that far, more cleaning and wiring up required
-* decided to go the lazy (and no longer immutable) route regarding registry, but it should also have no more lookup performance penalty
-* moved everything from js to mjs, still lots of work to do, so much legacy code I want to get rid of
-* fixed a logic flaw in `QuakeEntityAI._huntTarget` which caused unkillable ghosts hunting you down
+- got the dedicated server spawn a map again, but got only that far, more cleaning and wiring up required
+- decided to go the lazy (and no longer immutable) route regarding registry, but it should also have no more lookup performance penalty
+- moved everything from js to mjs, still lots of work to do, so much legacy code I want to get rid of
+- fixed a logic flaw in `QuakeEntityAI._huntTarget` which caused unkillable ghosts hunting you down
 
 ### 2025-07-14
 
-* tightened jsconfig and eslint config a bit to enforce a stricter standard, it already detected some silent bugs
-* game code is now properly sharing stuff with the engine
-* reorganized a bit the engine<->game API naming convention
+- tightened jsconfig and eslint config a bit to enforce a stricter standard, it already detected some silent bugs
+- game code is now properly sharing stuff with the engine
+- reorganized a bit the engine<->game API naming convention
 
 ### 2025-07-12
 
-* I asked Claude Sonnet 4 to improve the Key input mess (especially when using a non-us keyboard layout)
-* I started to refactor the engine code:
-  * completely moving to ESM
-  * throwing out unused code
-  * breaking larger files into smaller better managable ones
-  * introduced a registry to hold references to singletons (workaround to avoid circular dependencies)
-* next steps I’m planning on the engine side:
-  * decouple tightly decoupled components
-  * implement an eventbus that can be accessed by the regular code and worker
-  * reduce reliance on the registry to an absolute minimum
-  * make stuff async as much as possible
-    * uploading textures and building VBA in workers
+- I asked Claude Sonnet 4 to improve the Key input mess (especially when using a non-us keyboard layout)
+- I started to refactor the engine code:
+  - completely moving to ESM
+  - throwing out unused code
+  - breaking larger files into smaller better managable ones
+  - introduced a registry to hold references to singletons (workaround to avoid circular dependencies)
+- next steps I’m planning on the engine side:
+  - decouple tightly decoupled components
+  - implement an eventbus that can be accessed by the regular code and worker
+  - reduce reliance on the registry to an absolute minimum
+  - make stuff async as much as possible
+    - uploading textures and building VBA in workers
 
 ### 2025-07-09
 
-* continued cleaning up loading textures stuff, paved the way to load any modern image as texture
-* if there’s `gfx/conback.webp`, it will use that as conback
-* it’s time to completely rewrite CL.js, it’s a huge mess based on the old JS port, some modern stuff I introduced and some stuff I played around with
+- continued cleaning up loading textures stuff, paved the way to load any modern image as texture
+- if there’s `gfx/conback.webp`, it will use that as conback
+- it’s time to completely rewrite CL.js, it’s a huge mess based on the old JS port, some modern stuff I introduced and some stuff I played around with
 
 ### 2025-07-06
 
-* worked more on client-side prediction stuff (unfinished yet)
-* reorganized loading WAD files
-* added WAD3 support
-* started working on uploading 32 bit textures instead of 8 bit indexed stuff
+- worked more on client-side prediction stuff (unfinished yet)
+- reorganized loading WAD files
+- added WAD3 support
+- started working on uploading 32 bit textures instead of 8 bit indexed stuff
 
 ### 2025-06-30
 
-* reorganized Vector a bit, some sort of belated spring cleaning
-* fixed a bug regarding spawnflags and skill level 3
-* Defs.mjs is now all ReadOnly
+- reorganized Vector a bit, some sort of belated spring cleaning
+- fixed a bug regarding spawnflags and skill level 3
+- Defs.mjs is now all ReadOnly
 
 ### 2025-06-25
 
-* added monster_shambler
-* a couple of changes
+- added monster_shambler
+- a couple of changes
 
 ### 2025-06-22
 
-* I need to double check the AI/NPC logic, the knights are glitching around when attacking
-  * fixed it, `ServerEdict.walkMove` didn’t convert degrees into radians lol
-* fixed NPC enemy sight check bug
-* implemented `BaseMonster.moveTargetReached` properly
-* some code cleanup
-* found some bugs (set v_angle to angles) I definitely introduced while not focused
+- I need to double check the AI/NPC logic, the knights are glitching around when attacking
+  - fixed it, `ServerEdict.walkMove` didn’t convert degrees into radians lol
+- fixed NPC enemy sight check bug
+- implemented `BaseMonster.moveTargetReached` properly
+- some code cleanup
+- found some bugs (set v_angle to angles) I definitely introduced while not focused
 
 ### 2025-06-21
 
-* fixed the lerp stuff
-* changed NPC names to their proper names (QuakeC: client.qc/ClientObituary)
-* added monster_ogre
-* fixed AI logic to switch from target to enemy when received damage
-* removed some hardcoded magic values (color codes)
-* added monster_shalrath
-* fixed/changed some logic regarding stepping forward in the state machine
-* added laser traps
-* added monster_enforcer
-* added refire check logic (unsure if it actually works lol)
+- fixed the lerp stuff
+- changed NPC names to their proper names (QuakeC: client.qc/ClientObituary)
+- added monster_ogre
+- fixed AI logic to switch from target to enemy when received damage
+- removed some hardcoded magic values (color codes)
+- added monster_shalrath
+- fixed/changed some logic regarding stepping forward in the state machine
+- added laser traps
+- added monster_enforcer
+- added refire check logic (unsure if it actually works lol)
 
 ### 2025-06-20
 
-* fixed rcon command
-* small knight fix
-* added monster_hell_knight
-* small AI improvements
+- fixed rcon command
+- small knight fix
+- added monster_hell_knight
+- small AI improvements
 
 ### 2025-06-19
 
-* fixed a few AI related bugs and added more logic
-* fixed monster_zombie, added giblets
-* fixed monster_demon1
-* added monster_knight and parts of monster_hell_knight
+- fixed a few AI related bugs and added more logic
+- fixed monster_zombie, added giblets
+- fixed monster_demon1
+- added monster_knight and parts of monster_hell_knight
 
 ### 2025-05-08
 
-* added monster_demon1
-* added misc_gib_meatspray
-* added `canReceiveDamage` to `BaseEntity`
-* tried VS Code’s Agentic AI to port some logic, it went just so-so
-  * it forgot to port important parts of the original logic
-  * it assumed some APIs wrongly
+- added monster_demon1
+- added misc_gib_meatspray
+- added `canReceiveDamage` to `BaseEntity`
+- tried VS Code’s Agentic AI to port some logic, it went just so-so
+  - it forgot to port important parts of the original logic
+  - it assumed some APIs wrongly
 
 ### 2025-04-28
 
-* need to rethink the AI code structure a bit, I ran into a few problems such as:
-  * able to do a missile attack is also used to indicate being a hitscanner
+- need to rethink the AI code structure a bit, I ran into a few problems such as:
+  - able to do a missile attack is also used to indicate being a hitscanner
 
 ### 2025-04-26
 
-* added monster_army
-* a few fixes here and there
-* monster_dog is not getting stuck in leap state anymore
+- added monster_army
+- a few fixes here and there
+- monster_dog is not getting stuck in leap state anymore
 
 ### 2025-04-19
 
-* added back chase cam
-* started cleaning up `MSG`, added read and write methods to `SzBuffer`
-* started auditing `CL` in more detail, it’s time to refactor the code considering legacy game and QuakeJS features
+- added back chase cam
+- started cleaning up `MSG`, added read and write methods to `SzBuffer`
+- started auditing `CL` in more detail, it’s time to refactor the code considering legacy game and QuakeJS features
 
 ### 2025-04-17
 
-* fixed an absolutely dumb bug in my rewrite breaking spawning a local map after 10s
-* location.search will now properly map to command line like this: `?noquakejs=true` --> `-noquakejs`
-* added some `await Promise.all([…])` to speed up loading
+- fixed an absolutely dumb bug in my rewrite breaking spawning a local map after 10s
+- location.search will now properly map to command line like this: `?noquakejs=true` --> `-noquakejs`
+- added some `await Promise.all([…])` to speed up loading
 
 ### 2025-04-15
 
-* continued working on usercmds and update messages
-  * there’s still unnecessary update chatter every 16ms from the server side
-  * client is only sending whenever there is an update and every 10 seconds
-  * there’s logic missing killing off players that are no longer sending pings
-* I need to look into reliable and unreliable messages, unsure if they are still needed over WebSocket
+- continued working on usercmds and update messages
+  - there’s still unnecessary update chatter every 16ms from the server side
+  - client is only sending whenever there is an update and every 10 seconds
+  - there’s logic missing killing off players that are no longer sending pings
+- I need to look into reliable and unreliable messages, unsure if they are still needed over WebSocket
 
 ### 2025-04-13
 
-* moved `PR` related stuff from `ED` to `PR`
-* considering rewriting ClientEntity into ClientEdict and allow the game code to put entities on top of it, reflecting the server side structure
-* some more `Cvar` improvements
-  * implemented `Cvar.FLAG.CHEAT`
-  * server is sending server cvars as serverinfo
-* there’s still lots of chatter going on even though it’s not required
-  * if there is no input update or anything, we do not need to send every frame
+- moved `PR` related stuff from `ED` to `PR`
+- considering rewriting ClientEntity into ClientEdict and allow the game code to put entities on top of it, reflecting the server side structure
+- some more `Cvar` improvements
+  - implemented `Cvar.FLAG.CHEAT`
+  - server is sending server cvars as serverinfo
+- there’s still lots of chatter going on even though it’s not required
+  - if there is no input update or anything, we do not need to send every frame
 
 ### 2025-04-12
 
-* decided to ditch lerping entities for now, it’s in there, but disabled by default
-* focussing on getting networking back on track as well as Client Game stuff
-* merged `SZ` into `MSG`
-* went over `Cmd`, `Cvar` and `Con` once more
-  * added `Con.PrintWarning` to emit warnings
-  * added `Con.PrintError` to emit errors
-  * added `Cvar.FLAG.DEFERRED` (but not finished yet)
-  * introduced `Cvar.FLAG.GAME`, cvars registered by the game code
-* added code to render colored text
-* started wiring up `ClientGameAPI` to `CL` code
-* made `0.8` the default for `gamma`
-* added parameter `-noquakejs` to disable loading of QuakeJS game code
-* M: alert box supports newlines now
-* added a safeguard making the client code check if server QuakeJS is compatible
-* need to reimplement beam and other temporary entities
+- decided to ditch lerping entities for now, it’s in there, but disabled by default
+- focussing on getting networking back on track as well as Client Game stuff
+- merged `SZ` into `MSG`
+- went over `Cmd`, `Cvar` and `Con` once more
+  - added `Con.PrintWarning` to emit warnings
+  - added `Con.PrintError` to emit errors
+  - added `Cvar.FLAG.DEFERRED` (but not finished yet)
+  - introduced `Cvar.FLAG.GAME`, cvars registered by the game code
+- added code to render colored text
+- started wiring up `ClientGameAPI` to `CL` code
+- made `0.8` the default for `gamma`
+- added parameter `-noquakejs` to disable loading of QuakeJS game code
+- M: alert box supports newlines now
+- added a safeguard making the client code check if server QuakeJS is compatible
+- need to reimplement beam and other temporary entities
 
 ### 2025-04-11
 
-* some cleanup
-  * introduced proper `SzBuffer` class
-  * cleaning more in `SV`, merging functions into new classes
-* I’m considering completely rewriting Host, SV and CL
+- some cleanup
+  - introduced proper `SzBuffer` class
+  - cleaning more in `SV`, merging functions into new classes
+- I’m considering completely rewriting Host, SV and CL
 
 ### 2025-04-08
 
-* `Cvar.set` didn’t do anything lol, fixed
+- `Cvar.set` didn’t do anything lol, fixed
 
 ### 2025-04-07
 
-* all entities are pushed via delta updates per client now
+- all entities are pushed via delta updates per client now
 
 ### 2025-04-05
 
-* there are a couple of objects that only get their properties sometime during the running process, this leads to interesting situations (me getting confused all the time)
-* trying to stick to a convention for `toString`: always name `this.constructor.name` first
-* introduced `SV.Client` class
-  * also got rid of a few C-style setters/getters
-* introduced flag `Mod.effects.nodraw` to make entities hidden via `effects`
-* started implementing usercmd delta packages
-* small fix in `S.StopSound`
-* introduced `SV.EntityState` class to track written delta package on a per player basis
-* added `console.assert` to `MSG.Write*` to make sure things are not getting out of bound
-  * found a couple of silent bugs that way
-* added `SV.TraversePVS` making it easier to go over PVS
-* seems like I’m half way through rewriting the netcode based on QW improvements
-* next up:
-  * getting the entities back in place using delta updates
-  * proper delta updates on clientdata
-  * pmove predicted client moves
+- there are a couple of objects that only get their properties sometime during the running process, this leads to interesting situations (me getting confused all the time)
+- trying to stick to a convention for `toString`: always name `this.constructor.name` first
+- introduced `SV.Client` class
+  - also got rid of a few C-style setters/getters
+- introduced flag `Mod.effects.nodraw` to make entities hidden via `effects`
+- started implementing usercmd delta packages
+- small fix in `S.StopSound`
+- introduced `SV.EntityState` class to track written delta package on a per player basis
+- added `console.assert` to `MSG.Write*` to make sure things are not getting out of bound
+  - found a couple of silent bugs that way
+- added `SV.TraversePVS` making it easier to go over PVS
+- seems like I’m half way through rewriting the netcode based on QW improvements
+- next up:
+  - getting the entities back in place using delta updates
+  - proper delta updates on clientdata
+  - pmove predicted client moves
 
 ### 2025-04-03
 
-* added `Cvar.FLAG.SECRET` to suppress broadcasting sensitive cvar changes
-* started reorganizing client/server code, decided to implement the QW protocol (more or less)
-* started adding Pmove to the client code
-* if you add some `console.assert` here and there, you’ll discover lots of fun quiet bugs
-* started implementing delta updates and only transmitting PVS visible players etc.
+- added `Cvar.FLAG.SECRET` to suppress broadcasting sensitive cvar changes
+- started reorganizing client/server code, decided to implement the QW protocol (more or less)
+- started adding Pmove to the client code
+- if you add some `console.assert` here and there, you’ll discover lots of fun quiet bugs
+- started implementing delta updates and only transmitting PVS visible players etc.
 
 ### 2025-04-02
 
-* more Pmove
-  * added a mini testsuite `Pmove.TestServerside()`
-  * `pmovetst.c` is ported
-  * most of `pmove.c` is ported
-* next steps:
-  * replace the old move code in `SV` with the new `Pmove` logic
+- more Pmove
+  - added a mini testsuite `Pmove.TestServerside()`
+  - `pmovetst.c` is ported
+  - most of `pmove.c` is ported
+- next steps:
+  - replace the old move code in `SV` with the new `Pmove` logic
 
 ### 2025-04-01
 
-* some more polish on Cvar.js
-* I want to have client prediction, so I started porting over pmove.c from QuakeWorld
-  * PM_RecursiveHullCheck is the same as SV_RecursiveHullCheck
-    * works already on the new structure: `Pmove.Hull.fromDeprecated(Mod.known[0].hulls[1]).pointContents(SV.server.edicts[1].entity.origin)`
-  * playermove_t is going to be implemented encapsulated
-  * hull and plane (somewhere over in Mod) will be replaced by this later
-  * introduced `Hull.fromDeprecated` because I’m going to clean up some old structures as well
+- some more polish on Cvar.js
+- I want to have client prediction, so I started porting over pmove.c from QuakeWorld
+  - PM_RecursiveHullCheck is the same as SV_RecursiveHullCheck
+    - works already on the new structure: `Pmove.Hull.fromDeprecated(Mod.known[0].hulls[1]).pointContents(SV.server.edicts[1].entity.origin)`
+  - playermove_t is going to be implemented encapsulated
+  - hull and plane (somewhere over in Mod) will be replaced by this later
+  - introduced `Hull.fromDeprecated` because I’m going to clean up some old structures as well
 
 ### 2025-03-30
 
-* went through a lot of maps and checked what’s going wrong, found a couple of bugs and fixed them
-* a few Sys.Error to console.assert changes
-* fixed the fact that dogs can trigger buttons
-* load game from menu will use the json files now
-* bunch of a lowhanging fruits todos
-* fixed screenshot (F12)
-* introduced arguments to console commands, removing the access to the `Cmd.argv` global allowing `AsyncFunction` in future
-* introduced `Cvar` class with flags and some more fluff
-* made console disappear instantly after joining the game
+- went through a lot of maps and checked what’s going wrong, found a couple of bugs and fixed them
+- a few Sys.Error to console.assert changes
+- fixed the fact that dogs can trigger buttons
+- load game from menu will use the json files now
+- bunch of a lowhanging fruits todos
+- fixed screenshot (F12)
+- introduced arguments to console commands, removing the access to the `Cmd.argv` global allowing `AsyncFunction` in future
+- introduced `Cvar` class with flags and some more fluff
+- made console disappear instantly after joining the game
 
 ### 2025-03-28
 
-* reorganized shaders
+- reorganized shaders
 
 ### 2025-03-27
 
-* fixed the zombie player issue after a disconnect
-* used a three hours plane ride to implement colored dlights
+- fixed the zombie player issue after a disconnect
+- used a three hours plane ride to implement colored dlights
 
 ### 2025-03-20
 
-* save/load
-  * breaks in QuakeC, writing to entities of which the data structures are not existing yet/anymore
-  * breaks in QuakeJS, when objects get serialized or nested more complicated structures
-* added a magic serializer class
-* more AI related work
+- save/load
+  - breaks in QuakeC, writing to entities of which the data structures are not existing yet/anymore
+  - breaks in QuakeJS, when objects get serialized or nested more complicated structures
+- added a magic serializer class
+- more AI related work
 
 ### 2025-03-16
 
-* continue working on monster_dog and AI stuff, I’m considering tossing the whole structure and to start all over again
-* also considering pause AI for now and focus on network first, implementing more of the QW improvements
-* added save/load back to the engine
-  * serialize/deserialize added to the QuakeC VM
-  * meanwhile over in QuakeJS world: TODO and not as straight forward except I’m going to use blackmagic
-* need to have a configuration for QuakeJS/QuakeC, right now I’m commenting out/in a `throw Error`
+- continue working on monster_dog and AI stuff, I’m considering tossing the whole structure and to start all over again
+- also considering pause AI for now and focus on network first, implementing more of the QW improvements
+- added save/load back to the engine
+  - serialize/deserialize added to the QuakeC VM
+  - meanwhile over in QuakeJS world: TODO and not as straight forward except I’m going to use blackmagic
+- need to have a configuration for QuakeJS/QuakeC, right now I’m commenting out/in a `throw Error`
 
 ### 2025-03-11
 
-* started working on monster_dog and more AI stuff
+- started working on monster_dog and more AI stuff
 
 ### 2025-03-10
 
-* added death bubbles and fixed the vanilla Quake’s actually air_bubbles bubble spawner logic, though it’s still ugly
+- added death bubbles and fixed the vanilla Quake’s actually air_bubbles bubble spawner logic, though it’s still ugly
 
 ### 2025-03-08
 
-* all sorts of bugs happen if there is an entity at origin doing special things (vanilla BUG)
-  * for instance, trigger_push at or near origin (0, 0, 0) affects projectiles and other things spawned in
-  * also happens in vanilla Quake
-  * the root cause is linkEdicts with triggerTouch = true when the model is being set and it brings sizes (causing the forced relink)
-* added plenty of asserts to the Vector class, it’s too easy to confuse `setTo` and `set` causing NaNs when for instance trying to multiply Vector with a number
+- all sorts of bugs happen if there is an entity at origin doing special things (vanilla BUG)
+  - for instance, trigger_push at or near origin (0, 0, 0) affects projectiles and other things spawned in
+  - also happens in vanilla Quake
+  - the root cause is linkEdicts with triggerTouch = true when the model is being set and it brings sizes (causing the forced relink)
+- added plenty of asserts to the Vector class, it’s too easy to confuse `setTo` and `set` causing NaNs when for instance trying to multiply Vector with a number
 
 ### 2025-03-07
 
-* added back in the delayed unsetting and freeing of `entity`, sometimes we had strange side effects of logic assuming they could still access certain entity data even though the edict got freed already
-* need to restructure ED.js and move logic to `SV.Edict`
-* implemented `func_train` using VS Code Copilot, it went okayish
-* introduced `BaseEntity.lazyRemove()` to gracefully remove an entity and keep it alive for at least 100ms and up to whatever is configured in `delay`
-* found a nasty bug in `useTargets` causing some scripted sequences to be out of order when delays were used.
-* quite happy about the current memory footprint, though it could be optimized further
+- added back in the delayed unsetting and freeing of `entity`, sometimes we had strange side effects of logic assuming they could still access certain entity data even though the edict got freed already
+- need to restructure ED.js and move logic to `SV.Edict`
+- implemented `func_train` using VS Code Copilot, it went okayish
+- introduced `BaseEntity.lazyRemove()` to gracefully remove an entity and keep it alive for at least 100ms and up to whatever is configured in `delay`
+- found a nasty bug in `useTargets` causing some scripted sequences to be out of order when delays were used.
+- quite happy about the current memory footprint, though it could be optimized further
 
 ### 2025-03-05
 
-* triggers needs some clean up, cleaned up code related to doors
-* added some `console.asserts` here and there
-* also those centerPrint sound effects should play locally, right now they are sometimes play on entities
-* started implementing func_plat
-* absurdly hunt down a garbage collection issue, added some explicit resetting of variables and it turned out that it was the developer console holding references due to some `console.log(this)` statements
+- triggers needs some clean up, cleaned up code related to doors
+- added some `console.asserts` here and there
+- also those centerPrint sound effects should play locally, right now they are sometimes play on entities
+- started implementing func_plat
+- absurdly hunt down a garbage collection issue, added some explicit resetting of variables and it turned out that it was the developer console holding references due to some `console.log(this)` statements
 
 ### 2025-03-02
 
-* should always add netname to everything that inflicts damage, otherwise we will get gems such as “func_door killed player”
-* intermission stuff
+- should always add netname to everything that inflicts damage, otherwise we will get gems such as “func_door killed player”
+- intermission stuff
 
 ### 2025-02-26
 
-* added couple more of trigger entities
-* fixed a stupid bug deep down in linked doors caused by a faulty entities touching check
-* I noticed that some entities set fields that do not exist or are valid on some entities --> might need to go more easy on setting fields
-* doors with a lock will tell the player what key is needed again
-* cleaning up some earlier code I wrote
-* resolved a couple of TODOs
-* I noticed a couple of stuttering when `aim` is called, lots of GC involvement too
-* I need to fix that applyBackpack switch weapon after consuming backpack nonsense
-* added all weapon entities
-* jumping out of water works now, there was a bug over in the engine I introduced weeks ago
-* completed reimplementation of powerups
+- added couple more of trigger entities
+- fixed a stupid bug deep down in linked doors caused by a faulty entities touching check
+- I noticed that some entities set fields that do not exist or are valid on some entities --> might need to go more easy on setting fields
+- doors with a lock will tell the player what key is needed again
+- cleaning up some earlier code I wrote
+- resolved a couple of TODOs
+- I noticed a couple of stuttering when `aim` is called, lots of GC involvement too
+- I need to fix that applyBackpack switch weapon after consuming backpack nonsense
+- added all weapon entities
+- jumping out of water works now, there was a bug over in the engine I introduced weeks ago
+- completed reimplementation of powerups
 
 ### 2025-02-25
 
-* added barrels
-* some small adjustments in Subs
+- added barrels
+- some small adjustments in Subs
 
 ### 2025-02-24
 
-* move some code around
-* made sounds precache upon connect properly, getting away from my lazy load nonsense
-* added health items and armor items, I think items should be complete by now
-* time to implement all trigger_ next
+- move some code around
+- made sounds precache upon connect properly, getting away from my lazy load nonsense
+- added health items and armor items, I think items should be complete by now
+- time to implement all trigger\_ next
 
 ### 2025-02-23
 
-* found the root of discrepancies: equals check with Edicts (fed by the engine) instead of Entities
-* added Lightning gun
-* some more fixes around weapon states
-* simplied some code here and there
-* introduced `sv_cheats`
-* added artifact items as well as sigils
+- found the root of discrepancies: equals check with Edicts (fed by the engine) instead of Entities
+- added Lightning gun
+- some more fixes around weapon states
+- simplied some code here and there
+- introduced `sv_cheats`
+- added artifact items as well as sigils
 
 ### 2025-02-22
 
-* there are some weird discrepancies between vanilla Quake and my Quake
-* fixed some issues with those Nailgun spikes
+- there are some weird discrepancies between vanilla Quake and my Quake
+- fixed some issues with those Nailgun spikes
 
 ### 2025-02-21
 
-* there’s a glitch when depleting ammo that I need to investigate
-* added the nailguns (I’m okayish happy how I implemented it)
+- there’s a glitch when depleting ammo that I need to investigate
+- added the nailguns (I’m okayish happy how I implemented it)
 
 ### 2025-02-20
 
-* thinking about removing some entity classes from the registry and have a “private” spawn by simply allocating the edict and instantiating the entity class ourselves
-* first I thought, FindInRadius was not working, turns out `trace.fraction === 1.0` is *not* the way how to test if an expected entity has been traced, there must be some floating point voodoo making problems here? it’s always close to 1.0 (off by less than 0.3 off, which is quite big for floating point imprecisions though)
-* implemented blastDamage, added Rocket Launcher, some smaller bug fixes
-* decided to keep `BaseEntity.clear()`, restructured handling `respawn`/`putPlayerInServer`
-* choosing best weapon after picking up a “backpack” is a bit flawed
+- thinking about removing some entity classes from the registry and have a “private” spawn by simply allocating the edict and instantiating the entity class ourselves
+- first I thought, FindInRadius was not working, turns out `trace.fraction === 1.0` is _not_ the way how to test if an expected entity has been traced, there must be some floating point voodoo making problems here? it’s always close to 1.0 (off by less than 0.3 off, which is quite big for floating point imprecisions though)
+- implemented blastDamage, added Rocket Launcher, some smaller bug fixes
+- decided to keep `BaseEntity.clear()`, restructured handling `respawn`/`putPlayerInServer`
+- choosing best weapon after picking up a “backpack” is a bit flawed
 
 ### 2025-02-19
 
-* some documentation clean up
-* added blood particles, a primitive hitbox check, `bloodcolor` etc.
-* implemented some more TODOs here and there
-* bmodels own that fantastic trait of their origin being always at `Vector(0, 0, 0)`, you have to use `centerPoint`
-* implemented shotguns and started working on `DamageInflictor` class
-* couple of fixes for finding entities
-* backpacks/items that cannot be consumed won’t disappear anymore
-* 3s pause between being dead and being able to respawn
-* I’m getting very close to have everything except the monsters/AI reimplemented
+- some documentation clean up
+- added blood particles, a primitive hitbox check, `bloodcolor` etc.
+- implemented some more TODOs here and there
+- bmodels own that fantastic trait of their origin being always at `Vector(0, 0, 0)`, you have to use `centerPoint`
+- implemented shotguns and started working on `DamageInflictor` class
+- couple of fixes for finding entities
+- backpacks/items that cannot be consumed won’t disappear anymore
+- 3s pause between being dead and being able to respawn
+- I’m getting very close to have everything except the monsters/AI reimplemented
 
 ### 2025-02-17
 
-* once I got QuakeJS finished, I might consider add V8 to WinQuake (or a proper modern port) to see if this new game code would work with proper Quake ports as well
-  * providing the Engine Interface should be fairly trivial (mimicking SV.Edict and stuff)
-  * that edict field access must point into structures that the JavaScript engine memory maps directly
-* implemented some obituary logic (`PlayerEntity.thinkDie` does it now)
-* added player’s pain, dying and dead states
-* added suicide to player
-* improved a couple of things that vanilla Quake did in a weird way
-* reorganized connect/disconnect events for players
+- once I got QuakeJS finished, I might consider add V8 to WinQuake (or a proper modern port) to see if this new game code would work with proper Quake ports as well
+  - providing the Engine Interface should be fairly trivial (mimicking SV.Edict and stuff)
+  - that edict field access must point into structures that the JavaScript engine memory maps directly
+- implemented some obituary logic (`PlayerEntity.thinkDie` does it now)
+- added player’s pain, dying and dead states
+- added suicide to player
+- improved a couple of things that vanilla Quake did in a weird way
+- reorganized connect/disconnect events for players
 
 ### 2025-02-16
 
-* current plan is to port over player, weapons, items and func stuff first, then we can take care of the monsters and stuff
-* added more player animation states, started adding weapon attacks
-* introduced `DamageHandler`, `BaseEntity.damage` and a few more things to handle damage somewhat conveniently
-* `PF_aim` is supposed to have an argument called speed, but it’s not implemented, not even by vanilla Quake
-* added `direction` to `Edict.aim` as well as `BaseEntity`
-* worked on some TODOs regarding inflicting damage
+- current plan is to port over player, weapons, items and func stuff first, then we can take care of the monsters and stuff
+- added more player animation states, started adding weapon attacks
+- introduced `DamageHandler`, `BaseEntity.damage` and a few more things to handle damage somewhat conveniently
+- `PF_aim` is supposed to have an argument called speed, but it’s not implemented, not even by vanilla Quake
+- added `direction` to `Edict.aim` as well as `BaseEntity`
+- worked on some TODOs regarding inflicting damage
 
 ### 2025-02-15
 
-* added teleporting stuff
-* added EngineInterface for temporary entities
+- added teleporting stuff
+- added EngineInterface for temporary entities
 
 ### 2025-02-13
 
-* ported more over of items, keys and ammo
-  * it’s super easy and convenient to extend items now
-  * should look into making it more flexible on the client side as well (e.g. inventory)
-* netradiant is so much better than GtkRadiant
-* have to use Valve 220 map format, otherwise textures are all over the place
-* looking into porting over hlbsp at some point
-* I tried again hooking up CANNON, since now it’s easier to play around with objects and stuff, but no luck
-* at some point I should look into JavaScript workers (maybe I could let the local server run in the background)
-* I should focus on porting over the core mechanics of Quake so that we can get at least Deathmatch going again, AI and monsters later
-* before I’m going to start implementing BSP2 or HLBSP (v30), I need to refactor loading of models
+- ported more over of items, keys and ammo
+  - it’s super easy and convenient to extend items now
+  - should look into making it more flexible on the client side as well (e.g. inventory)
+- netradiant is so much better than GtkRadiant
+- have to use Valve 220 map format, otherwise textures are all over the place
+- looking into porting over hlbsp at some point
+- I tried again hooking up CANNON, since now it’s easier to play around with objects and stuff, but no luck
+- at some point I should look into JavaScript workers (maybe I could let the local server run in the background)
+- I should focus on porting over the core mechanics of Quake so that we can get at least Deathmatch going again, AI and monsters later
+- before I’m going to start implementing BSP2 or HLBSP (v30), I need to refactor loading of models
 
 ### 2025-02-12
 
-* continue working on porting of items.qc
-* added `item_backpack` entity
-  * there’s infrastructure to let a player consume a backpack of arbitrary items and ammo: `PlayerEntity.applyBackpack`
-* added `item_shells`, `item_rockets`
-* thinking of simplifying the whole precache/model stuff
+- continue working on porting of items.qc
+- added `item_backpack` entity
+  - there’s infrastructure to let a player consume a backpack of arbitrary items and ammo: `PlayerEntity.applyBackpack`
+- added `item_shells`, `item_rockets`
+- thinking of simplifying the whole precache/model stuff
 
 ### 2025-02-09
 
-* got GtkRadiant working, but textures are bugging out when the map is reloaded
-* found ericwtools to compile maps
-* thought I introduced a bug somewhere in func_wall, turned out, it was the missing spawnflags handling upon preparing entities
+- got GtkRadiant working, but textures are bugging out when the map is reloaded
+- found ericwtools to compile maps
+- thought I introduced a bug somewhere in func_wall, turned out, it was the missing spawnflags handling upon preparing entities
 
 ### 2025-02-05
 
-* added ambient sound entities
-* added wall entities
-  * though removing them does not work for whatever reason, have to investigate
+- added ambient sound entities
+- added wall entities
+  - though removing them does not work for whatever reason, have to investigate
 
 ### 2025-02-04
 
-* reimplemented secret doors, shooting at them still missing though
+- reimplemented secret doors, shooting at them still missing though
 
 ### 2025-02-03
 
-* mini project idea: reimplement q2048 https://github.com/jhspetersson/q2048/tree/master
-* added gibbing
-  * gibbing turns an actor into a head and spawns three giblets
-  * MOVETYPE_BOUNCE is a hack lol
-* added `resetThinking`
+- mini project idea: reimplement q2048 https://github.com/jhspetersson/q2048/tree/master
+- added gibbing
+  - gibbing turns an actor into a head and spawns three giblets
+  - MOVETYPE_BOUNCE is a hack lol
+- added `resetThinking`
 
 ### 2025-02-02
 
-* it’s mildly frustrating that if you forget to copy a Vector you’ll get a reference causing all sorts of funny side effects, I need to doublecheck all `(origin|a?velocity|angles)\s*=`
-* AI is making things walk now
-* Added impulse code 66 to get information of the entity in front of you
-* Introduced that scheduled thinker pattern to ease up lots of pain
-  * _scheduleThink will schedule thinking according to timeline, optionally taking an identifier
+- it’s mildly frustrating that if you forget to copy a Vector you’ll get a reference causing all sorts of funny side effects, I need to doublecheck all `(origin|a?velocity|angles)\s*=`
+- AI is making things walk now
+- Added impulse code 66 to get information of the entity in front of you
+- Introduced that scheduled thinker pattern to ease up lots of pain
+  - \_scheduleThink will schedule thinking according to timeline, optionally taking an identifier
 
 ### 2025-02-01
 
-* over at the engine side of things, there’s too much QuakeC serving structures, I need to clean it up
-* also I should move `Game.EngineInterface` to `PF` maybe for the time being
-* reimplemented weapon switch back, but I also do not like the way I did it, I want some encapsuled weapon handling
-* also I thought about `bf` console command as it being a hack and that we need a better way to push events to the client side
-* random observations:
-  * `SV.RunThink` will reset `nextthink` to 0
-  * `ltime` is not `time`
+- over at the engine side of things, there’s too much QuakeC serving structures, I need to clean it up
+- also I should move `Game.EngineInterface` to `PF` maybe for the time being
+- reimplemented weapon switch back, but I also do not like the way I did it, I want some encapsuled weapon handling
+- also I thought about `bf` console command as it being a hack and that we need a better way to push events to the client side
+- random observations:
+  - `SV.RunThink` will reset `nextthink` to 0
+  - `ltime` is not `time`
 
 ### 2025-01-31
 
-* there’s a super weird bug where models and entities detach from each other (observed from a dummy monster on a moving platform)
-* I need a better thinker system and state machine, the original QuakeC one doesn’t cut it
-  * I tried to come up with a custom `setTimeout` and async/wait thing, but that would break save/load games
+- there’s a super weird bug where models and entities detach from each other (observed from a dummy monster on a moving platform)
+- I need a better thinker system and state machine, the original QuakeC one doesn’t cut it
+  - I tried to come up with a custom `setTimeout` and async/wait thing, but that would break save/load games
 
 ### 2025-01-30
 
-* spun-off `_sub*` methods into its own class to keep `BaseEntity` a bit more tidy
-* I need more debugging tools from the engine side
-  * such a bbox renderer for entities
-* right now some APIs between game and engine are catering more to the QuakeC world, I want to clean that up once the new game code is ready and I like the structure
-* some cleaning up eslint related stuff, should focus on more static analysis
-* I found some weird glitches in platforms (the lift on E1M1 is glitching when you are on it going up, also getting stock pushes you to world origin for one frame and then you get unstuck again, both original game bugs)
-* added debug_marker entity to help debugging things
-* fixed a stupid bug in the use handler, invoked `angleVectors` on `origin` instead of `angles`
-* `entity.ltime != game.time`
-* we got this concept of `BaseEntity.isActor` now grouping players and NPCs
-* started porting over code from QuakeC regarding AI
-* I decoupled AI from entity, so in future it might be easier to have a more smart drop-in AI replacement
+- spun-off `_sub*` methods into its own class to keep `BaseEntity` a bit more tidy
+- I need more debugging tools from the engine side
+  - such a bbox renderer for entities
+- right now some APIs between game and engine are catering more to the QuakeC world, I want to clean that up once the new game code is ready and I like the structure
+- some cleaning up eslint related stuff, should focus on more static analysis
+- I found some weird glitches in platforms (the lift on E1M1 is glitching when you are on it going up, also getting stock pushes you to world origin for one frame and then you get unstuck again, both original game bugs)
+- added debug_marker entity to help debugging things
+- fixed a stupid bug in the use handler, invoked `angleVectors` on `origin` instead of `angles`
+- `entity.ltime != game.time`
+- we got this concept of `BaseEntity.isActor` now grouping players and NPCs
+- started porting over code from QuakeC regarding AI
+- I decoupled AI from entity, so in future it might be easier to have a more smart drop-in AI replacement
 
 ### 2025-01-27
 
-* looks like the traceline is bugging out or the sizes are not set properly for things like doors, need some visual representation of their bounding boxes
-* I’m not happy about how to spawn temporarity entities or entities that require another entity they make up on the fly
-* added linking doors / door parts
-* I’m also not happy about these sub_* contraptions, I’m thinking about adding a proper state machine
-* `_precache` is called twice now: in `constructor` and in `assignInitialData`, because some fields will influence precache behavior --> doors work now
+- looks like the traceline is bugging out or the sizes are not set properly for things like doors, need some visual representation of their bounding boxes
+- I’m not happy about how to spawn temporarity entities or entities that require another entity they make up on the fly
+- added linking doors / door parts
+- I’m also not happy about these sub\_\* contraptions, I’m thinking about adding a proper state machine
+- `_precache` is called twice now: in `constructor` and in `assignInitialData`, because some fields will influence precache behavior --> doors work now
 
 ### 2025-01-26
 
-* I found `+use`/`-use`, but it’s not fully implemented on the engine side, added it back in
-* Introduced `Host.ScheduleInFuture` for convenient scheduling tasks in the near future
-* Archive Cvars are getting persisted right away
-* Accidentally spammed the sound subsystem by having issues with `watertype` and `waterlevel`
-* View angels are considered for noclip moves now
-* Reimplemented jump
-* Started playing around with `use` and `touch`
-* Started implementing doors
+- I found `+use`/`-use`, but it’s not fully implemented on the engine side, added it back in
+- Introduced `Host.ScheduleInFuture` for convenient scheduling tasks in the near future
+- Archive Cvars are getting persisted right away
+- Accidentally spammed the sound subsystem by having issues with `watertype` and `waterlevel`
+- View angels are considered for noclip moves now
+- Reimplemented jump
+- Started playing around with `use` and `touch`
+- Started implementing doors
 
 ### 2025-01-25
 
-* Still working on a few structural things in QuakeJS
-* Entities need to have all fields declared
-* Classnames are now static
+- Still working on a few structural things in QuakeJS
+- Entities need to have all fields declared
+- Classnames are now static
 
 ### 2025-01-24
 
-* ported more QuakeJS features over from QuakeC: weapon handling
+- ported more QuakeJS features over from QuakeC: weapon handling
 
 ### 2025-01-22
 
-* stuffing QuakeC quirkses into ProgsEntity/EdictProxy
-* calls into the game are now carrying entities first, not edicts
-* I cannot get rid of private data of entities over in QuakeC world, it loves to write into freed edicts
-* I want to rename `Edict.api` to `Edict.entity` to make clear this is the entity structure
+- stuffing QuakeC quirkses into ProgsEntity/EdictProxy
+- calls into the game are now carrying entities first, not edicts
+- I cannot get rid of private data of entities over in QuakeC world, it loves to write into freed edicts
+- I want to rename `Edict.api` to `Edict.entity` to make clear this is the entity structure
 
 ### 2025-01-21
 
-* it’s super important that models are set --> physics depend on them
-* this whole edicts have to be there and then you need to split instantiating an entity is super ugly
-* added a QC parser
-  * the structure how I implemented it is not great, needs refactoring
-  * it automatically groups frames into animations by name
-* started adding a state machine to `BaseEntity`
-  * there’s `_initStates` to init states
-  * there’s `_defineState` to add states, similar to what QuakeC has
-* introduced `GameAI` and `EntityAI` to separate logic a bit
-  * GameAI will hold the global state
-  * EntityAI will hold the entity state and provide functions
+- it’s super important that models are set --> physics depend on them
+- this whole edicts have to be there and then you need to split instantiating an entity is super ugly
+- added a QC parser
+  - the structure how I implemented it is not great, needs refactoring
+  - it automatically groups frames into animations by name
+- started adding a state machine to `BaseEntity`
+  - there’s `_initStates` to init states
+  - there’s `_defineState` to add states, similar to what QuakeC has
+- introduced `GameAI` and `EntityAI` to separate logic a bit
+  - GameAI will hold the global state
+  - EntityAI will hold the entity state and provide functions
 
 ### 2025-01-20
 
-* started reimplementing Quake game logic in QuakeJS
-* changed a few interfaces around
-* I’m again unhappy how I integrated QuakeC VM, it should follow the QuakeJS standard now
+- started reimplementing Quake game logic in QuakeJS
+- changed a few interfaces around
+- I’m again unhappy how I integrated QuakeC VM, it should follow the QuakeJS standard now
 
 ### 2025-01-19
 
-* restructured spawning of entities
-  * initiate the entity object
-  * preset a couple of information (SV.SpawnServer or ED.LoadFromFile)
-  * call the actual spawn function
-* there’s no max edict limit anymore
-* removed progsdef logic, I got no need for it anymore
-* integrated webserver denies the browser caching when developer is set to 1
-* temporary entities only have a life on client side
-  * this could be refactored into the client code of QuakeJS
-    * applies to Sbar as well
+- restructured spawning of entities
+  - initiate the entity object
+  - preset a couple of information (SV.SpawnServer or ED.LoadFromFile)
+  - call the actual spawn function
+- there’s no max edict limit anymore
+- removed progsdef logic, I got no need for it anymore
+- integrated webserver denies the browser caching when developer is set to 1
+- temporary entities only have a life on client side
+  - this could be refactored into the client code of QuakeJS
+    - applies to Sbar as well
 
 ### 2025-01-18
 
-* it’s now possible to mix QuakeJS and QuakeC world, albeit it’s super brittle and incomplete
-  * QuakeJS can speak to QuakeC but not vice-versa
-* started transforming things to `async`/`await`
+- it’s now possible to mix QuakeJS and QuakeC world, albeit it’s super brittle and incomplete
+  - QuakeJS can speak to QuakeC but not vice-versa
+- started transforming things to `async`/`await`
 
 ### 2025-01-17
 
-* moved lots of PF builtins to either `SV.Edict` or `Game.EngineInterface`
-* started cleaning up some contraptions to bridge between progs and engine
-  * removed `ClearEdictPrivateData`
-  * also starting to move `v`, `v_int` and `v_float` completely private to `ProgsEntity`
-  * renamed `EdictProxy` to `ProgsEntity`
-  * removed `PR.GameInterface` (it was of no use anyway)
-* I’m not happy how entangled clients and edicts are
-* I need to introduce some feature flags the QuakeJS game can set:
-  * interpolation yes/no
-  * colored lightmaps yes/no
-  * high precision protocol yes/no
-* PR/PF: I need to add debug features or at least hide some of the asserts and safety checks behind `Host.developer.value`
-* CL: loading maps is like 10x as fast now, found balance between updating the screen and loading/crunching data
-* Host: changed behavior of `give`, it will now accept an entity classname and spawn it in front of the player
+- moved lots of PF builtins to either `SV.Edict` or `Game.EngineInterface`
+- started cleaning up some contraptions to bridge between progs and engine
+  - removed `ClearEdictPrivateData`
+  - also starting to move `v`, `v_int` and `v_float` completely private to `ProgsEntity`
+  - renamed `EdictProxy` to `ProgsEntity`
+  - removed `PR.GameInterface` (it was of no use anyway)
+- I’m not happy how entangled clients and edicts are
+- I need to introduce some feature flags the QuakeJS game can set:
+  - interpolation yes/no
+  - colored lightmaps yes/no
+  - high precision protocol yes/no
+- PR/PF: I need to add debug features or at least hide some of the asserts and safety checks behind `Host.developer.value`
+- CL: loading maps is like 10x as fast now, found balance between updating the screen and loading/crunching data
+- Host: changed behavior of `give`, it will now accept an entity classname and spawn it in front of the player
 
 ### 2025-01-16
 
-* got rid of almost all `v_int`/`v_float`
-* fixed a couple of issues that were introduced when I did some changes to the code during the past few weeks
-  * damage information wasn’t properly sent to the client
-  * some issues related to null entity vs worldspawn (I assumed edict 0 was null entity, but it’s also worldspawn)
-  * sounds wouldn’t play sometimes
-* we could actually get rid of precaching or at least the hard requirement of having all resources precached
-* fixed one of the most stupid bugs in `Vector.clear()`: it would set the vector to `[0.0, 1.0, 2.0]` causing some fun
-* SV<->CL: bumped up punchangle precision from 8 bit to 16 bit
+- got rid of almost all `v_int`/`v_float`
+- fixed a couple of issues that were introduced when I did some changes to the code during the past few weeks
+  - damage information wasn’t properly sent to the client
+  - some issues related to null entity vs worldspawn (I assumed edict 0 was null entity, but it’s also worldspawn)
+  - sounds wouldn’t play sometimes
+- we could actually get rid of precaching or at least the hard requirement of having all resources precached
+- fixed one of the most stupid bugs in `Vector.clear()`: it would set the vector to `[0.0, 1.0, 2.0]` causing some fun
+- SV<->CL: bumped up punchangle precision from 8 bit to 16 bit
 
 ### 2025-01-15
 
-* introduced `Game.EngineInterface`
-  * started to organize some of the API functions into a unified game API
-* introduced `PF._generateBuiltinFunction`
-  * you can pass a signature and it will automatically translate JavaScript native functions to QuakeC builtins
-  * also comes with lots of sanity checks for the time being, I need to comment them out or at least make it toggleable
-* introduced `PR._stats` to collect data on how many times what variable was read/written
-* introduced `SV.Edict` class
-* about to introduce `SV.Client` class
-* there’s some weird entanglement between edicts and clients based on their ID
-* NPCs and items are not affected by gravity, only clients with `SV.movetype.walk` are exposed to `SV.AddGravity`… bug?
-* almost crunched all `v_int`/`v_float` access, but now I’m seeing all sorts of issues
+- introduced `Game.EngineInterface`
+  - started to organize some of the API functions into a unified game API
+- introduced `PF._generateBuiltinFunction`
+  - you can pass a signature and it will automatically translate JavaScript native functions to QuakeC builtins
+  - also comes with lots of sanity checks for the time being, I need to comment them out or at least make it toggleable
+- introduced `PR._stats` to collect data on how many times what variable was read/written
+- introduced `SV.Edict` class
+- about to introduce `SV.Client` class
+- there’s some weird entanglement between edicts and clients based on their ID
+- NPCs and items are not affected by gravity, only clients with `SV.movetype.walk` are exposed to `SV.AddGravity`… bug?
+- almost crunched all `v_int`/`v_float` access, but now I’m seeing all sorts of issues
 
 Need to be more careful with those ent structures:
+
 ```
 Jan 14 21:50:03 quakeshack.chrisnew.de node[57337]:         const dz = ent.v_float[PR.entvars.origin2] - SV.server.edicts[enemy].v_float[PR.entvars.origin2];
 Jan 14 21:50:03 quakeshack.chrisnew.de node[57337]:                                                                              ^
@@ -1173,63 +1179,63 @@ Jan 14 21:50:03 quakeshack.chrisnew.de node[57337]: Node.js v23.2.0
 
 ### 2025-01-14
 
-* I might have found a way to group frames into animations:
-  * going over functions that start off with `PR.op.state`,
-  * extract this frame, think (next frame)
-* fixes related to r_interpolation
-  * applied to lightstyles as well
-  * setting to 0 will apply to all interpolated values now
+- I might have found a way to group frames into animations:
+  - going over functions that start off with `PR.op.state`,
+  - extract this frame, think (next frame)
+- fixes related to r_interpolation
+  - applied to lightstyles as well
+  - setting to 0 will apply to all interpolated values now
 
 ### 2025-01-13
 
-* fixed co-op respawn bug
+- fixed co-op respawn bug
 
 ### 2025-01-10
 
-* fixed player rendering bug
-* adjusted Sbar code to have the player list and chatter box back in co-op mode
-* found a new bug: dead players in co-op will lead to a reconnect for all
+- fixed player rendering bug
+- adjusted Sbar code to have the player list and chatter box back in co-op mode
+- found a new bug: dead players in co-op will lead to a reconnect for all
 
 ### 2025-01-09
 
-* played around with smooth texture animations using pixel shaders
+- played around with smooth texture animations using pixel shaders
 
 ### 2025-01-07
 
-* models with grouped frames do have linear interpolation now, done via the vertex shader for alias models
-* added cvar `r_interpolation` to switch on/off interpolation of grouped frames
-* added fade effect between animated textures, also controlable via `r_interpolation`
+- models with grouped frames do have linear interpolation now, done via the vertex shader for alias models
+- added cvar `r_interpolation` to switch on/off interpolation of grouped frames
+- added fade effect between animated textures, also controlable via `r_interpolation`
 
 ### 2025-01-06
 
-* `SV.server.gameAPI.mapname` could be part of `SV.server` instead
-* for some reason `SV.svs.maxclientslimit` is always forced to 1 when we are in full-stack mode, unsure if there was a reason behind that
-* `Sbar` is basically everything that would be part of `cl_dll` in GoldSrc
-* `SV.svs.clients[].name` must be an empty string, otherwise `Sbar` is going to bug out
-* fixed a few `null` strings here in there due to some gameAPI vars I forgot to set
+- `SV.server.gameAPI.mapname` could be part of `SV.server` instead
+- for some reason `SV.svs.maxclientslimit` is always forced to 1 when we are in full-stack mode, unsure if there was a reason behind that
+- `Sbar` is basically everything that would be part of `cl_dll` in GoldSrc
+- `SV.svs.clients[].name` must be an empty string, otherwise `Sbar` is going to bug out
+- fixed a few `null` strings here in there due to some gameAPI vars I forgot to set
 
 ### 2025-01-05
 
-* found some regenerated stuff, I added their generator algorithms next to them
-* some more splitting off `PR` and `SV`
-* should be more careful with replacing things willy-nilly, introduced a nasty bug that took me an hour to track down
-* `PR.FunctionProxy` is now cached (using edict id and function id as key), improved memory and CPU usage drastically
+- found some regenerated stuff, I added their generator algorithms next to them
+- some more splitting off `PR` and `SV`
+- should be more careful with replacing things willy-nilly, introduced a nasty bug that took me an hour to track down
+- `PR.FunctionProxy` is now cached (using edict id and function id as key), improved memory and CPU usage drastically
 
 ### 2025-01-04
 
-* more and more use of `edict.api`, server state is keeping track of the client names, not the game anymore
-* unsure where the border is between `Host` and `SV`, there’s quite a lot of server related state inside of `Host`
-* introduced `ed.clear()` to clear private data on edicts, more separation of PR private data access and rest of the engine
+- more and more use of `edict.api`, server state is keeping track of the client names, not the game anymore
+- unsure where the border is between `Host` and `SV`, there’s quite a lot of server related state inside of `Host`
+- introduced `ed.clear()` to clear private data on edicts, more separation of PR private data access and rest of the engine
 
 ### 2025-01-03
 
-* found QC files at https://www.doomworld.com/idgames/idstuff/unsup/progs106
-* decompiling from `progs.dat` to JavaScript is getting more complicated due to branching
-* introduced `SV.server.worldvars`
-* also introduced proper function call proxy to execute PR functions
-* ED/PR: seems like fielddefs are barely used (except save/load and parsing from Edict text)
-* ED/PR: introduced `PR.SetString` able to recycle memory and update in place
-* ED: parsing requires knowledge about the structure in order to set entvars, getting rid of PR reliance is hard
+- found QC files at https://www.doomworld.com/idgames/idstuff/unsup/progs106
+- decompiling from `progs.dat` to JavaScript is getting more complicated due to branching
+- introduced `SV.server.worldvars`
+- also introduced proper function call proxy to execute PR functions
+- ED/PR: seems like fielddefs are barely used (except save/load and parsing from Edict text)
+- ED/PR: introduced `PR.SetString` able to recycle memory and update in place
+- ED: parsing requires knowledge about the structure in order to set entvars, getting rid of PR reliance is hard
 
 ```
 const player = SV.server.edicts.find((ent) => ent.vars.classname === 'player');
@@ -1239,12 +1245,12 @@ SV.server.worldvars.make_bubbles(player);
 
 ### 2025-01-02
 
-* first experiments with CANNON.js, but I’m seeing weird issues (fall through issues)
-* added code that generates a triangle mesh based on the BSP structure (being fed into CANNON.js)
-* introduced first version of proxy classes to ease up interfacing data going in / coming out of QuakeVM
-* added quaternion math to `Vec`
-* ED, PF, PR: in order to have a function call proxy, you need to know the function signature ahead of time unfortunately, I need to move all the proxy stuff from ED to PR
-* `Vec.Copy`’s order of arguments was a fucking trap to deal with
+- first experiments with CANNON.js, but I’m seeing weird issues (fall through issues)
+- added code that generates a triangle mesh based on the BSP structure (being fed into CANNON.js)
+- introduced first version of proxy classes to ease up interfacing data going in / coming out of QuakeVM
+- added quaternion math to `Vec`
+- ED, PF, PR: in order to have a function call proxy, you need to know the function signature ahead of time unfortunately, I need to move all the proxy stuff from ED to PR
+- `Vec.Copy`’s order of arguments was a fucking trap to deal with
 
 ```
 const global = new ED.Proxy(null);
@@ -1255,65 +1261,65 @@ global.make_bubbles.call(player);
 
 ### 2025-01-01
 
-* added initial touchpad support using nipple.js, no longer a high prio, it’s a crap experience anyway
-* added chatlog next to the ranking in multiplayer games
-* BUG: ambient sounds are not stopped properly from time to time, no clue why
-* changed the multiplayer menu a bit
-* using AbortController to stop all pending network requests
-* also added some `!this._started` safeguards to `S.LoadSound` and a few other places
-* calling `S.LoadPendingFiles` to load all new files after connect
-* `SV.svs.maxclientslimit = 32;`
-* added `S.LoadPendingFiles`
+- added initial touchpad support using nipple.js, no longer a high prio, it’s a crap experience anyway
+- added chatlog next to the ranking in multiplayer games
+- BUG: ambient sounds are not stopped properly from time to time, no clue why
+- changed the multiplayer menu a bit
+- using AbortController to stop all pending network requests
+- also added some `!this._started` safeguards to `S.LoadSound` and a few other places
+- calling `S.LoadPendingFiles` to load all new files after connect
+- `SV.svs.maxclientslimit = 32;`
+- added `S.LoadPendingFiles`
 
 ### 2024-12-31
 
-* lots of eslinting, detected some bugs (undefined vars etc.)
-* skip forward or do not play sounds at all when they arrived too late via async loading
-* implemented a loading screen
-* rendering of the loading screen is blocked by blocking IO activities
-* renderer is now utilizing requestAnimationFrame
-* easing up the blocking during entering the game using `CL.processingServerInfoState`
-* introduced Draw.BigChar etc.
-* added `svc.loadsound` to tell the client to load sounds that were not precached
-* added `Draw.CachePicDeferred` for loading things in the background, cut down initial loading times by 200%
+- lots of eslinting, detected some bugs (undefined vars etc.)
+- skip forward or do not play sounds at all when they arrived too late via async loading
+- implemented a loading screen
+- rendering of the loading screen is blocked by blocking IO activities
+- renderer is now utilizing requestAnimationFrame
+- easing up the blocking during entering the game using `CL.processingServerInfoState`
+- introduced Draw.BigChar etc.
+- added `svc.loadsound` to tell the client to load sounds that were not precached
+- added `Draw.CachePicDeferred` for loading things in the background, cut down initial loading times by 200%
 
 ### 2024-12-30
 
-* completely rewrote the sound subsystem, it was a mess until now
-* static sounds are lazy loaded
-* most sounds are still being loaded after the game is already ready
+- completely rewrote the sound subsystem, it was a mess until now
+- static sounds are lazy loaded
+- most sounds are still being loaded after the game is already ready
 
 ### 2024-12-29
 
-* more SV related fixes, don’t crash on full servers
-* reworked frontend error handling, leave a proper error message, clean up WebGL context on a crash
-* loading maps is taking too long, looking into streaming of data when used
-* started adding `*Async` to COM
+- more SV related fixes, don’t crash on full servers
+- reworked frontend error handling, leave a proper error message, clean up WebGL context on a crash
+- loading maps is taking too long, looking into streaming of data when used
+- started adding `*Async` to COM
 
 ### 2024-12-28
 
-* added express.js to serve files for the frontend part through the dedicated server
-* reimplemented RCON
-* restructured file structure a bit
-* noticed the sound is a bit broken on Chrome, fixing AudioContext sound subsystem
-* added alert box (`M.Alert`), so that errors can show a proper message box instead of the Console
+- added express.js to serve files for the frontend part through the dedicated server
+- reimplemented RCON
+- restructured file structure a bit
+- noticed the sound is a bit broken on Chrome, fixing AudioContext sound subsystem
+- added alert box (`M.Alert`), so that errors can show a proper message box instead of the Console
 
 ### 2024-12-27
 
-* starting rewriting low-level networking code
-* added ping, introduced `svc.updatepings`
-* improved `svc.disconnect`: added a reason string
+- starting rewriting low-level networking code
+- added ping, introduced `svc.updatepings`
+- improved `svc.disconnect`: added a reason string
 
 ### 2024-12-25
 
-* started working on network driver based on Websockets
+- started working on network driver based on Websockets
 
 ### 2024-12-24
 
-* started working on `dedicated.js`
-* introduced node.js replacements for COM and Sys
+- started working on `dedicated.js`
+- introduced node.js replacements for COM and Sys
 
 ### 2024-12-23
 
-* mainly code clean up, used ESLint
-* cleaned out lots of `var`
+- mainly code clean up, used ESLint
+- cleaned out lots of `var`

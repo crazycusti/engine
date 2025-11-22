@@ -90,22 +90,22 @@ SCR.DrawCenterString = function() {
     let str; let x; let j;
     for (i = 0; i < SCR.centerstring.length; i++) {
       str = SCR.centerstring[i];
-      x = (VID.width - (str.length * 8)) / 2;
+      x = (VID.width - (str.length * 16)) / 2;
       for (j = 0; j < str.length; j++) {
-        Draw.Character(x, y, str.charCodeAt(j));
+        Draw.Character(x, y, str.charCodeAt(j), 2.0);
         if ((remaining--) === 0) {
           return;
         }
-        x += 8;
+        x += 16;
       }
-      y += 8;
+      y += 16;
     }
     return;
   }
 
   for (i = 0; i < SCR.centerstring.length; i++) {
-    Draw.String((VID.width - (SCR.centerstring[i].length * 8)) / 2, y, SCR.centerstring[i]);
-    y += 8;
+    Draw.String((VID.width - (SCR.centerstring[i].length * 16)) / 2, y, SCR.centerstring[i], 2.0);
+    y += 16;
   }
 };
 

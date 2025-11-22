@@ -430,7 +430,7 @@ export class ServerEdict {
    * @returns {boolean} true, when edict touches the ground
    */
   isOnTheFloor() {
-  return SV.movement.checkBottom(this);
+    return SV.movement.checkBottom(this);
   }
 
   /**

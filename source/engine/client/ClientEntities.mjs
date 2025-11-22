@@ -143,7 +143,7 @@ export class ClientEdict {
       },
       get origin() {
         const time = CL.state.clientMessages.mtime[0];
-        if (that.nextthink <= time || CL.nolerp.value) {
+        if (that.nextthink <= time || CL.nolerp.value || that.originPrevious.isInfinite()) {
           return that.origin;
         }
         const f = Math.min(1, Math.max(0, (time - that.originTime) / (that.nextthink - that.originTime)));
@@ -158,7 +158,7 @@ export class ClientEdict {
       },
       get angles() {
         const time = CL.state.clientMessages.mtime[0];
-        if (that.nextthink <= time || CL.nolerp.value) {
+        if (that.nextthink <= time || CL.nolerp.value || that.anglesPrevious.isInfinite()) {
           return that.angles;
         }
         const f = Math.min(1, Math.max(0, (time - that.anglesTime) / (that.nextthink - that.anglesTime)));
@@ -656,6 +656,11 @@ export default class ClientEntities {
         continue;
       }
 
+      // entity has not been updated yet
+      if (clent.updatecount === 0) {
+        continue;
+      }
+
       // apply prediction for non-player entities
       // if (clent.classname !== 'player') {
         clent.updatePosition(clent.num !== CL.state.viewentity);
@@ -682,6 +687,11 @@ export default class ClientEntities {
     for (const clent of this.static_entities) {
       // freed entity or invisible entity
       if (clent.free || !clent.model || (clent.effects & effect.EF_NODRAW)) {
+        continue;
+      }
+
+      // entity has not been updated yet
+      if (clent.updatecount === 0) {
         continue;
       }
 

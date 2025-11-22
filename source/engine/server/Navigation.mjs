@@ -515,9 +515,10 @@ export class Navigation {
   /**
    * @param {Vector} startpos start position (waypoint)
    * @param {Vector} endpos end position (waypoint), will overwrite!
+   * @param {number} hullNum hull number
    * @returns {number} fraction of unobstructed trace, 0 = completely blocked, 1 = fully clear
    */
-  #testTraceStatic(startpos, endpos) {
+  #testTraceStatic(startpos, endpos, hullNum) {
     const trace = {
       fraction: 1.0,
       allsolid: true,
@@ -527,8 +528,8 @@ export class Navigation {
       ent: null,
     };
     SV.collision.recursiveHullCheck(
-      SV.server.worldmodel.hulls[0],
-      SV.server.worldmodel.hulls[0].firstclipnode,
+      SV.server.worldmodel.hulls[hullNum],
+      SV.server.worldmodel.hulls[hullNum].firstclipnode,
       0.0, 1.0,
       startpos.copy(),
       endpos.copy(),
@@ -756,7 +757,7 @@ export class Navigation {
         const endpos = startpos.copy();
 
         // trace up hull2 height, will modify endpos to the actual endpoint
-        this.#testTraceStatic(startpos, endpos.add(hull2Height));
+        this.#testTraceStatic(startpos, endpos.add(hull2Height), 0);
 
         wp.availableHeight = endpos[2] - startpos[2];
 
@@ -789,7 +790,7 @@ export class Navigation {
           dir.multiply(this.requiredRadius);
           const sideStart = wp.origin.copy();
           const sideEnd = sideStart.copy().add(dir);
-          const frac = this.#testTraceStatic(sideStart, sideEnd);
+          const frac = this.#testTraceStatic(sideStart, sideEnd, 0);
           if (frac < 1) {
             wp.isClipping = true;
             break;
@@ -807,7 +808,7 @@ export class Navigation {
           // TODO: apply normal vector to dir to follow slope
           const sideStart = wp.origin.copy().add(new Vector(dir[0], dir[1], 0));
           const sideEnd = sideStart.copy().add(new Vector(0, 0, dir[2]));
-          const frac = this.#testTraceStatic(sideStart, sideEnd);
+          const frac = this.#testTraceStatic(sideStart, sideEnd, 0);
           if (frac === -1 && sideEnd[2] === sideStart[2]) { // still on solid ground
             if (sideEnd[0] !== sideStart[0] || sideEnd[1] !== sideStart[1]) { // found a wall
               // TODO: but what if it’s a small protrusion, e.g. stairs?
@@ -969,7 +970,6 @@ export class Navigation {
     }
 
     // 3) connect nodes: attempt links between node pairs if close and unobstructed
-    const viewOffset = new Vector(0, 0, 22); // trace at roughly head height (FIXME: viewofs)
     const stepOffset = new Vector(0, 0, 18); // maximum allowance to climb steps (FIXME: STEPSIZE)
 
     for (let i = 0; i < nodes.length; i++) {
@@ -984,12 +984,12 @@ export class Navigation {
         }
 
         // perform a trace between the two node origins to ensure unobstructed path
-        const start = a.origin.copy().add(viewOffset);
-        const end = b.origin.copy().add(viewOffset);
+        const start = a.origin;
+        const end = b.origin;
         const startStepped = start.copy().add(stepOffset);
 
-        const frac = this.#testTraceStatic(start.copy(), end.copy());
-        const fracStep = this.#testTraceStatic(startStepped, end.copy());
+        const frac = this.#testTraceStatic(start.copy(), end.copy(), 1);
+        const fracStep = this.#testTraceStatic(startStepped, end.copy(), 0);
 
         if (frac < 1.0 && fracStep < 1.0) {
           // blocked or partially blocked
