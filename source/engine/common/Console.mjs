@@ -200,7 +200,7 @@ export default class Con {
       } else {
         y -= Math.ceil(Con.text[i].text.length / width) << 3;
       }
-      --i;
+      i--;
       if (y <= 0) {
         break;
       }

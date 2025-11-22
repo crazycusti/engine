@@ -62,6 +62,11 @@ export default defineConfig(({ mode }) => ({
             return 'shared';
           }
 
+          // vendor packages from node_modules
+          if (id.includes('/node_modules/')) {
+            return 'vendor';
+          }
+
           // keep game modules as separate chunks (they are dynamically loaded by the PR code)
           if (id.includes('/source/game/')) {
             // extract the gamedir name
@@ -80,6 +85,11 @@ export default defineConfig(({ mode }) => ({
     sourcemap: mode !== 'production',
     chunkSizeWarningLimit: 1000,
     minify: mode === 'production' ? 'esbuild' : false,
+    esbuild: mode === 'production' ? {
+      drop: ['console', 'debugger'],
+    } : undefined,
+    reportCompressedSize: true,
+    target: 'es2019',
   },
   plugins: [
     gameModulePreloadPlugin(),
@@ -94,6 +104,7 @@ export default defineConfig(({ mode }) => ({
     '__BUILD_MODE__': JSON.stringify(mode),
     '__BUILD_TIMESTAMP__': JSON.stringify(new Date().toISOString()),
     '__BUILD_COMMIT_HASH__': JSON.stringify(process.env.WORKERS_CI_COMMIT_SHA?.substring(0, 7) || null),
+    '__DEV__': JSON.stringify(mode !== 'production'),
   },
   resolve: {
     alias: {

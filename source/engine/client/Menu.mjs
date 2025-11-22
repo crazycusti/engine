@@ -223,7 +223,7 @@ M.SinglePlayer_Key = function(k) {
             Cmd.text += 'disconnect\n';
           }
           Key.dest.value = Key.dest.game;
-          Cmd.text += 'maxplayers 1\nmap start\n';
+          Cmd.text += 'exec start.cfg';
           return;
         case 1:
           M.Menu_Load_f();
