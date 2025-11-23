@@ -415,6 +415,8 @@ SCR.UpdateScreen = function() {
 
     GL.StreamFlush();
 
+    R.PrintSpeeds();
+
     gl.disable(gl.BLEND);
 
     SCR._requestedAnimationFrames--;

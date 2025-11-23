@@ -15,6 +15,7 @@ import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
+import Draw from './Draw.mjs';
 
 let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
 
@@ -1209,6 +1210,8 @@ R.RenderScene = function() {
   gl.disable(gl.CULL_FACE);
 };
 
+R._speeds = [];
+
 R.RenderView = function() {
   gl.finish();
   let time1;
@@ -1228,8 +1231,25 @@ R.RenderView = function() {
     const c_brush_polys = R.c_brush_verts / 3;
     const c_alias_polys = R.c_alias_polys;
     const avgTrisPerDraw = (R.c_brush_tris / R.c_brush_draws).toFixed(1);
-    Con.DPrint(`Frame Stats: ${R.c_brush_draws} draw calls (${R.c_brush_draws_pbr} PBR), ${R.c_brush_tris} tris (${R.c_brush_verts} verts), ${R.c_brush_vbos} VBO binds, ${c_alias_polys} alias polys, ${c_brush_polys} brush polys\n`);
-    Con.DPrint(`  Avg ${avgTrisPerDraw} tris/draw, ${R.c_brush_texture_binds} texture binds, time: ${((Sys.FloatMilliTime() - time1)).toFixed(1)} msec\n`);
+
+    R._speeds[0] = `${R.c_brush_draws.toFixed().padStart(5)} draw calls (${R.c_brush_draws_pbr} PBR)`;
+    R._speeds[1] = `${R.c_brush_tris.toFixed().padStart(5)} tris, ${R.c_brush_verts.toFixed().padStart(5)} verts`;
+    R._speeds[2] = `${R.c_brush_vbos.toFixed().padStart(5)} VBOs used, ${R.c_brush_texture_binds.toFixed().padStart(5)} texture binds`;
+    R._speeds[3] = `${c_alias_polys.toFixed().padStart(5)} alias polys, ${c_brush_polys.toFixed().padStart(5)} brush polys`;
+    R._speeds[4] = '';
+    R._speeds[5] = `Avg ${avgTrisPerDraw} tris/draw, time: ${((Sys.FloatMilliTime() - time1)).toFixed(1)} msec`;
+  }
+};
+
+R.PrintSpeeds = function() {
+  if (!R.speeds.value) {
+    return;
+  }
+
+  Draw.String(16, 16, `${SCR.FPS.toFixed(1)} FPS`, 2.0);
+
+  for (let i = 0; i < R._speeds.length; i++) {
+    Draw.String(16, 40 + i * 8, R._speeds[i]);
   }
 };
 
