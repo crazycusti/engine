@@ -1007,7 +1007,7 @@ M.Quit_Key = function (k) {
       }
       break;
     case 121:
-      M.CloseMenu();
+      Key.dest.value = Key.dest.console;
       Host.Quit_f();
   }
 };
