@@ -18,13 +18,14 @@ Grouped by sections and then sorted by priority (more or less).
   - [_] setup a profile when new player
   - [_] better create game menu
   - [_] integrate with server browser
-- [_] M: make it more readible on high DPI screens
+- [X] M: make it more readible on high DPI screens
 - [_] UI: textboxes should act more like text boxes
 - [_] CL: finished demos trigger a `Host.Error` (lost connection), needs fixing
 - [_] M: introduce a password required dialog to join password protected servers
 - [_] M: touch support (how to escape etc) and mouse support
 - [_] M: rewrite the code using the new framework
 - [_] IN: proper virtual joystick and keyboard/UI
+- [_] M: expose GUI toolkit (draw routines etc.) to the client game code, put stuff in shared/
 
 ### Code smell
 
@@ -61,8 +62,8 @@ Grouped by sections and then sorted by priority (more or less).
 ### LibreQuake support
 
 - [_] investigate issues with missing/broken bmodels in some of the maps
-- [_] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
-- [_] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
+- [X] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
+- [X] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
 - [_] try to get QuakeC’s progs.dat going
 
 ## Ideas

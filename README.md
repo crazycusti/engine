@@ -9,7 +9,7 @@ Added features include but not limited to:
 * Support for client-side game code.
 * 32-bit texture support.
 * WAD3 file support and texture support.
-* Colored dynamic lighting support.
+* Colored dynamic and static lighting support, supporting both BSPX/RGBLIGHTING lumps and `.lit` files.
 * Slightly improved console subsystem.
 * Smooth animations using lerping.
 * Somewhat optimized network code.
