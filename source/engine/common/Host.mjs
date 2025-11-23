@@ -494,6 +494,7 @@ Host.Shutdown = function() {
     Sys.Print('recursive shutdown\n');
     return;
   }
+  eventBus.publish('host.shutting-down');
   Host.isdown = true;
   Host.WriteConfiguration();
   if (!registry.isDedicatedServer) {
@@ -507,6 +508,7 @@ Host.Shutdown = function() {
   }
   Cmd.Shutdown();
   Cvar.Shutdown();
+  eventBus.publish('host.shutdown');
 };
 
 // Commands

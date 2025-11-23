@@ -62,6 +62,8 @@ The engine has an event bus.
 | - | - | - |
 | host.crash | 1. Error | Emitted when there was an uncaught exception during the main loop. |
 | host.ready | - | The engine is initialized and ready to roll. |
+| host.shutting-down | - | Shutting down. Being of Host.Shutdown. |
+| host.shutdown | - | Shut down. End of Host.Shutdown. |
 
 ### Network
 

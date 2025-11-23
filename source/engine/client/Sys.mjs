@@ -272,7 +272,7 @@ export default class Sys {
     // @ts-ignore
     delete window.registry;
 
-    Sys.Print('Sys.Quit: done\n');
+    Sys.Print('Sys.Quit: finished, thank you for playing!\n');
   }
 
   static Print(/** @type {string} */ text) {

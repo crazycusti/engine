@@ -482,13 +482,15 @@ export default class SV {
       edict.freeEdict();
     }
 
-    SV.server.edicts = [];
+    SV.server.edicts.length = 0;
     SV.server.num_edicts = 0;
 
     if (SV.server.navigation) {
       SV.server.navigation.shutdown();
       SV.server.navigation = null;
     }
+
+    SV.server.eventBus.unsubscribeAll();
 
     if (isCrashShutdown) {
       Con.Print('Server shut down due to a crash!\n');
