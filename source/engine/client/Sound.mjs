@@ -693,8 +693,13 @@ const S = {
       });
 
       if (sfx.state === SFX.STATE.NEW) {
-        this.LoadSound(sfx);
-      }
+          this.LoadSound(sfx).catch((error) => {
+            if (!this._started) {
+              return;
+            }
+            Con.Print(`S.Init: async load of ambient ${name} failed, ${error}\n`);
+          });
+        }
     }
 
     this._eventListeners.push(eventBus.subscribe('client.paused', () => this._PauseAllSounds()));
@@ -740,6 +745,8 @@ const S = {
     // wait for all of them, process next batch
     Promise.all(promises).then(() => {
       this.LoadPendingFiles();
+    }).catch((err) => {
+      Con.PrintError(`S.LoadPendingFiles: Error while loading pending sounds: ${err.message || err}\n`);
     });
   },
 
@@ -841,6 +848,12 @@ const S = {
 
     // Minimal parsing of a WAV
     let view = new DataView(data);
+    // Minimal WAV sanity check - we need at least a RIFF header and a WAVE marker
+    if (data.byteLength < 12) {
+      Con.Print(`S.LoadSound: ${sfx.name} is too small to be a valid WAV file (size=${data.byteLength})\n`);
+      sfx.state = SFX.STATE.FAILED;
+      return false;
+    }
     // Quick check for 'RIFF' & 'WAVE'
     if (view.getUint32(0, true) !== 0x46464952 || view.getUint32(8, true) !== 0x45564157) {
       Con.Print(`S.LoadSound: Missing RIFF/WAVE chunks on ${sfx.name}\n`);
@@ -856,63 +869,86 @@ const S = {
     let cueFound = false;
     let totalSamples = null;
 
-    try {
-      while (p < data.byteLength) {
-        const chunkId = view.getUint32(p, true);
-        const chunkSize = view.getUint32(p + 4, true);
-        switch (chunkId) {
+    // Only iterate while a full chunk header (8 bytes) is present
+    while (p + 8 <= data.byteLength) {
+      const chunkId = view.getUint32(p, true);
+      const chunkSize = view.getUint32(p + 4, true);
+
+      // Compute how many bytes remain after the header, clamp if chunk claims more
+      const remain = data.byteLength - (p + 8);
+      let actualChunkSize = chunkSize;
+      if (chunkSize > remain) {
+        // Instead of failing outright, accept a malformed size and continue parsing
+        Con.PrintWarning(`S.LoadSound: ${sfx.name} claims chunk at ${p} has ${chunkSize} bytes but only ${remain} available - clamping\n`);
+        actualChunkSize = remain;
+      }
+      switch (chunkId) {
           case 0x20746d66: // 'fmt '
-            if (view.getInt16(p + 8, true) !== 1) {
-              Con.Print(`S.LoadSound: ${sfx.name} is not in Microsoft PCM format\n`);
+            // fmt chunk must be at least 16 bytes for the fields we read
+            if (actualChunkSize < 16) {
+              Con.PrintError(`S.LoadSound: ${sfx.name} has invalid fmt chunk (size ${chunkSize})\n`);
               sfx.state = SFX.STATE.FAILED;
               return false;
             }
-            fmt = {
-              channels: view.getUint16(p + 10, true),
-              samplesPerSec: view.getUint32(p + 12, true),
-              avgBytesPerSec: view.getUint32(p + 16, true),
-              blockAlign: view.getUint16(p + 20, true),
-              bitsPerSample: view.getUint16(p + 22, true),
-            };
-            break;
+          if (view.getInt16(p + 8, true) !== 1) {
+            Con.PrintError(`S.LoadSound: ${sfx.name} is not in Microsoft PCM format\n`);
+            sfx.state = SFX.STATE.FAILED;
+            return false;
+          }
+          fmt = {
+            channels: view.getUint16(p + 10, true),
+            samplesPerSec: view.getUint32(p + 12, true),
+            avgBytesPerSec: view.getUint32(p + 16, true),
+            blockAlign: view.getUint16(p + 20, true),
+            bitsPerSample: view.getUint16(p + 22, true),
+          };
+          break;
           case 0x61746164: // 'data'
-            dataOfs = p + 8;
-            dataLen = chunkSize;
-            break;
+          dataOfs = p + 8;
+          dataLen = actualChunkSize;
+          break;
           case 0x20657563: // 'cue '
-            cueFound = true;
-            loopstart = view.getUint32(p + 32, true);
-            break;
-          case 0x5453494c: // 'LIST'
-            if (cueFound === true) {
-              // 'cue' chunk was found earlier, so let's interpret the 'LIST' chunk
-              cueFound = false;
-              if (view.getUint32(p + 28, true) === 0x6b72616d) { // 'mark'
-                totalSamples = loopstart + view.getUint32(p + 24, true);
-              }
+            // Ensure chunk is large enough to contain the fields we access. Use actualChunkSize check.
+            if (actualChunkSize >= 36) {
+              cueFound = true;
+              loopstart = view.getUint32(p + 32, true);
+            } else {
+              Con.PrintWarning(`S.LoadSound: ${sfx.name} has a truncated cue chunk at offset ${p} (size ${actualChunkSize})\n`);
             }
-            break;
-          default:
-            break;
-        }
-        p += (chunkSize + 8);
-        if (p & 1) { // pad if needed
-          p += 1;
-        }
+          break;
+          case 0x5453494c: // 'LIST'
+          if (cueFound === true) {
+            // 'cue' chunk was found earlier, so let's interpret the 'LIST' chunk
+            cueFound = false;
+            // Check bounds before reading from the LIST chunk
+            if (actualChunkSize >= 32) {
+              if (view.getUint32(p + 28, true) === 0x6b72616d) { // 'mark'
+                // Check the subfield we read (p + 24) is available within actualChunkSize
+                if (actualChunkSize >= 28) {
+                  totalSamples = loopstart + view.getUint32(p + 24, true);
+                }
+              }
+            } else {
+              Con.PrintWarning(`S.LoadSound: ${sfx.name} has a truncated LIST chunk at offset ${p} (size ${actualChunkSize})\n`);
+            }
+          }
+          break;
+        default:
+          break;
       }
-    } catch(e) {
-      Con.Print(`S.LoadSound: unable to read ${sfx.name}, ${e.message} \n`);
-      sfx.state = SFX.STATE.FAILED;
-      return false;
+      p += (actualChunkSize + 8);
+      if (p & 1) { // pad if needed
+        p += 1;
+      }
     }
 
     if (!fmt) {
-      Con.Print(`S.LoadSound: ${sfx.name} is missing the fmt chunk\n`);
+      Con.PrintError(`S.LoadSound: ${sfx.name} is missing the fmt chunk\n`);
       sfx.state = SFX.STATE.FAILED;
       return false;
     }
     if (dataOfs === null) {
-      Con.Print(`S.LoadSound: ${sfx.name} is missing the data chunk\n`);
+      Con.PrintError(`S.LoadSound: ${sfx.name} is missing the data chunk\n`);
       sfx.state = SFX.STATE.FAILED;
       return false;
     }
@@ -1015,6 +1051,8 @@ const S = {
 
         // jump back up to playing it
         onDataAvailable(sfx.cache);
+      }).catch((err) => {
+        Con.PrintError(`S.StartSound: failed to LoadSound ${sfx.name}, ${err.message || err}\n`);
       });
       return;
     }
@@ -1108,8 +1146,8 @@ const S = {
 
     const onDataAvailable = (sc) => {
       if (sc.loopstart === null) {
-        Con.Print(`S.StaticSound: Sound ${sfx.name} not looped\n`);
-        return;
+        Con.PrintWarning(`S.StaticSound: Sound ${sfx.name} not looped, assuming start 0\n`);
+        sc.loopstart = 0;
       }
 
       ss.loadData();

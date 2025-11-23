@@ -248,6 +248,8 @@ export default class Cvar {
       return true;
     }
 
+    // TODO: check if there’s a min/max value and clamp accordingly
+
     v.set(value);
 
     return true;
@@ -308,7 +310,7 @@ export default class Cvar {
       return;
     }
 
-    if (!(variable.flags & Cvar.FLAG.ARCHIVE)) {
+    if (!(variable.flags & (Cvar.FLAG.ARCHIVE | Cvar.FLAG.READONLY))) {
       variable.flags |= Cvar.FLAG.ARCHIVE;
       Con.DPrint(`"${name}" flagged as archive variable\n`);
     }

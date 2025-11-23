@@ -115,6 +115,9 @@ Grouped by sections and then sorted by priority (more or less).
 ### 2025-11-23
 
 - client: main loop is now dependent on vsync refresh rate (automatically determined)
+- fog is now rendered like Ironwail/FTEQW would do it (also respecting fog value on worldspawn)
+- sound loader is a bit more chill when it comes to loading files
+- I’m quite unhappy about the state machine for game/console/menu keyboard and rendering, especially after me botching in some things
 
 ### 2025-11-22
 

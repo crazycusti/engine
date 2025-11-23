@@ -1132,7 +1132,7 @@ R.Perspective = function() {
     }
     if (program.uFogParams !== undefined) {
       // uFogParams = vec4(start, end, density, mode)
-      gl.uniform4f(program.uFogParams, R.fog_start.value || 100.0, R.fog_end.value || 1000.0, R.fog_density.value || 0.01, R.fog_mode.value || 0.0);
+      gl.uniform4f(program.uFogParams, R.fog_start.value, R.fog_end.value, R.fog_density.value, R.fog_mode.value);
     }
   }
 };
@@ -1499,11 +1499,11 @@ R.Init = async function() {
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
   R.pbr_lod_threshold = new Cvar('r_pbr_lod_threshold', '-1', Cvar.FLAG.ARCHIVE, 'Triangle count threshold to disable PBR (normal mapping) for fillrate optimization. -1 = no limit (always PBR), 0 = PBR off, >0 = disable PBR when triangle count exceeds threshold');
   // fog controls
-  R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.ARCHIVE, 'Fog color: R G B (0-255)');
-  R.fog_start = new Cvar('r_fog_start', '100', Cvar.FLAG.ARCHIVE, 'Fog start distance');
-  R.fog_end = new Cvar('r_fog_end', '1000', Cvar.FLAG.ARCHIVE, 'Fog end distance (linear)');
-  R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.ARCHIVE, 'Fog density (for exp/exp2)');
-  R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.ARCHIVE, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
+  R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.CHEAT, 'Fog color: R G B (0-255)');
+  R.fog_start = new Cvar('r_fog_start', '128', Cvar.FLAG.CHEAT, 'Fog start distance (linear)');
+  R.fog_end = new Cvar('r_fog_end', '4096', Cvar.FLAG.CHEAT, 'Fog end distance (linear)');
+  R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.CHEAT, 'Fog density (for exp/exp2)');
+  R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.CHEAT, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
 
   R.InitTextures();
   R.InitParticles();
@@ -1554,8 +1554,26 @@ R.Init = async function() {
   R.MakeSky();
 };
 
-R.InitFog = function() {
+R.NewMapFog = function() {
+  console.assert(CL.state.worldmodel, 'worldmodel must be loaded before InitFog');
 
+  const fogInfo = CL.state.worldmodel.worldspawnInfo.fog;
+
+  if (!fogInfo) {
+    R.fog_mode.set(-1);
+    return;
+  }
+
+  const [exp, r, g, b] = fogInfo.split(' ').map(Number);
+
+  // CR: I took that calculation from Ironwail’s Fog_SetupFrame:
+  const ExpAdjustment = 1.20112241; // sqrt(log2(e))
+  const SphericalCorrection = 0.85; // compensate higher perceived density with spherical fog
+  const DensityScale = ExpAdjustment * SphericalCorrection / 64.0;
+
+  R.fog_density.set(exp / DensityScale);
+  R.fog_color.set(`${r * 255} ${g * 255} ${b * 255}`);
+  R.fog_mode.set(1);
 };
 
 R.NewMap = function() {
@@ -1578,7 +1596,7 @@ R.NewMap = function() {
   GL.Bind(0, R.dlightmap_rgba_texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-  R.InitFog();
+  R.NewMapFog();
 };
 
 R.TimeRefresh_f = function() {
