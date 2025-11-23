@@ -1518,12 +1518,12 @@ R.Init = async function() {
   R.nocolors = new Cvar('gl_nocolors', '0');
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
   R.pbr_lod_threshold = new Cvar('r_pbr_lod_threshold', '-1', Cvar.FLAG.ARCHIVE, 'Triangle count threshold to disable PBR (normal mapping) for fillrate optimization. -1 = no limit (always PBR), 0 = PBR off, >0 = disable PBR when triangle count exceeds threshold');
-  // fog controls
-  R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.CHEAT, 'Fog color: R G B (0-255)');
-  R.fog_start = new Cvar('r_fog_start', '128', Cvar.FLAG.CHEAT, 'Fog start distance (linear)');
-  R.fog_end = new Cvar('r_fog_end', '4096', Cvar.FLAG.CHEAT, 'Fog end distance (linear)');
-  R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.CHEAT, 'Fog density (for exp/exp2)');
-  R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.CHEAT, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
+  // fog controls (TODO: make that a cheat, but resetting cvar to default is done after R.NewMapFog, so need to rethink the order of operations)
+  R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.NONE, 'Fog color: R G B (0-255)');
+  R.fog_start = new Cvar('r_fog_start', '128', Cvar.FLAG.NONE, 'Fog start distance (linear)');
+  R.fog_end = new Cvar('r_fog_end', '4096', Cvar.FLAG.NONE, 'Fog end distance (linear)');
+  R.fog_density = new Cvar('r_fog_density', '0.01', Cvar.FLAG.NONE, 'Fog density (for exp/exp2)');
+  R.fog_mode = new Cvar('r_fog_mode', '-1', Cvar.FLAG.NONE, 'Fog mode: 0=linear, 1=exp, 2=exp2, -1=disable');
 
   R.InitTextures();
   R.InitParticles();

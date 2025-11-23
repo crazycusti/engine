@@ -173,6 +173,9 @@ export class BrushModel extends BaseModel {
   /** @type {number} Offset into vertex buffer for turbulent surfaces (water, slime, lava) */
   waterchain = 0;
 
+  /** @type {boolean} Whether RGB lighting is used */
+  coloredlights = false;
+
   /**
    * Find the leaf node for a given point in 3D space
    * @param {Vector} p position

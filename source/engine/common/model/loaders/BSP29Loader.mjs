@@ -126,6 +126,10 @@ export class BSP29Loader extends ModelLoader {
     this._loadDeluxeMap(loadmodel, buffer);
     this._loadLightgridOctree(loadmodel, buffer);
 
+    if (loadmodel.coloredlights && !loadmodel.lightdata_rgb) {
+      this._loadExternalLighting(loadmodel, name);
+    }
+
     // Calculate bounding radius
     this._calculateRadius(loadmodel);
 
@@ -357,7 +361,8 @@ export class BSP29Loader extends ModelLoader {
   }
 
   /**
-   * Load entities from BSP lump and parse worldspawn properties
+   * Load entities from BSP lump and parse worldspawn properties.
+   * Also this tries to parse light entities to determine if RGB lighting is used and whether we need to load the .lit file.
    * @private
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
@@ -371,28 +376,53 @@ export class BSP29Loader extends ModelLoader {
     loadmodel.worldspawnInfo = {};
 
     let data = loadmodel.entities;
-    const parsed = COM.Parse(data);
-    console.assert(parsed.data !== null && parsed.token === '{');
-    data = parsed.data;
 
-    while (true) {
-      const parsedKey = COM.Parse(data);
-      data = parsedKey.data;
-
-      if (!data || parsedKey.token === '}') {
-        break;
-      }
-
-      const parsedValue = COM.Parse(data);
-      data = parsedValue.data;
+    // going for worldspawn and light
+    let stillLooking = 2;
+    while (stillLooking > 0) {
+      const parsed = COM.Parse(data);
+      data = parsed.data;
 
       if (!data) {
         break;
       }
 
-      console.assert(parsedValue.token !== '}');
+      const currentEntity = {};
+      while (data) {
+        const parsedKey = COM.Parse(data);
+        data = parsedKey.data;
 
-      loadmodel.worldspawnInfo[parsedKey.token] = parsedValue.token;
+        if (!data || parsedKey.token === '}') {
+          break;
+        }
+
+        const parsedValue = COM.Parse(data);
+        data = parsedValue.data;
+
+        if (!data || parsedKey.token === '}') {
+          break;
+        }
+
+        currentEntity[parsedKey.token] = parsedValue.token;
+      }
+
+      if (!currentEntity.classname) {
+        break;
+      }
+
+      switch (currentEntity.classname) {
+        case 'worldspawn':
+          Object.assign(loadmodel.worldspawnInfo, currentEntity);
+          stillLooking--;
+          break;
+
+        case 'light':
+          if (currentEntity._color) {
+            loadmodel.coloredlights = true;
+            stillLooking--;
+          }
+          break;
+      }
     }
 
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
@@ -964,6 +994,29 @@ export class BSP29Loader extends ModelLoader {
     if (filelen === 0) { return; }
 
     loadmodel.lightdata_rgb = new Uint8Array(buf.slice(fileofs, fileofs + filelen));
+  }
+
+  /**
+   * Load external RGB lighting from .lit file if available
+   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {string} filename - The original BSP filename
+   */
+  _loadExternalLighting(loadmodel, filename) {
+    const rgbFilename = filename.replace(/\.bsp$/i, '.lit');
+
+    const data = COM.LoadFile(rgbFilename);
+
+    if (!data) {
+      Con.DPrint(`BSP29Loader: no external RGB lighting file found: ${rgbFilename}\n`);
+      return;
+    }
+
+    const dv = new DataView(data);
+
+    console.assert(dv.getUint32(0, true) === 0x54494C51, 'QLIT header');
+    console.assert(dv.getUint32(4, true) === 0x00000001, 'QLIT version 1');
+
+    loadmodel.lightdata_rgb = new Uint8Array(data.slice(8)); // Skip header
   }
 
   /**
