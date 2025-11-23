@@ -223,7 +223,7 @@ M.SinglePlayer_Key = function(k) {
             Cmd.text += 'disconnect\n';
           }
           Key.dest.value = Key.dest.game;
-          Cmd.text += 'exec start.cfg';
+          Cmd.text += 'exec start.cfg\n';
           return;
         case 1:
           M.Menu_Load_f();

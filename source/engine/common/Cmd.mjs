@@ -216,10 +216,6 @@ export default class Cmd {
       const f = await COM.LoadTextFileAsync(filename);
       slot.isReady = true;
       slot.content = f;
-      if (f === null) {
-        Con.PrintWarning('couldn\'t exec ' + filename + '\n');
-        return;
-      }
     }
   };
 
