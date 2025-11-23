@@ -310,6 +310,11 @@ SCR.EndLoadingPlaque = function() {
   Con.ClearNotify();
 };
 
+SCR._lastAnimationTime = 0;
+SCR._frameTimes = new Array(30).fill(null);
+SCR._frameTimeIndex = 0;
+SCR.FPS = 0;
+
 SCR.UpdateScreen = function() {
   // if (SCR.disabled_for_loading === true) {
   //   if (Host.realtime <= SCR.disabled_time) {
@@ -338,11 +343,28 @@ SCR.UpdateScreen = function() {
     return;
   }
 
-  requestAnimationFrame(() => {
+  requestAnimationFrame((animationTime) => {
     // we are already shutting down
     if (!gl) {
       return;
     }
+
+    if (SCR._lastAnimationTime > 0) {
+      SCR._frameTimes[SCR._frameTimeIndex] = animationTime - SCR._lastAnimationTime;
+      SCR._frameTimeIndex = (SCR._frameTimeIndex + 1) % SCR._frameTimes.length;
+
+      const samples = SCR._frameTimes.filter((a) => a !== null);
+      SCR.FPS = 1000 / (samples.reduce((a, b) => a + b, 0) / samples.length);
+
+      if (Host.refreshrate.value === 0 && Host.framecount > SCR._frameTimes.length * 10) {
+        const refreshRate = (Math.ceil(SCR.FPS / 15)) * 15;
+        Con.DPrint(`Determined refresh rate: ${Math.round(SCR.FPS)} FPS\n`);
+        Con.DPrint(`Setting Host refreshrate to ${Math.round(refreshRate)}\n`);
+        Host.refreshrate.set(Math.round(refreshRate));
+      }
+    }
+
+    SCR._lastAnimationTime = animationTime;
 
     V.RenderView();
     GL.Set2D();

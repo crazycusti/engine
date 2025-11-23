@@ -115,6 +115,10 @@ export default class Sys {
 
     Sys.#isRunning = true;
 
+    if (Host.refreshrate.value === 0) {
+      Host.refreshrate.set(60);
+    }
+
     // Main loop
     while (Sys.#isRunning) {
       const startTime = Date.now();
@@ -127,7 +131,7 @@ export default class Sys {
         Sys.Print(`Host.Frame took too long: ${dtime} ms\n`);
       }
 
-      await Q.sleep(Math.max(0, 1000.0 / 60.0 - dtime));
+      await Q.sleep(Math.max(0, 1000.0 / Math.min(300, Math.max(60, Host.refreshrate.value)) - dtime));
 
       // when there are no more commands to process and no active connections, we can sleep indefinitely
       if (NET.activeconnections === 0 && Host._scheduledForNextFrame.length === 0 && !Cmd.HasPendingCommands()) {
@@ -161,6 +165,14 @@ export default class Sys {
    */
   static FloatTime() {
     return Date.now() * 0.001 - Sys.#oldtime;
+  }
+
+  /**
+   * Returns the time elapsed since initialization in milliseconds.
+   * @returns {number} - Elapsed time in milliseconds.
+   */
+  static FloatMilliTime() {
+    return performance.now();
   }
 
   /** @private */

@@ -242,9 +242,14 @@ export default class Sys {
     while (Sys.#isRunning) {
       const startTime = Date.now();
 
-      Host.Frame();
+      await Host.Frame();
 
-      await Q.sleep(Math.max(0, 1000.0 / 60.0 - (Date.now() - startTime)));
+      if (Host.refreshrate.value === 0) { // uncapped framerate
+        await Q.yield();
+        continue;
+      }
+
+      await Q.sleep(Math.max(0, 1000.0 / Math.min(300, Math.max(60, Host.refreshrate.value)) - (Date.now() - startTime)));
     }
   }
 
@@ -274,11 +279,16 @@ export default class Sys {
     Sys.Print('Sys.Quit: done\n');
   }
 
-  static Print(text) {
+  static Print(/** @type {string} */ text) {
+    // by this time we feed the Sys.Print into the event bus
     eventBus.publish('console.print-line', text);
   }
 
   static FloatTime() {
     return Date.now() * 0.001 - Sys.#oldtime;
+  }
+
+  static FloatMilliTime() {
+    return performance.now();
   }
 };

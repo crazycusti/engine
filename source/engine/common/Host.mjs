@@ -91,6 +91,7 @@ Host.InitLocal = function() {
   Host.version = new Cvar('version', version, Cvar.FLAG.READONLY);
 
   Host.InitCommands();
+  Host.refreshrate = new Cvar('host_refreshrate', '0', Cvar.FLAG.ARCHIVE, 'Affects main loop sleep time, keep it at 0 for vsync-based timing. Vanilla recommendation is 60.');
   Host.framerate = new Cvar('host_framerate', '0');
   Host.speeds = new Cvar('host_speeds', '0');
   Host.ticrate = new Cvar('sys_ticrate', '0.05');

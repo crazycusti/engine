@@ -112,6 +112,10 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2025-11-23
+
+- client: main loop is now dependent on vsync refresh rate (automatically determined)
+
 ### 2025-11-22
 
 - navigation code is no longer trying direct links against hull0, since they exclude clipping brushes

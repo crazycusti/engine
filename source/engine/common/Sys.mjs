@@ -22,6 +22,13 @@ export default class Sys {
     return 0;
   }
 
+  /** @returns {number} uptime in milliseconds, containing microseconds */
+  static FloatMilliTime() {
+    throw new NotImplementedError('Sys.FloatMilliTime must be implemented in a subclass');
+    // eslint-disable-next-line no-unreachable
+    return 0;
+  }
+
   /**
    * Spawns a worker thread and sets up event forwarding.
    * @param {string} script Path to worker script

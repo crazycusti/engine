@@ -1211,10 +1211,9 @@ R.RenderScene = function() {
 
 R.RenderView = function() {
   gl.finish();
-  // let time1;
+  let time1;
   if (R.speeds.value !== 0) {
-    // time1 = Sys.FloatTime();
-    console.profile('R.RenderView');
+    time1 = Sys.FloatMilliTime();
   }
   R.c_brush_verts = 0;
   R.c_brush_tris = 0;
@@ -1226,12 +1225,11 @@ R.RenderView = function() {
   gl.clear(gl.COLOR_BUFFER_BIT + gl.DEPTH_BUFFER_BIT);
   R.RenderScene();
   if (R.speeds.value !== 0) {
-    console.profileEnd('R.RenderView');
     const c_brush_polys = R.c_brush_verts / 3;
     const c_alias_polys = R.c_alias_polys;
     const avgTrisPerDraw = (R.c_brush_tris / R.c_brush_draws).toFixed(1);
     Con.DPrint(`Frame Stats: ${R.c_brush_draws} draw calls (${R.c_brush_draws_pbr} PBR), ${R.c_brush_tris} tris (${R.c_brush_verts} verts), ${R.c_brush_vbos} VBO binds, ${c_alias_polys} alias polys, ${c_brush_polys} brush polys\n`);
-    Con.DPrint(`  Avg ${avgTrisPerDraw} tris/draw, ${R.c_brush_texture_binds} texture binds\n`);
+    Con.DPrint(`  Avg ${avgTrisPerDraw} tris/draw, ${R.c_brush_texture_binds} texture binds, time: ${((Sys.FloatMilliTime() - time1)).toFixed(1)} msec\n`);
   }
 };
 
@@ -1556,6 +1554,10 @@ R.Init = async function() {
   R.MakeSky();
 };
 
+R.InitFog = function() {
+
+};
+
 R.NewMap = function() {
   if (R.particles) {
     R.particles.length = 0;
@@ -1575,6 +1577,8 @@ R.NewMap = function() {
 
   GL.Bind(0, R.dlightmap_rgba_texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+  R.InitFog();
 };
 
 R.TimeRefresh_f = function() {
