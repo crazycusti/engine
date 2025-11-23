@@ -1,3 +1,4 @@
+import { K } from '../../shared/Keys.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
@@ -14,50 +15,6 @@ eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   Host = registry.Host;
   M = registry.M;
-});
-
-Key.k = Object.freeze({
-  tab: 9,
-  enter: 13,
-  escape: 27,
-  space: 32,
-
-  backspace: 127,
-  uparrow: 128,
-  downarrow: 129,
-  leftarrow: 130,
-  rightarrow: 131,
-
-  alt: 132,
-  ctrl: 133,
-  shift: 134,
-  f1: 135,
-  f2: 136,
-  f3: 137,
-  f4: 138,
-  f5: 139,
-  f6: 140,
-  f7: 141,
-  f8: 142,
-  f9: 143,
-  f10: 144,
-  f11: 145,
-  f12: 146,
-  ins: 147,
-  del: 148,
-  pgdn: 149,
-  pgup: 150,
-  home: 151,
-  end: 152,
-
-  pause: 255,
-
-  mouse1: 200,
-  mouse2: 201,
-  mouse3: 202,
-
-  mwheelup: 239,
-  mwheeldown: 240,
 });
 
 Key.lines = [''];
@@ -78,48 +35,48 @@ Key.consolekeys = [];
 Key.shift = [];
 Key.down = [];
 
-Key.names = [
-  {name: 'TAB', keynum: Key.k.tab},
-  {name: 'ENTER', keynum: Key.k.enter},
-  {name: 'ESCAPE', keynum: Key.k.escape},
-  {name: 'SPACE', keynum: Key.k.space},
-  {name: 'BACKSPACE', keynum: Key.k.backspace},
-  {name: 'UPARROW', keynum: Key.k.uparrow},
-  {name: 'DOWNARROW', keynum: Key.k.downarrow},
-  {name: 'LEFTARROW', keynum: Key.k.leftarrow},
-  {name: 'RIGHTARROW', keynum: Key.k.rightarrow},
-  {name: 'ALT', keynum: Key.k.alt},
-  {name: 'CTRL', keynum: Key.k.ctrl},
-  {name: 'SHIFT', keynum: Key.k.shift},
-  {name: 'F1', keynum: Key.k.f1},
-  {name: 'F2', keynum: Key.k.f2},
-  {name: 'F3', keynum: Key.k.f3},
-  {name: 'F4', keynum: Key.k.f4},
-  {name: 'F5', keynum: Key.k.f5},
-  {name: 'F6', keynum: Key.k.f6},
-  {name: 'F7', keynum: Key.k.f7},
-  {name: 'F8', keynum: Key.k.f8},
-  {name: 'F9', keynum: Key.k.f9},
-  {name: 'F10', keynum: Key.k.f10},
-  {name: 'F11', keynum: Key.k.f11},
-  {name: 'F12', keynum: Key.k.f12},
-  {name: 'INS', keynum: Key.k.ins},
-  {name: 'DEL', keynum: Key.k.del},
-  {name: 'PGDN', keynum: Key.k.pgdn},
-  {name: 'PGUP', keynum: Key.k.pgup},
-  {name: 'HOME', keynum: Key.k.home},
-  {name: 'END', keynum: Key.k.end},
-  {name: 'MOUSE1', keynum: Key.k.mouse1},
-  {name: 'MOUSE2', keynum: Key.k.mouse2},
-  {name: 'MOUSE3', keynum: Key.k.mouse3},
-  {name: 'PAUSE', keynum: Key.k.pause},
-  {name: 'MWHEELUP', keynum: Key.k.mwheelup},
-  {name: 'MWHEELDOWN', keynum: Key.k.mwheeldown},
-  {name: 'SEMICOLON', keynum: 59},
-];
+Key.names = {
+  'TAB': K.TAB,
+  'ENTER': K.ENTER,
+  'ESCAPE': K.ESCAPE,
+  'SPACE': K.SPACE,
+  'BACKSPACE': K.BACKSPACE,
+  'UPARROW': K.UPARROW,
+  'DOWNARROW': K.DOWNARROW,
+  'LEFTARROW': K.LEFTARROW,
+  'RIGHTARROW': K.RIGHTARROW,
+  'ALT': K.ALT,
+  'CTRL': K.CTRL,
+  'SHIFT': K.SHIFT,
+  'F1': K.F1,
+  'F2': K.F2,
+  'F3': K.F3,
+  'F4': K.F4,
+  'F5': K.F5,
+  'F6': K.F6,
+  'F7': K.F7,
+  'F8': K.F8,
+  'F9': K.F9,
+  'F10': K.F10,
+  'F11': K.F11,
+  'F12': K.F12,
+  'INS': K.INS,
+  'DEL': K.DEL,
+  'PGDN': K.PGDN,
+  'PGUP': K.PGUP,
+  'HOME': K.HOME,
+  'END': K.END,
+  'MOUSE1': K.MOUSE1,
+  'MOUSE2': K.MOUSE2,
+  'MOUSE3': K.MOUSE3,
+  'PAUSE': K.PAUSE,
+  'MWHEELUP': K.MWHEELUP,
+  'MWHEELDOWN': K.MWHEELDOWN,
+  'SEMICOLON': 59,
+};
 
 Key.Console = function(key) {
-  if (key === Key.k.enter) {
+  if (key === K.ENTER) {
     Cmd.text += Key.edit_line + '\n';
     Con.Print(']' + Key.edit_line + '\n', new Vector(0.8, 0.8, 0.8));
     Key.lines[Key.lines.length] = Key.edit_line;
@@ -128,26 +85,26 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.tab) {
+  if (key === K.TAB) {
     let cmd = Cmd.CompleteCommand(Key.edit_line);
-    if (cmd == null) {
+    if (cmd === null) {
       cmd = Cvar.CompleteVariable(Key.edit_line);
     }
-    if (cmd == null) {
+    if (cmd === null) {
       return;
     }
     Key.edit_line = cmd + ' ';
     return;
   }
 
-  if ((key === Key.k.backspace) || (key === Key.k.leftarrow)) {
+  if ((key === K.BACKSPACE) || (key === K.LEFTARROW)) {
     if (Key.edit_line.length > 0) {
       Key.edit_line = Key.edit_line.substring(0, Key.edit_line.length - 1);
     }
     return;
   }
 
-  if (key === Key.k.uparrow) {
+  if (key === K.UPARROW) {
     if (--Key.history_line < 0) {
       Key.history_line = 0;
     }
@@ -155,7 +112,7 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.downarrow) {
+  if (key === K.DOWNARROW) {
     if (Key.history_line >= Key.lines.length) {
       return;
     }
@@ -168,7 +125,7 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.pgup) {
+  if (key === K.PGUP) {
     Con.backscroll += 2;
     if (Con.backscroll > Con.text.length) {
       Con.backscroll = Con.text.length;
@@ -176,7 +133,7 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.pgdn) {
+  if (key === K.PGDN) {
     Con.backscroll -= 2;
     if (Con.backscroll < 0) {
       Con.backscroll = 0;
@@ -184,7 +141,7 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.home) {
+  if (key === K.HOME) {
     Con.backscroll = Con.text.length - 10;
     if (Con.backscroll < 0) {
       Con.backscroll = 0;
@@ -192,7 +149,7 @@ Key.Console = function(key) {
     return;
   }
 
-  if (key === Key.k.end) {
+  if (key === K.END) {
     Con.backscroll = 0;
     return;
   }
@@ -207,7 +164,7 @@ Key.Console = function(key) {
 Key.chat_buffer = '';
 
 Key.Message = function(key) {
-  if (key === Key.k.enter) {
+  if (key === K.ENTER) {
     if (Key.chat_buffer.trim().length > 0) {
       if (Key.team_message) {
         Cmd.ExecuteString(`say_team "${Key.chat_buffer}"`);
@@ -219,7 +176,7 @@ Key.Message = function(key) {
     Key.chat_buffer = '';
     return;
   }
-  if (key === Key.k.escape) {
+  if (key === K.ESCAPE) {
     Key.dest.value = Key.dest.game;
     Key.chat_buffer = '';
     return;
@@ -227,7 +184,7 @@ Key.Message = function(key) {
   if ((key < 32) || (key > 127)) {
     return;
   }
-  if (key === Key.k.backspace) {
+  if (key === K.BACKSPACE) {
     if (Key.chat_buffer.length !== 0) {
       Key.chat_buffer = Key.chat_buffer.substring(0, Key.chat_buffer.length - 1);
     }
@@ -243,25 +200,21 @@ Key.StringToKeynum = function(str) {
   if (str.length === 1) {
     return str.charCodeAt(0);
   }
-  str = str.toUpperCase();
-  for (let i = 0; i < Key.names.length; i++) {
-    if (Key.names[i].name === str) {
-      return Key.names[i].keynum;
-    }
-  }
-  return null;
+
+  return Key.names[str.toUpperCase()] || null;
 };
 
 Key.KeynumToString = function(keynum) {
   if ((keynum > 32) && (keynum < 127)) {
     return String.fromCharCode(keynum);
   }
-  let i;
-  for (i = 0; i < Key.names.length; i++) {
-    if (Key.names[i].keynum === keynum) {
-      return Key.names[i].name;
+
+  for (const [name, num] of Object.entries(Key.names)) {
+    if (num === keynum) {
+      return name;
     }
   }
+
   return '<UNKNOWN KEYNUM>';
 };
 
@@ -270,7 +223,7 @@ Key.Unbind_f = function(key) {
     Con.Print('Usage: unbind <key>\n');
   }
   const b = Key.StringToKeynum(key);
-  if (b == null) {
+  if (b === null) {
     Con.Print('"' + key + '" isn\'t a valid key\n');
     return;
   }
@@ -289,7 +242,7 @@ Key.Bind_f = function(key, command) {
 
   const b = Key.StringToKeynum(key.toLowerCase());
 
-  if (b == null) {
+  if (b === null) {
     Con.Print('"' + key + '" isn\'t a valid key\n');
     return;
   }
@@ -323,18 +276,18 @@ Key.Init = function() {
   for (i = 32; i < 128; i++) {
     Key.consolekeys[i] = true;
   }
-  Key.consolekeys[Key.k.enter] = true;
-  Key.consolekeys[Key.k.tab] = true;
-  Key.consolekeys[Key.k.leftarrow] = true;
-  Key.consolekeys[Key.k.rightarrow] = true;
-  Key.consolekeys[Key.k.uparrow] = true;
-  Key.consolekeys[Key.k.downarrow] = true;
-  Key.consolekeys[Key.k.backspace] = true;
-  Key.consolekeys[Key.k.home] = true;
-  Key.consolekeys[Key.k.end] = true;
-  Key.consolekeys[Key.k.pgup] = true;
-  Key.consolekeys[Key.k.pgdn] = true;
-  Key.consolekeys[Key.k.shift] = true;
+  Key.consolekeys[K.ENTER] = true;
+  Key.consolekeys[K.TAB] = true;
+  Key.consolekeys[K.LEFTARROW] = true;
+  Key.consolekeys[K.RIGHTARROW] = true;
+  Key.consolekeys[K.UPARROW] = true;
+  Key.consolekeys[K.DOWNARROW] = true;
+  Key.consolekeys[K.BACKSPACE] = true;
+  Key.consolekeys[K.HOME] = true;
+  Key.consolekeys[K.END] = true;
+  Key.consolekeys[K.PGUP] = true;
+  Key.consolekeys[K.PGDN] = true;
+  Key.consolekeys[K.SHIFT] = true;
   Key.consolekeys[96] = false;
   Key.consolekeys[126] = false;
 
@@ -372,23 +325,23 @@ Key.Init = function() {
 };
 
 Key.Event = function(key, down) {
-  if (CL.cls.state === CL.active.connecting && key === Key.k.escape && down === true) {
+  if (CL.cls.state === CL.active.connecting && key === K.ESCAPE && down === true) {
     CL.Disconnect();
     M.ToggleMenu_f();
     return;
   }
   if (down === true) {
-    if ((key !== Key.k.backspace) && (key !== Key.k.pause) && (Key.down[key] === true)) {
+    if ((key !== K.BACKSPACE) && (key !== K.PAUSE) && (Key.down[key] === true)) {
       return;
     }
   }
   Key.down[key] = down;
 
-  if (key === Key.k.shift) {
+  if (key === K.SHIFT) {
     Key.shift_down = down;
   }
 
-  if (key === Key.k.escape) {
+  if (key === K.ESCAPE) {
     if (down !== true) {
       return;
     }
@@ -427,7 +380,7 @@ Key.Event = function(key, down) {
     return;
   }
 
-  if (((Key.dest.value === Key.dest.menu) && ((key === Key.k.escape) || ((key >= Key.k.f1) && (key <= Key.k.f12)))) ||
+  if (((Key.dest.value === Key.dest.menu) && ((key === K.ESCAPE) || ((key >= K.F1) && (key <= K.F12)))) ||
     ((Key.dest.value === Key.dest.console) && (Key.consolekeys[key] !== true)) ||
     ((Key.dest.value === Key.dest.game) && ((Con.forcedup !== true) || (Key.consolekeys[key] !== true)))) {
     kb = Key.bindings[key];

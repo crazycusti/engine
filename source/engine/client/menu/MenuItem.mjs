@@ -1,3 +1,4 @@
+import { K } from '../../../shared/Keys.mjs';
 import Cvar from '../../common/Cvar.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
@@ -99,7 +100,7 @@ export class Action extends MenuItem {
       return false;
     }
 
-    if (key === Key.k.enter) {
+    if (key === K.ENTER) {
       this.action();
       S.LocalSound(M.sfx_menu2);
       return true;
@@ -182,14 +183,14 @@ export class Slider extends MenuItem {
       return false;
     }
 
-    if (key === Key.k.leftarrow) {
+    if (key === K.LEFTARROW) {
       const newVal = this.getValue() - this.step;
       this.setValue(newVal);
       S.LocalSound(M.sfx_menu3);
       return true;
     }
 
-    if (key === Key.k.rightarrow || key === Key.k.enter) {
+    if (key === K.RIGHTARROW || key === K.ENTER) {
       const newVal = this.getValue() + this.step;
       this.setValue(newVal);
       S.LocalSound(M.sfx_menu3);
@@ -274,9 +275,9 @@ export class Toggle extends MenuItem {
       return false;
     }
 
-    if (key === Key.k.enter ||
-      key === Key.k.leftarrow ||
-      key === Key.k.rightarrow) {
+    if (key === K.ENTER ||
+      key === K.LEFTARROW ||
+      key === K.RIGHTARROW) {
       this.toggle();
       S.LocalSound(M.sfx_menu3);
       return true;
@@ -366,7 +367,7 @@ export class Textbox extends MenuItem {
       return false;
     }
 
-    if (key === Key.k.backspace) {
+    if (key === K.BACKSPACE) {
       const current = this.getValue();
       if (current.length > 0) {
         this.setValue(current.substring(0, current.length - 1));

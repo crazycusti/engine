@@ -735,14 +735,13 @@ Host.Map_f = function(mapname, ...spawnparms) {
   }
 
   Host.ScheduleForNextFrame(async () => {
-    await SV.SpawnServer(mapname);
+    if (!await SV.SpawnServer(mapname)) {
+      SV.ShutdownServer(false);
+      throw new HostError('Could not spawn server with map ' + mapname);
+    }
 
     if (!registry.isDedicatedServer) {
       CL.SetConnectingStep(null, null);
-    }
-
-    if (SV.server.active !== true) {
-      return;
     }
 
     if (!registry.isDedicatedServer) {
@@ -782,7 +781,10 @@ Host.Changelevel_f = function(mapname) {
 
     console.info('Host.Changelevel_f: changing level to ' + mapname);
 
-    await SV.SpawnServer(mapname);
+    if (!await SV.SpawnServer(mapname)) {
+      SV.ShutdownServer(false);
+      throw new HostError('Could not spawn server for changelevel to ' + mapname);
+    }
 
     console.info('Host.Changelevel_f: spawned server for changelevel to ' + mapname);
 
@@ -958,13 +960,13 @@ Host.Loadgame_f = async function (savename) {
     }
   }
 
-  await SV.SpawnServer(gamestate.mapname);
-
-  if (!SV.server.active) {
+  if (!await SV.SpawnServer(gamestate.mapname)) {
     if (!registry.isDedicatedServer) {
       CL.SetConnectingStep(null, null);
     }
-    throw new HostError(`Couldn't load map: ${gamestate.mapname}\n`);
+
+    SV.ShutdownServer(false);
+    throw new HostError(`Couldn't load map ${gamestate.mapname} for save game ${name}\n`);
   }
 
   if (gamestate.gameversion !== SV.server.gameVersion) {

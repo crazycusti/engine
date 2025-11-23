@@ -1,3 +1,4 @@
+import { K } from '../../../shared/Keys.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
 // Destructure registry modules
@@ -61,12 +62,12 @@ export class MenuPage {
     }
 
     // Generic navigation
-    if (key === Key.k.downarrow) {
+    if (key === K.DOWNARROW) {
       this._moveCursor(1);
       return true;
     }
 
-    if (key === Key.k.uparrow) {
+    if (key === K.UPARROW) {
       this._moveCursor(-1);
       return true;
     }

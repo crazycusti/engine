@@ -485,8 +485,10 @@ export default class SV {
     SV.server.edicts = [];
     SV.server.num_edicts = 0;
 
-    SV.server.navigation.shutdown();
-    SV.server.navigation = null;
+    if (SV.server.navigation) {
+      SV.server.navigation.shutdown();
+      SV.server.navigation = null;
+    }
 
     if (isCrashShutdown) {
       Con.Print('Server shut down due to a crash!\n');

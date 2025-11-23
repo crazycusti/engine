@@ -1,3 +1,4 @@
+import { K } from '../../shared/Keys.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
@@ -23,50 +24,45 @@ eventBus.subscribe('host.crash', (error) => {
 function getModernKey(event) {
   // Physical key mappings - maintain WASD regardless of layout
   const physicalKeys = {
-    'KeyW': 119,
-    'KeyA': 97,
-    'KeyS': 115,
-    'KeyD': 100,
+    'Space': K.SPACE,
+    'ShiftLeft': K.SHIFT,
+    'ShiftRight': K.SHIFT,
+    'ControlLeft': K.CTRL,
+    'ControlRight': K.CTRL,
+    'AltLeft': K.ALT,
+    'AltRight': K.ALT,
+    'ArrowUp': K.UPARROW,
+    'ArrowDown': K.DOWNARROW,
+    'ArrowLeft': K.LEFTARROW,
+    'ArrowRight': K.RIGHTARROW,
 
-    'Space': Key.k.space,
-    'ShiftLeft': Key.k.shift,
-    'ShiftRight': Key.k.shift,
-    'ControlLeft': Key.k.ctrl,
-    'ControlRight': Key.k.ctrl,
-    'AltLeft': Key.k.alt,
-    'AltRight': Key.k.alt,
-    'ArrowUp': Key.k.uparrow,
-    'ArrowDown': Key.k.downarrow,
-    'ArrowLeft': Key.k.leftarrow,
-    'ArrowRight': Key.k.rightarrow,
-
-    'F1': Key.k.f1,
-    'F2': Key.k.f2,
-    'F3': Key.k.f3,
-    'F4': Key.k.f4,
-    'F5': Key.k.f5,
-    'F6': Key.k.f6,
-    'F7': Key.k.f7,
-    'F8': Key.k.f8,
-    'F9': Key.k.f9,
-    'F10': Key.k.f10,
-    'F11': Key.k.f11,
-    'F12': Key.k.f12,
+    'F1': K.F1,
+    'F2': K.F2,
+    'F3': K.F3,
+    'F4': K.F4,
+    'F5': K.F5,
+    'F6': K.F6,
+    'F7': K.F7,
+    'F8': K.F8,
+    'F9': K.F9,
+    'F10': K.F10,
+    'F11': K.F11,
+    'F12': K.F12,
   };
 
   // Logical key mappings - use actual key value
   const logicalKeys = {
-    'Enter': Key.k.enter,
-    'Backspace': Key.k.backspace,
-    'Tab': Key.k.tab,
-    'Escape': Key.k.escape,
-    'Pause': Key.k.pause,
-    'PageUp': Key.k.pgup,
-    'PageDown': Key.k.pgdn,
-    'End': Key.k.end,
-    'Home': Key.k.home,
-    'Insert': Key.k.ins,
-    'Delete': Key.k.del,
+    'Enter': K.ENTER,
+    'Backspace': K.BACKSPACE,
+    'Tab': K.TAB,
+    'Escape': K.ESCAPE,
+    'Pause': K.PAUSE,
+    'PageUp': K.PGUP,
+    'PageDown': K.PGDN,
+    'End': K.END,
+    'Home': K.HOME,
+    'Insert': K.INS,
+    'Delete': K.DEL,
   };
 
   // Check physical mapping first for game controls
@@ -128,13 +124,13 @@ const eventHandlers = {
     let key;
     switch (e.which) {
       case 1:
-        key = Key.k.mouse1;
+        key = K.MOUSE1;
         break;
       case 2:
-        key = Key.k.mouse3;
+        key = K.MOUSE3;
         break;
       case 3:
-        key = Key.k.mouse2;
+        key = K.MOUSE2;
         break;
       default:
         return;
@@ -147,13 +143,13 @@ const eventHandlers = {
     let key;
     switch (e.which) {
       case 1:
-        key = Key.k.mouse1;
+        key = K.MOUSE1;
         break;
       case 2:
-        key = Key.k.mouse3;
+        key = K.MOUSE3;
         break;
       case 3:
-        key = Key.k.mouse2;
+        key = K.MOUSE2;
         break;
       default:
         return;
@@ -163,14 +159,14 @@ const eventHandlers = {
   },
 
   onmousewheel(e) {
-    const key = e.wheelDeltaY > 0 ? Key.k.mwheelup : Key.k.mwheeldown;
+    const key = e.wheelDeltaY > 0 ? K.MWHEELUP : K.MWHEELDOWN;
     Key.Event(key, true);
     Key.Event(key);
     e.preventDefault();
   },
 
   onwheel(e) {
-    const key = e.deltaY < 0 ? Key.k.mwheelup : Key.k.mwheeldown;
+    const key = e.deltaY < 0 ? K.MWHEELUP : K.MWHEELDOWN;
     Key.Event(key, true);
     Key.Event(key);
     e.preventDefault();

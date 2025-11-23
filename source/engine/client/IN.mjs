@@ -1,3 +1,4 @@
+import { K } from '../../shared/Keys.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { kbutton, kbuttons } from './ClientInput.mjs';
@@ -28,25 +29,14 @@ IN.StartupMouse = function() {
   if (COM.CheckParm('-nomouse')) {
     return;
   }
-  if (VID.mainwindow.requestPointerLock != null) {
+  if (VID.mainwindow.requestPointerLock) {
     IN.movementX = 'movementX';
     IN.movementY = 'movementY';
     IN.pointerLockElement = 'pointerLockElement';
     IN.requestPointerLock = 'requestPointerLock';
     IN.pointerlockchange = 'onpointerlockchange';
-  } else if (VID.mainwindow.webkitRequestPointerLock != null) {
-    IN.movementX = 'webkitMovementX';
-    IN.movementY = 'webkitMovementY';
-    IN.pointerLockElement = 'webkitPointerLockElement';
-    IN.requestPointerLock = 'webkitRequestPointerLock';
-    IN.pointerlockchange = 'onwebkitpointerlockchange';
-  } else if (VID.mainwindow.mozRequestPointerLock != null) {
-    IN.movementX = 'mozMovementX';
-    IN.movementY = 'mozMovementY';
-    IN.pointerLockElement = 'mozPointerLockElement';
-    IN.requestPointerLock = 'mozRequestPointerLock';
-    IN.pointerlockchange = 'onmozpointerlockchange';
   } else {
+    Con.PrintWarning('IN.StartupMouse: Pointer Lock API (requestPointerLock) not available, cannot make use of mouse movement\n');
     return;
   }
   VID.mainwindow.onclick = IN.onclick;
@@ -271,6 +261,6 @@ IN.onpointerlockchange = function() {
   if (document[IN.pointerLockElement] === VID.mainwindow) {
     return;
   }
-  Key.Event(Key.k.escape, true);
-  Key.Event(Key.k.escape);
+  Key.Event(K.ESCAPE, true);
+  Key.Event(K.ESCAPE);
 };

@@ -1,3 +1,4 @@
+import { K } from '../../shared/Keys.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
@@ -42,27 +43,27 @@ M.state =
   value: 0,
 };
 
-M.DrawCharacter = function(cx, cy, num) {
+M.DrawCharacter = function (cx, cy, num) {
   Draw.Character(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, num, 2.0);
 };
 
-M.Print = function(cx, cy, str) {
+M.Print = function (cx, cy, str) {
   Draw.StringWhite(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, str, 2.0);
 };
 
-M.PrintWhite = function(cx, cy, str) {
+M.PrintWhite = function (cx, cy, str) {
   Draw.String(cx * 2 + Math.floor(VID.width / 2) - 320, cy * 2 + Math.floor(VID.height / 2) - 200, str, 2.0);
 };
 
-M.DrawPic = function(x, y, pic) {
+M.DrawPic = function (x, y, pic) {
   Draw.Pic(x * 2 + Math.floor(VID.width / 2) - 320, y * 2 + Math.floor(VID.height / 2) - 200, pic, 2.0);
 };
 
-M.DrawPicTranslate = function(x, y, pic, top, bottom) {
+M.DrawPicTranslate = function (x, y, pic, top, bottom) {
   Draw.PicTranslate(x * 2 + Math.floor(VID.width / 2) - 320, y * 2 + Math.floor(VID.height / 2) - 200, pic, top, bottom, 2.0);
 };
 
-M.DrawTextBox = function(x, y, width, lines) {
+M.DrawTextBox = function (x, y, width, lines) {
   let cx; let cy; let n;
 
   cy = y;
@@ -74,7 +75,7 @@ M.DrawTextBox = function(x, y, width, lines) {
 
   cx = x + 8;
   let p;
-  for (; width > 0; ) {
+  for (; width > 0;) {
     cy = y;
     M.DrawPic(cx, y, M.box_tm);
     p = M.box_mm;
@@ -97,15 +98,23 @@ M.DrawTextBox = function(x, y, width, lines) {
   M.DrawPic(cx, cy + 8, M.box_br);
 };
 
-M.ToggleMenu_f = function() {
+M.CloseMenu = function () {
+  if (CL.cls.state === CL.active.connected) {
+    Key.dest.value = Key.dest.game;
+  } else {
+    Key.dest.value = Key.dest.console;
+  }
+  M.state.value = M.state.none;
+};
+
+M.ToggleMenu_f = function () {
   M.entersound = true;
   if (Key.dest.value === Key.dest.menu) {
     if (M.state.value !== M.state.main) {
       M.Menu_Main_f();
       return;
     }
-    Key.dest.value = Key.dest.game;
-    M.state.value = M.state.none;
+    M.CloseMenu();
     return;
   }
   M.Menu_Main_f();
@@ -117,7 +126,7 @@ M.main_cursor = 0;
 M.main_items = 5;
 M.save_demonum = 0; // THIS IS THE REASON WHY I HATE UNINITIALIZED PROPERTIES, this line was missing and it quietly caused some NaNs deep in the demo code…
 
-M.Menu_Main_f = function() {
+M.Menu_Main_f = function () {
   if (Key.dest.value !== Key.dest.menu) {
     M.save_demonum = CL.cls.demonum;
     CL.cls.demonum = -1;
@@ -127,40 +136,35 @@ M.Menu_Main_f = function() {
   M.entersound = true;
 };
 
-M.Main_Draw = function() {
+M.Main_Draw = function () {
   M.DrawPic(16, 4, M.qplaque);
   M.DrawPic(160 - (M.ttl_main.width / 2), 4, M.ttl_main);
   M.DrawPic(72, 32, M.mainmenu);
   M.DrawPic(54, 32 + M.main_cursor * 20, M.menudot[Math.floor(Host.realtime * 10.0) % 6]);
 };
 
-M.Main_Key = function(k) {
+M.Main_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
-      if (CL.cls.state === CL.active.connected) {
-        Key.dest.value = Key.dest.game;
-      } else {
-        Key.dest.value = Key.dest.console;
-      }
-      M.state.value = M.state.none;
+    case K.ESCAPE:
+      M.CloseMenu();
       CL.cls.demonum = M.save_demonum;
       if ((CL.cls.demonum !== -1) && (CL.cls.demoplayback !== true) && (CL.cls.state !== CL.active.connected)) {
         CL.NextDemo();
       }
       return;
-    case Key.k.downarrow:
+    case K.DOWNARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.main_cursor >= M.main_items) {
         M.main_cursor = 0;
       }
       return;
-    case Key.k.uparrow:
+    case K.UPARROW:
       S.LocalSound(M.sfx_menu1);
-      if (--M.main_cursor < 0) {
+      if (M.main_cursor-- === 0) {
         M.main_cursor = M.main_items - 1;
       }
       return;
-    case Key.k.enter:
+    case K.ENTER:
       M.entersound = true;
       switch (M.main_cursor) {
         case 0:
@@ -185,37 +189,37 @@ M.Main_Key = function(k) {
 M.singleplayer_cursor = 0;
 M.singleplayer_items = 3;
 
-M.Menu_SinglePlayer_f = function() {
+M.Menu_SinglePlayer_f = function () {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.singleplayer;
   M.entersound = true;
 };
 
-M.SinglePlayer_Draw = function() {
+M.SinglePlayer_Draw = function () {
   M.DrawPic(16, 4, M.qplaque);
   M.DrawPic(160 - (M.ttl_sgl.width / 2), 4, M.ttl_sgl);
   M.DrawPic(72, 32, M.sp_menu);
   M.DrawPic(54, 32 + M.singleplayer_cursor * 20, M.menudot[Math.floor(Host.realtime * 10.0) % 6]);
 };
 
-M.SinglePlayer_Key = function(k) {
+M.SinglePlayer_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_Main_f();
       return;
-    case Key.k.downarrow:
+    case K.DOWNARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.singleplayer_cursor >= M.singleplayer_items) {
         M.singleplayer_cursor = 0;
       }
       return;
-    case Key.k.uparrow:
+    case K.UPARROW:
       S.LocalSound(M.sfx_menu1);
       if (--M.singleplayer_cursor < 0) {
         M.singleplayer_cursor = M.singleplayer_items - 1;
       }
       return;
-    case Key.k.enter:
+    case K.ENTER:
       M.entersound = true;
       switch (M.singleplayer_cursor) {
         case 0:
@@ -241,7 +245,7 @@ M.filenames = [];
 M.loadable = [];
 M.removable = [];
 
-M.ScanSaves = function() {
+M.ScanSaves = function () {
   const searchpaths = COM.searchpaths;
   const search = 'Quake.' + COM.gamedir[0].filename + '/s';
   COM.searchpaths = COM.gamedir;
@@ -261,14 +265,14 @@ M.ScanSaves = function() {
   COM.searchpaths = searchpaths;
 };
 
-M.Menu_Load_f = function() {
+M.Menu_Load_f = function () {
   M.entersound = true;
   M.state.value = M.state.load;
   Key.dest.value = Key.dest.menu;
   M.ScanSaves();
 };
 
-M.Menu_Save_f = function() {
+M.Menu_Save_f = function () {
   if ((SV.server.active !== true) || (CL.state.intermission !== 0) || (SV.svs.maxclients !== 1)) {
     return;
   }
@@ -278,7 +282,7 @@ M.Menu_Save_f = function() {
   M.ScanSaves();
 };
 
-M.Load_Draw = function() {
+M.Load_Draw = function () {
   M.DrawPic(160 - (M.p_load.width / 2), 4, M.p_load);
   let i;
   for (i = 0; i < M.max_savegames; i++) {
@@ -287,7 +291,7 @@ M.Load_Draw = function() {
   M.DrawCharacter(8, 32 + (M.load_cursor << 3), 12 + ((Host.realtime * 4.0) & 1));
 };
 
-M.Save_Draw = function() {
+M.Save_Draw = function () {
   M.DrawPic(160 - (M.p_save.width / 2), 4, M.p_save);
   let i;
   for (i = 0; i < M.max_savegames; i++) {
@@ -296,36 +300,35 @@ M.Save_Draw = function() {
   M.DrawCharacter(8, 32 + (M.load_cursor << 3), 12 + ((Host.realtime * 4.0) & 1));
 };
 
-M.Load_Key = function(k) {
+M.Load_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_SinglePlayer_f();
       return;
-    case Key.k.enter:
+    case K.ENTER:
       S.LocalSound(M.sfx_menu2);
       if (M.loadable[M.load_cursor] !== true) {
         return;
       }
-      M.state.value = M.state.none;
-      Key.dest.value = Key.dest.game;
+      M.CloseMenu();
       SCR.BeginLoadingPlaque();
       Cmd.text += 'load s' + M.load_cursor + '\n';
       return;
-    case Key.k.uparrow:
-    case Key.k.leftarrow:
+    case K.UPARROW:
+    case K.LEFTARROW:
       S.LocalSound(M.sfx_menu1);
       if (--M.load_cursor < 0) {
         M.load_cursor = M.max_savegames - 1;
       }
       return;
-    case Key.k.downarrow:
-    case Key.k.rightarrow:
+    case K.DOWNARROW:
+    case K.RIGHTARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.load_cursor >= M.max_savegames) {
         M.load_cursor = 0;
       }
       return;
-    case Key.k.del:
+    case K.DEL:
       if (M.removable[M.load_cursor] !== true) {
         return;
       }
@@ -337,31 +340,30 @@ M.Load_Key = function(k) {
   }
 };
 
-M.Save_Key = function(k) {
+M.Save_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_SinglePlayer_f();
       return;
-    case Key.k.enter:
-      M.state.value = M.state.none;
-      Key.dest.value = Key.dest.game;
+    case K.ENTER:
+      M.CloseMenu();
       Cmd.text += 'save s' + M.load_cursor + '\n';
       return;
-    case Key.k.uparrow:
-    case Key.k.leftarrow:
+    case K.UPARROW:
+    case K.LEFTARROW:
       S.LocalSound(M.sfx_menu1);
       if (--M.load_cursor < 0) {
         M.load_cursor = M.max_savegames - 1;
       }
       return;
-    case Key.k.downarrow:
-    case Key.k.rightarrow:
+    case K.DOWNARROW:
+    case K.RIGHTARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.load_cursor >= M.max_savegames) {
         M.load_cursor = 0;
       }
       return;
-    case Key.k.del:
+    case K.DEL:
       if (M.removable[M.load_cursor] !== true) {
         return;
       }
@@ -376,13 +378,13 @@ M.Save_Key = function(k) {
 // Multiplayer menu
 M.multiplayer_cursor = 1;
 M.multiplayer_cursor_table = [56, 72, 96, 120, 156];
-M.multiplayer_joinname = (function() {
+M.multiplayer_joinname = (function () {
   const url = new URL(location.href);
   return url.host + url.pathname + (!url.pathname.endsWith('/') ? '/' : '') + 'api/';
 })();
 M.multiplayer_items = 5;
 
-M.Menu_MultiPlayer_f = function() {
+M.Menu_MultiPlayer_f = function () {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.multiplayer;
   M.entersound = true;
@@ -392,7 +394,7 @@ M.Menu_MultiPlayer_f = function() {
   M.multiplayer_cursor = 1;
 };
 
-M.MultiPlayer_Draw = function() {
+M.MultiPlayer_Draw = function () {
   M.DrawPic(16, 4, M.qplaque);
   M.DrawPic(160 - (M.p_multi.width / 2), 4, M.p_multi);
 
@@ -416,8 +418,8 @@ M.MultiPlayer_Draw = function() {
 
   M.DrawPic(160, 80 - y0, M.bigbox);
   M.DrawPicTranslate(172, 88 - y0, M.menuplyr,
-      (M.multiplayer_top << 4) + (M.multiplayer_top >= 8 ? 4 : 11),
-      (M.multiplayer_bottom << 4) + (M.multiplayer_bottom >= 8 ? 4 : 11));
+    (M.multiplayer_top << 4) + (M.multiplayer_top >= 8 ? 4 : 11),
+    (M.multiplayer_bottom << 4) + (M.multiplayer_bottom >= 8 ? 4 : 11));
 
   M.DrawCharacter(56, M.multiplayer_cursor_table[M.multiplayer_cursor] - y0, 12 + ((Host.realtime * 4.0) & 1));
 
@@ -428,25 +430,25 @@ M.MultiPlayer_Draw = function() {
   }
 };
 
-M.MultiPlayer_Key = function(k) {
-  if (k === Key.k.escape) {
+M.MultiPlayer_Key = function (k) {
+  if (k === K.ESCAPE) {
     M.Menu_Main_f();
   }
 
   switch (k) {
-    case Key.k.uparrow:
+    case K.UPARROW:
       S.LocalSound(M.sfx_menu1);
       if (--M.multiplayer_cursor < 1) {
         M.multiplayer_cursor = M.multiplayer_items - 1;
       }
       return;
-    case Key.k.downarrow:
+    case K.DOWNARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.multiplayer_cursor >= M.multiplayer_items) {
         M.multiplayer_cursor = 1;
       }
       return;
-    case Key.k.leftarrow:
+    case K.LEFTARROW:
       if (M.multiplayer_cursor === 2) {
         if (--M.multiplayer_top < 0) {
           M.multiplayer_top = 13;
@@ -459,31 +461,30 @@ M.MultiPlayer_Key = function(k) {
         S.LocalSound(M.sfx_menu3);
       }
       return;
-    case Key.k.rightarrow:
+    case K.RIGHTARROW:
       if (M.multiplayer_cursor === 2) {
-(M.multiplayer_top <= 12) ? ++M.multiplayer_top : M.multiplayer_top = 0;
+        (M.multiplayer_top <= 12) ? ++M.multiplayer_top : M.multiplayer_top = 0;
       } else if (M.multiplayer_cursor === 3) {
-(M.multiplayer_bottom <= 12) ? ++M.multiplayer_bottom : M.multiplayer_bottom = 0;
+        (M.multiplayer_bottom <= 12) ? ++M.multiplayer_bottom : M.multiplayer_bottom = 0;
       } else {
         return;
       }
       S.LocalSound(M.sfx_menu3);
       return;
-    case Key.k.enter:
+    case K.ENTER:
       switch (M.multiplayer_cursor) {
         case 0:
           S.LocalSound(M.sfx_menu2);
-          Key.dest.value = Key.dest.game;
-          M.state.value = M.state.none;
+          M.CloseMenu();
           Cmd.text += 'connect "' + M.multiplayer_joinname + '"\n';
           return;
         case 2:
           S.LocalSound(M.sfx_menu3);
-			(M.multiplayer_top <= 12) ? ++M.multiplayer_top : M.multiplayer_top = 0;
+          (M.multiplayer_top <= 12) ? ++M.multiplayer_top : M.multiplayer_top = 0;
           return;
         case 3:
           S.LocalSound(M.sfx_menu3);
-			(M.multiplayer_bottom <= 12) ? ++M.multiplayer_bottom : M.multiplayer_bottom = 0;
+          (M.multiplayer_bottom <= 12) ? ++M.multiplayer_bottom : M.multiplayer_bottom = 0;
           return;
         case 4:
           if (CL.name.string !== M.multiplayer_myname) {
@@ -498,18 +499,16 @@ M.MultiPlayer_Key = function(k) {
           S.LocalSound(M.sfx_menu2);
 
           if (CL.cls.state !== CL.active.connected) {
-            Key.dest.value = Key.dest.game;
-            M.state.value = M.state.none;
+            M.CloseMenu();
             Cmd.text += 'connect "' + M.multiplayer_joinname + '"\n';
             return;
           }
 
-          Key.dest.value = Key.dest.game;
-          M.state.value = M.state.none;
+          M.CloseMenu();
           return;
       }
       return;
-    case Key.k.backspace:
+    case K.BACKSPACE:
       if (M.multiplayer_cursor === 0) {
         if (M.multiplayer_joinname.length !== 0) {
           M.multiplayer_joinname = M.multiplayer_joinname.substring(0, M.multiplayer_joinname.length - 1);
@@ -542,13 +541,13 @@ M.MultiPlayer_Key = function(k) {
 M.options_cursor = 0;
 M.options_items = 12;
 
-M.Menu_Options_f = function() {
+M.Menu_Options_f = function () {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.options;
   M.entersound = true;
 };
 
-M.AdjustSliders = function(dir) {
+M.AdjustSliders = function (dir) {
   S.LocalSound(M.sfx_menu3);
 
   switch (M.options_cursor) {
@@ -627,7 +626,7 @@ M.AdjustSliders = function(dir) {
   }
 };
 
-M.DrawSlider = function(x, y, range) {
+M.DrawSlider = function (x, y, range) {
   if (range < 0) {
     range = 0;
   } else if (range > 1) {
@@ -648,7 +647,7 @@ M.DrawSlider = function(x, y, range) {
   M.DrawCharacter(x + Math.floor(72 * range), y, 131);
 };
 
-M.Options_Draw = function() {
+M.Options_Draw = function () {
   M.DrawPic(16, 4, M.qplaque);
   M.DrawPic(160 - (M.p_option.width / 2), 4, M.p_option);
 
@@ -678,19 +677,19 @@ M.Options_Draw = function() {
   M.DrawCharacter(200, 32 + (M.options_cursor << 3), 12 + ((Host.realtime * 4.0) & 1));
 };
 
-M.Options_Key = function(k) {
+M.Options_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_Main_f();
       return;
-    case Key.k.enter:
+    case K.ENTER:
       M.entersound = true;
       switch (M.options_cursor) {
         case 0:
           M.Menu_Keys_f();
           return;
         case 1:
-          M.state.value = M.state.none;
+          M.CloseMenu();
           Con.ToggleConsole_f();
           return;
         case 2:
@@ -700,22 +699,22 @@ M.Options_Key = function(k) {
           M.AdjustSliders(1);
       }
       return;
-    case Key.k.uparrow:
+    case K.UPARROW:
       S.LocalSound(M.sfx_menu1);
-      if (--M.options_cursor < 0) {
+      if (M.options_cursor-- === 0) {
         M.options_cursor = M.options_items - 1;
       }
       return;
-    case Key.k.downarrow:
+    case K.DOWNARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.options_cursor >= M.options_items) {
         M.options_cursor = 0;
       }
       return;
-    case Key.k.leftarrow:
+    case K.LEFTARROW:
       M.AdjustSliders(-1);
       return;
-    case Key.k.rightarrow:
+    case K.RIGHTARROW:
       M.AdjustSliders(1);
   }
 };
@@ -744,13 +743,13 @@ M.bindnames = [
 
 M.keys_cursor = 0;
 
-M.Menu_Keys_f = function() {
+M.Menu_Keys_f = function () {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.keys;
   M.entersound = true;
 };
 
-M.FindKeysForCommand = function(command) {
+M.FindKeysForCommand = function (command) {
   const twokeys = []; let i;
   for (i = 0; i < Key.bindings.length; i++) {
     if (Key.bindings[i] === command) {
@@ -763,7 +762,7 @@ M.FindKeysForCommand = function(command) {
   return twokeys;
 };
 
-M.UnbindCommand = function(command) {
+M.UnbindCommand = function (command) {
   let i;
   for (i = 0; i < Key.bindings.length; i++) {
     if (Key.bindings[i] === command) {
@@ -772,7 +771,7 @@ M.UnbindCommand = function(command) {
   }
 };
 
-M.Keys_Draw = function() {
+M.Keys_Draw = function () {
   M.DrawPic(160 - (M.ttl_cstm.width / 2), 4, M.ttl_cstm);
 
   if (M.bind_grab === true) {
@@ -800,10 +799,10 @@ M.Keys_Draw = function() {
   }
 };
 
-M.Keys_Key = function(k) {
+M.Keys_Key = function (k) {
   if (M.bind_grab === true) {
     S.LocalSound(M.sfx_menu1);
-    if ((k !== Key.k.escape) && (k !== 96)) {
+    if ((k !== K.ESCAPE) && (k !== 96)) {
       Cmd.text = 'bind "' + Key.KeynumToString(k) + '" "' + M.bindnames[M.keys_cursor][0] + '"\n' + Cmd.text;
     }
     M.bind_grab = false;
@@ -811,32 +810,32 @@ M.Keys_Key = function(k) {
   }
 
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_Options_f();
       return;
-    case Key.k.leftarrow:
-    case Key.k.uparrow:
+    case K.LEFTARROW:
+    case K.UPARROW:
       S.LocalSound(M.sfx_menu1);
       if (--M.keys_cursor < 0) {
         M.keys_cursor = M.bindnames.length - 1;
       }
       return;
-    case Key.k.downarrow:
-    case Key.k.rightarrow:
+    case K.DOWNARROW:
+    case K.RIGHTARROW:
       S.LocalSound(M.sfx_menu1);
       if (++M.keys_cursor >= M.bindnames.length) {
         M.keys_cursor = 0;
       }
       return;
-    case Key.k.enter:
+    case K.ENTER:
       S.LocalSound(M.sfx_menu2);
       if (M.FindKeysForCommand(M.bindnames[M.keys_cursor][0])[1] != null) {
         M.UnbindCommand(M.bindnames[M.keys_cursor][0]);
       }
       M.bind_grab = true;
       return;
-    case Key.k.backspace:
-    case Key.k.del:
+    case K.BACKSPACE:
+    case K.DEL:
       S.LocalSound(M.sfx_menu2);
       M.UnbindCommand(M.bindnames[M.keys_cursor][0]);
   }
@@ -845,31 +844,31 @@ M.Keys_Key = function(k) {
 // Help menu
 M.num_help_pages = 6;
 
-M.Menu_Help_f = function() {
+M.Menu_Help_f = function () {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.help;
   M.entersound = true;
   M.help_page = 0;
 };
 
-M.Help_Draw = function() {
+M.Help_Draw = function () {
   M.DrawPic(0, 0, M.help_pages[M.help_page]);
 };
 
-M.Help_Key = function(k) {
+M.Help_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
       M.Menu_Main_f();
       return;
-    case Key.k.uparrow:
-    case Key.k.rightarrow:
+    case K.UPARROW:
+    case K.RIGHTARROW:
       M.entersound = true;
       if (++M.help_page >= M.num_help_pages) {
         M.help_page = 0;
       }
       return;
-    case Key.k.downarrow:
-    case Key.k.leftarrow:
+    case K.DOWNARROW:
+    case K.LEFTARROW:
       M.entersound = true;
       if (--M.help_page < 0) {
         M.help_page = M.num_help_pages - 1;
@@ -879,18 +878,18 @@ M.Help_Key = function(k) {
 
 // Quit menu
 M.quitMessage =
-[
-  ['  Are you gonna quit', '  this game just like', '   everything else?', ''],
-  [' Milord, methinks that', '   thou art a lowly', ' quitter. Is this true?', ''],
-  [' Do I need to bust your', '  face open for trying', '        to quit?', ''],
-  [' Man, I oughta smack you', '   for trying to quit!', '     Press Y to get', '      smacked out.'],
-  [' Press Y to quit like a', '   big loser in life.', '  Press N to stay proud', '    and successful!'],
-  ['   If you press Y to', '  quit, I will summon', '  Satan all over your', '      hard drive!'],
-  ['  Um, Asmodeus dislikes', ' his children trying to', ' quit. Press Y to return', '   to your Tinkertoys.'],
-  ['  If you quit now, I\'ll', '  throw a blanket-party', '   for you next time!', ''],
-];
+  [
+    ['  Are you gonna quit', '  this game just like', '   everything else?', ''],
+    [' Milord, methinks that', '   thou art a lowly', ' quitter. Is this true?', ''],
+    [' Do I need to bust your', '  face open for trying', '        to quit?', ''],
+    [' Man, I oughta smack you', '   for trying to quit!', '     Press Y to get', '      smacked out.'],
+    [' Press Y to quit like a', '   big loser in life.', '  Press N to stay proud', '    and successful!'],
+    ['   If you press Y to', '  quit, I will summon', '  Satan all over your', '      hard drive!'],
+    ['  Um, Asmodeus dislikes', ' his children trying to', ' quit. Press Y to return', '   to your Tinkertoys.'],
+    ['  If you quit now, I\'ll', '  throw a blanket-party', '   for you next time!', ''],
+  ];
 
-M.Menu_Quit_f = function() {
+M.Menu_Quit_f = function () {
   if (M.state.value === M.state.quit) {
     return;
   }
@@ -902,7 +901,7 @@ M.Menu_Quit_f = function() {
   M.msgNumber = Math.floor(Math.random() * M.quitMessage.length);
 };
 
-M.Alert = function(title, message) {
+M.Alert = function (title, message) {
   if (M.state.value === M.state.alert) {
     return;
   }
@@ -910,11 +909,11 @@ M.Alert = function(title, message) {
   Key.dest.value = Key.dest.menu;
   M.state.value = M.state.alert;
   M.entersound = true; // TODO: have a different sound
-  M.alertMessage = {title, message};
+  M.alertMessage = { title, message };
 };
 
-M.Alert_Draw = function() {
-  const {title, message} = M.alertMessage;
+M.Alert_Draw = function () {
+  const { title, message } = M.alertMessage;
   const titleLines = title ? title.split('\n') : [];
   const messageLines = message ? message.split('\n') : [];
 
@@ -948,31 +947,29 @@ M.Alert_Draw = function() {
   }
 };
 
-M.Alert_Key = function(k) {
-  if (k === Key.k.enter || k === Key.k.escape) {
-    Key.dest.value = Key.dest.game;
-    M.state.value = M.state.none;
+M.Alert_Key = function (k) {
+  if (k === K.ENTER || k === K.ESCAPE) {
+    M.CloseMenu();
   }
 };
 
 const testMenu = null;
 
-M.Test_Draw = function() {
+M.Test_Draw = function () {
   testMenu.draw();
 };
 
-M.Test_Key = function(k) {
-  if (k === Key.k.escape) {
-    Key.dest.value = Key.dest.game;
-    M.state.value = M.state.none;
+M.Test_Key = function (k) {
+  if (k === K.ESCAPE) {
     testMenu.deactivate();
+    M.CloseMenu();
     return;
   }
 
   testMenu.handleInput(k);
 };
 
-M.Menu_Test_f = function() {
+M.Menu_Test_f = function () {
   if (M.state.value === M.state.test) {
     return;
   }
@@ -984,7 +981,7 @@ M.Menu_Test_f = function() {
   testMenu.activate();
 };
 
-M.Quit_Draw = function() {
+M.Quit_Draw = function () {
   if (M.wasInMenus === true) {
     M.state.value = M.quit_prevstate;
     M.recursiveDraw = true;
@@ -998,27 +995,26 @@ M.Quit_Draw = function() {
   M.Print(64, 108, M.quitMessage[M.msgNumber][3]);
 };
 
-M.Quit_Key = function(k) {
+M.Quit_Key = function (k) {
   switch (k) {
-    case Key.k.escape:
+    case K.ESCAPE:
     case 110:
       if (M.wasInMenus === true) {
         M.state.value = M.quit_prevstate;
         M.entersound = true;
       } else {
-        Key.dest.value = Key.dest.game;
-        M.state.value = M.state.none;
+        M.CloseMenu();
       }
       break;
     case 121:
-      Key.dest.value = Key.dest.console;
+      M.CloseMenu();
       Host.Quit_f();
   }
 };
 
 
 // Menu Subsystem
-M.Init = async function() {
+M.Init = async function () {
   Cmd.AddCommand('togglemenu', M.ToggleMenu_f);
   Cmd.AddCommand('menu_main', M.Menu_Main_f);
   Cmd.AddCommand('menu_singleplayer', M.Menu_SinglePlayer_f);
@@ -1111,7 +1107,7 @@ M.Init = async function() {
   ];
 };
 
-M.Draw = function() {
+M.Draw = function () {
   if (M.state.value === M.state.none || Key.dest.value !== Key.dest.menu) {
     return;
   }
@@ -1163,7 +1159,7 @@ M.Draw = function() {
   }
 };
 
-M.Keydown = function(key) {
+M.Keydown = function (key) {
   switch (M.state.value) {
     case M.state.main:
       M.Main_Key(key);

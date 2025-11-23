@@ -118,6 +118,7 @@ Grouped by sections and then sorted by priority (more or less).
 - fog is now rendered like Ironwail/FTEQW would do it (also respecting fog value on worldspawn)
 - sound loader is a bit more chill when it comes to loading files
 - I’m quite unhappy about the state machine for game/console/menu keyboard and rendering, especially after me botching in some things
+- keys (`K`) are now in `Keys.mjs`, to be shared with game client code
 
 ### 2025-11-22
 

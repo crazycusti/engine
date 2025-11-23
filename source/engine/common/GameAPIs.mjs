@@ -1,5 +1,6 @@
 import { solid } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
+import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';
 import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -610,6 +611,19 @@ export class ClientEngineAPI extends CommonEngineAPI {
     return Draw.LoadPicFromFileDeferred(filename);
   }
 
+  /**
+   * Plays a sound effect.
+   * @param {SFX} sfx sound effect
+   */
+  static PlaySound(sfx) {
+    S.LocalSound(sfx);
+  }
+
+  /**
+   * Loads a sound effect. Can be used with PlaySound.
+   * @param {string} sfxName sound effect name, e.g. "misc/talk.wav"
+   * @returns {SFX} sound effect
+   */
   static LoadSound(sfxName) {
     return S.PrecacheSound(sfxName);
   }
@@ -782,6 +796,8 @@ export class ClientEngineAPI extends CommonEngineAPI {
   static ContentShift(slot, color, alpha = 0.5) {
     V.ContentShift(slot + 4, color, alpha);
   }
+
+  static M = null;
 
   static CL = {
     get viewangles() {
