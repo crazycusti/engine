@@ -768,7 +768,7 @@ R._CalculateLightValues = function (e) {
     if (add > 0.0) {
       const color = dl.color.copy();
       const vadd = color.multiply(add);
-      ambientlight.add(vadd);
+      // ambientlight.add(vadd);
       shadelight.add(vadd);
 
       nearestLightOrigin.set(dl.origin);
@@ -781,19 +781,21 @@ R._CalculateLightValues = function (e) {
     ambientlight.multiply(128.0 / alavg);
   }
 
-  const alslavg = (ambientlight.copy().add(shadelight)).greatest();
-  if (alslavg > 192.0) {
-    ambientlight.multiply(192.0 / alslavg);
-    shadelight.set(ambientlight);
+  const slavg = shadelight.greatest();
+  if (slavg > 128.0) {
+    shadelight.multiply(128.0 / slavg);
   }
 
   // never let players go totally dark either
-  if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (ambientlight.greatest() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
+  if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (shadelight.greatest() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
     if (ambientlight.average() === 0) {
       ambientlight.setTo(1.0, 1.0, 1.0); // no color, set to white
     }
     ambientlight.multiply(8.0);
-    shadelight.set(ambientlight);
+    // shadelight.set(ambientlight);
+    shadelight[0] = Math.max(shadelight[0], ambientlight[0]);
+    shadelight[1] = Math.max(shadelight[1], ambientlight[1]);
+    shadelight[2] = Math.max(shadelight[2], ambientlight[2]);
   }
 
   if (e.effects & effect.EF_FULLBRIGHT) { // TODO: move this up before we do all the math
