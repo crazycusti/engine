@@ -585,7 +585,7 @@ export default class ClientEntities {
         if (yaw < 0) {
           yaw += 360;
         }
-        pitch = (Math.atan2(dist[2], Math.sqrt(dist[0] * dist[0] + dist[1] * dist[1])) * 180.0 / Math.PI) || 0;
+        pitch = (Math.atan2(dist[2], Math.hypot(dist[0], dist[1])) * 180.0 / Math.PI) || 0;
         if (pitch < 0) {
           pitch += 360;
         }

@@ -55,7 +55,7 @@ V.CalcBob = function () {
   } else {
     cycle = Math.PI + Math.PI * (cycle - V.bobup.value) / (1.0 - V.bobup.value);
   }
-  let bob = Math.sqrt(CL.state.velocity[0] * CL.state.velocity[0] + CL.state.velocity[1] * CL.state.velocity[1]) * V.bob.value;
+  let bob = Math.hypot(CL.state.velocity[0], CL.state.velocity[1]) * V.bob.value;
   bob = bob * 0.3 + bob * 0.7 * Math.sin(cycle);
   if (bob > 4.0) {
     bob = 4.0;

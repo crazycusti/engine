@@ -689,20 +689,20 @@ export class Navigation {
         if (c1 <= 0) {
           const dx = p[0] - a[0];
           const dy = p[1] - a[1];
-          return Math.sqrt(dx * dx + dy * dy);
+          return Math.hypot(dx, dy);
         }
         const c2 = vx * vx + vy * vy;
         if (c2 <= c1) {
           const dx = p[0] - b[0];
           const dy = p[1] - b[1];
-          return Math.sqrt(dx * dx + dy * dy);
+          return Math.hypot(dx, dy);
         }
         const t = c1 / c2;
         const projx = a[0] + t * vx;
         const projy = a[1] + t * vy;
         const dx = p[0] - projx;
         const dy = p[1] - projy;
-        return Math.sqrt(dx * dx + dy * dy);
+        return Math.hypot(dx, dy);
       };
 
       // margin inside polygon to avoid sampling near edges (in world units projected to local 2D)
@@ -873,7 +873,7 @@ export class Navigation {
     const nodes = this.graph.nodes;
     nodes.length = 0;
 
-    const distance = (/** @type {Vector} */ a, /** @type {Vector} */ b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+    const distance = (/** @type {Vector} */ a, /** @type {Vector} */ b) => Math.hypot(a[0] - b[0], a[1] - b[1]); // CR: z ignored, since they are coplanar anyway
 
     // Helper function to project a point onto a surface plane
     const projectOntoSurface = (/** @type {Vector} */ point, /** @type {WalkableSurface} */ surface) => {

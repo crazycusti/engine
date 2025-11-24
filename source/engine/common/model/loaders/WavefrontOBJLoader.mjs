@@ -363,8 +363,7 @@ export class WavefrontOBJLoader extends ModelLoader {
       const x = model.vertices[i];
       const y = model.vertices[i + 1];
       const z = model.vertices[i + 2];
-      const dist = Math.sqrt(x * x + y * y + z * z);
-      maxDist = Math.max(maxDist, dist);
+      maxDist = Math.max(maxDist, Math.hypot(x, y, z));
     }
     model.boundingradius = maxDist;
   }
@@ -460,7 +459,7 @@ export class WavefrontOBJLoader extends ModelLoader {
       ];
 
       // Normalize tangent
-      const tLen = Math.sqrt(tangent[0] * tangent[0] + tangent[1] * tangent[1] + tangent[2] * tangent[2]);
+      const tLen = Math.hypot(tangent[0], tangent[1], tangent[2]);
       if (tLen > 0) {
         tangent[0] /= tLen;
         tangent[1] /= tLen;

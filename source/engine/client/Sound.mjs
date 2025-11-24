@@ -167,7 +167,7 @@ class SoundBaseChannel {
       this.origin[2] - this._S._listenerOrigin[2],
     ];
 
-    let dist = Math.sqrt(source[0] * source[0] + source[1] * source[1] + source[2] * source[2]);
+    let dist = Math.hypot(source[0], source[1], source[2]);
     if (dist !== 0.0) {
       source[0] /= dist;
       source[1] /= dist;

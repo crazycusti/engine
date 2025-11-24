@@ -221,7 +221,8 @@ export class BSP29Loader extends ModelLoader {
         if (!tx.glt) {
           const pixelData = new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), tx.width * tx.height);
           const rgba = translateIndexToRGBA(pixelData, tx.width, tx.height, W.d_8to24table_u8, tx.name[0] === '{' ? 255 : null, 240);
-          tx.glt = GLTexture.Allocate(tx.name, tx.width, tx.height, rgba);
+          const textureId = `${tx.name}/${CRC16CCITT.Block(pixelData)}`; // CR: unique texture ID to avoid conflicts across maps
+          tx.glt = GLTexture.Allocate(textureId, tx.width, tx.height, rgba);
         }
 
         if (tx.name[0] === '*' || tx.name[0] === '!') {

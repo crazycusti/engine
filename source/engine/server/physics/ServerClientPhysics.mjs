@@ -166,7 +166,7 @@ export class ServerClientPhysics {
     }
 
     const vel = ent.entity.velocity;
-    const speed = Math.sqrt(vel[0] * vel[0] + vel[1] * vel[1]);
+    const speed = Math.hypot(vel[0], vel[1]);
 
     if (speed === 0.0) {
       return;

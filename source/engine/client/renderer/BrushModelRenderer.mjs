@@ -824,7 +824,7 @@ export class BrushModelRenderer extends ModelRenderer {
     }
 
     // Calculate tangents and bitangents for PBR normal mapping
-    R.CalculateTagentBitagents(cmds, cutoff);
+    R.CalculateTangentBitangents(cmds, cutoff);
 
     // Upload to GPU
     m.cmds = gl.createBuffer();
@@ -962,7 +962,7 @@ export class BrushModelRenderer extends ModelRenderer {
     }
 
     // Calculate tangents and bitangents for PBR normal mapping
-    R.CalculateTagentBitagents(cmds, cutoff);
+    R.CalculateTangentBitangents(cmds, cutoff);
 
     // Upload to GPU
     m.cmds = gl.createBuffer();

@@ -1255,8 +1255,7 @@ R.PrintSpeeds = function() {
 
 // mesh
 
-R.CalculateTagentBitagents = function(cmds, cutoff) {
-
+R.CalculateTangentBitangents = function(cmds, cutoff) {
   // compute per-triangle tangent/bitangent (stride = 20 floats)
   const stride = 20;
   for (let i = 0; i + stride * 3 <= Math.min(cutoff, cmds.length); i += stride * 3) {
@@ -1504,8 +1503,6 @@ R.Init = async function() {
     return;
   }
 
-  Cmd.AddCommand('timerefresh', R.TimeRefresh_f);
-
   R.waterwarp = new Cvar('r_waterwarp', '1');
   R.fullbright = new Cvar('r_fullbright', '0', Cvar.FLAG.CHEAT);
   R.drawentities = new Cvar('r_drawentities', '1', Cvar.FLAG.CHEAT);
@@ -1617,19 +1614,6 @@ R.NewMap = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
   R.NewMapFog();
-};
-
-R.TimeRefresh_f = function() {
-  gl.finish();
-  let i;
-  const start = Sys.FloatTime();
-  for (i = 0; i <= 127; i++) {
-    R.refdef.viewangles[1] = i * 2.8125;
-    R.RenderView();
-  }
-  gl.finish();
-  const time = Sys.FloatTime() - start;
-  Con.Print(time.toFixed(6) + ' seconds (' + (128.0 / time).toFixed(6) + ' fps)\n');
 };
 
 // part

@@ -53,6 +53,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 - [_] lerp view model animations
 - [_] water transparency should be configured through other means such as worldspawnInfo
+- [X] texture cache can return wrong textures when they share the same name across maps but are actually different
 
 ### Random issues
 
@@ -112,6 +113,11 @@ Grouped by sections and then sorted by priority (more or less).
 - https://sepia.imageonline.co/
 
 ## Log
+
+### 2025-11-24
+
+- texture names can collide across maps
+- should use `Math.hypot` more often lol
 
 ### 2025-11-23
 
