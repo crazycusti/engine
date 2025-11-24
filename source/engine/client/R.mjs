@@ -2110,7 +2110,7 @@ R.AddDynamicLights = function(surf) {
 
   for (let t = 0, i = 0; t < tmax; t++) {
     R.lightmap_modified[surf.light_t + t] = true;
-    const dest = ((surf.light_t + t) << 10) + surf.light_s;
+    const dest = ((surf.light_t + t) * LIGHTMAP_BLOCK_SIZE) + surf.light_s;
     for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;
       const blrgb = [
@@ -2132,7 +2132,7 @@ R.RemoveDynamicLights = function(surf) {
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
   for (let t = 0; t < tmax; t++) {
     R.lightmap_modified[surf.light_t + t] = true;
-    const dest = ((surf.light_t + t) << 10) + surf.light_s;
+    const dest = ((surf.light_t + t) * LIGHTMAP_BLOCK_SIZE) + surf.light_s;
     for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;
       for (let i = 0; i < 3; i++) {
