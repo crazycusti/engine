@@ -67,6 +67,10 @@ Grouped by sections and then sorted by priority (more or less).
 - [X] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
 - [_] try to get QuakeC’s progs.dat going
 
+### Documentation and Hackability™
+
+- [_] look into https://vitepress.dev/ and build a proper docs website on docs.quakeshack.dev or so
+
 ## Ideas
 
 ### More multiplayer features
@@ -111,6 +115,7 @@ Grouped by sections and then sorted by priority (more or less).
 - https://www.jagregory.com/abrash-black-book/ the 3d bible
 - https://q1tools.github.io/ set of handy Quake 1 tools
 - https://sepia.imageonline.co/
+- https://quakewiki.org/wiki/QuakeC_tutorials
 
 ## Log
 
