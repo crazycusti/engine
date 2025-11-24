@@ -272,3 +272,6 @@ export const cvarFlags = Object.freeze({
   /** variable has been registered from the client code */
   CLIENT: 128,
 });
+
+/** floating point epsilon to account for inexact comparisons */
+export const EPSILON = 1e-8;

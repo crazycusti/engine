@@ -116,6 +116,7 @@ Grouped by sections and then sorted by priority (more or less).
 - https://q1tools.github.io/ set of handy Quake 1 tools
 - https://sepia.imageonline.co/
 - https://quakewiki.org/wiki/QuakeC_tutorials
+- https://github.com/khreathor/mdl-for-blender mdl support
 
 ## Log
 
@@ -123,6 +124,8 @@ Grouped by sections and then sorted by priority (more or less).
 
 - texture names can collide across maps
 - should use `Math.hypot` more often lol
+- changed `ServerPhysics.pushEntity` to make sure that things do not fall out of world
+- took some inspiration from Quake 2 for `ServerCollision.recursiveHullCheck` to optimize it a bit
 
 ### 2025-11-23
 

@@ -1,3 +1,5 @@
+import { EPSILON } from "./Defs.mjs";
+
 /**
  * Utility class for common engine functions.
  */
@@ -121,6 +123,17 @@ export default class Q {
    */
   static sleep(msec) {
     return new Promise((resolve) => setTimeout(resolve, msec));
+  }
+
+  /**
+   * Compares two floating point numbers for near-equality.
+   * @param {number} a - First number.
+   * @param {number} b - Second number.
+   * @param {number} epsilon Tolerance for comparison, optional.
+   * @returns {boolean} True if numbers are nearly equal.
+   */
+  static compareFloat(a, b, epsilon = EPSILON) {
+    return Math.abs(a - b) < epsilon;
   }
 };
 

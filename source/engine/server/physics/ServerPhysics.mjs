@@ -117,8 +117,8 @@ export class ServerPhysics {
   impact(e1, e2) {
     SV.server.gameAPI.time = SV.server.time;
 
-    const ent1 = /** @type {*} */ (e1.entity);
-    const ent2 = /** @type {*} */ (e2.entity);
+    const ent1 = /** @type {import('../Edict.mjs').BaseEntity} */ (e1.entity);
+    const ent2 = /** @type {import('../Edict.mjs').BaseEntity} */ (e2.entity);
 
     if (ent1.touch && ent1.solid !== Defs.solid.SOLID_NOT) {
       ent1.touch(ent2);
@@ -297,6 +297,7 @@ export class ServerPhysics {
     }
 
     const trace = SV.collision.move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, nomonsters, ent);
+
     ent.entity.origin = ent.entity.origin.set(trace.endpos);
     SV.area.linkEdict(ent, true);
 

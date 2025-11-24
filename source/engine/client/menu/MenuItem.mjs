@@ -1,11 +1,12 @@
+import Q from '../../../shared/Q.mjs';
 import { K } from '../../../shared/Keys.mjs';
 import Cvar from '../../common/Cvar.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
-let { S, M, Key, Host } = registry;
+let { S, M, Host } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ S, M, Key, Host } = registry);
+  ({ S, M, Host } = registry);
 });
 
 /**
@@ -241,7 +242,7 @@ export class Toggle extends MenuItem {
    * @returns {boolean} True if on
    */
   isOn() {
-    return Math.abs(this.getValue() - this.onValue) < 0.01;
+    return Q.compareFloat(this.getValue(), this.onValue);
   }
 
   /**

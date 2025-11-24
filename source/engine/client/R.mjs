@@ -9,7 +9,7 @@ import MSG from '../network/MSG.mjs';
 import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
-import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
+import { content, effect, EPSILON, gameCapabilities } from '../../shared/Defs.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
@@ -1278,7 +1278,7 @@ R.CalculateTangentBitangents = function(cmds, cutoff) {
     const deltaUV2 = [uv2[0] - uv0[0], uv2[1] - uv0[1]];
     const det = deltaUV1[0] * deltaUV2[1] - deltaUV2[0] * deltaUV1[1];
     let f = 0.0;
-    if (Math.abs(det) > 1e-6) {
+    if (Math.abs(det) > EPSILON) { // CR: must be non-zero
       f = 1.0 / det;
     }
     const tx = f * (deltaUV2[1] * edge1[0] - deltaUV1[1] * edge2[0]);
