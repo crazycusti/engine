@@ -120,6 +120,10 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2025-11-29
+
+- cleaning up server code after trying to spin it off into smaller chunks
+
 ### 2025-11-24
 
 - texture names can collide across maps

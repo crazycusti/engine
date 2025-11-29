@@ -192,6 +192,9 @@ export const hull = Object.freeze([
  * point content values
  */
 export const content = Object.freeze({
+  // for convenience:
+  CONTENT_NONE: 0,
+
   // for game play:
   CONTENT_EMPTY: -1,
   CONTENT_SOLID: -2,
@@ -211,6 +214,22 @@ export const content = Object.freeze({
   CONTENT_CURRENT_270: -12,
   CONTENT_CURRENT_UP: -13,
   CONTENT_CURRENT_DOWN: -14,
+});
+
+/**
+ * @readonly
+ * @enum {number}
+ * waterlevel values (0, 1, 2, 3) for .waterlevel
+ */
+export const waterlevel = Object.freeze({
+  /** not in water */
+  WATERLEVEL_NONE: 0,
+  /** feet in water (origin[2] + playerMins[2] + 1) */
+  WATERLEVEL_FEET: 1,
+  /** waist in water (origin[2] + (playerMins[2] + playerMaxs[2]) / 2) */
+  WATERLEVEL_WAIST: 2,
+  /** head in water (origin[2] + view_ofs[2]) */
+  WATERLEVEL_HEAD: 3,
 });
 
 /**

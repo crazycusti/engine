@@ -1,9 +1,4 @@
 /**
- * Physics and movement constants for the Quake engine.
- * @module PhysicsConstants
- */
-
-/**
  * Minimum ground angle normal (Z component) to be considered "on ground".
  * Normal vectors with Z >= this value are walkable slopes.
  * @constant {number}

@@ -2,50 +2,6 @@ import Vector from '../../shared/Vector.mjs';
 
 /** @typedef {import('../../shared/GameInterfaces').SerializableType} SerializableType */
 
-export const MOVETYPE = Object.freeze({
-  none: 0,
-  anglenoclip: 1,
-  angleclip: 2,
-  walk: 3,
-  step: 4,
-  fly: 5,
-  toss: 6,
-  push: 7,
-  noclip: 8,
-  flymissile: 9,
-  bounce: 10,
-});
-
-export const SOLID = Object.freeze({
-  not: 0,
-  trigger: 1,
-  bbox: 2,
-  slidebox: 3,
-  bsp: 4,
-});
-
-export const DAMAGE = Object.freeze({
-  no: 0,
-  yes: 1,
-  aim: 2,
-});
-
-export const FL = Object.freeze({
-  fly: 1,
-  swim: 2,
-  conveyor: 4,
-  client: 8,
-  inwater: 16,
-  monster: 32,
-  godmode: 64,
-  notarget: 128,
-  item: 256,
-  onground: 512,
-  partialground: 1024,
-  waterjump: 2048,
-  jumpreleased: 4096,
-});
-
 export class ServerEntityState {
   constructor(num = null) {
     this.num = num;

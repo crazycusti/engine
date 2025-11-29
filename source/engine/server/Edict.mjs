@@ -617,7 +617,7 @@ export class ServerEdict {
    */
   changeYaw() {
     const angles = this.entity.angles;
-  angles[1] = SV.movement.changeYaw(this);
+    angles[1] = SV.movement.changeYaw(this);
     this.entity.angles = angles;
 
     return angles[1];

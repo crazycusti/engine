@@ -75,7 +75,7 @@ export class PlayerMover {
 
     const isSpectator = ('spectator' in client) ? client.spectator : false;
     pmPlayer.spectator = !!isSpectator; // Only true spectators, not noclip
-    pmPlayer.waterlevel = edict.entity.waterlevel ?? 0;
+    pmPlayer.waterlevel = edict.entity.waterlevel ?? Defs.waterlevel.WATERLEVEL_NONE;
     pmPlayer.watertype = edict.entity.watertype ?? Defs.content.CONTENT_EMPTY;
 
     // Set per-entity gravity multiplier (defaults to 1.0 = normal gravity)

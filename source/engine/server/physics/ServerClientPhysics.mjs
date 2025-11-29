@@ -6,7 +6,7 @@ import {
   STEP_HEIGHT,
   VELOCITY_EPSILON,
   WATER_SPEED_FACTOR,
-} from './PhysicsConstants.mjs';
+} from './Defs.mjs';
 
 let { Host, SV, V } = registry;
 
@@ -36,7 +36,7 @@ export class ServerClientPhysics {
     if ((clip & 2) === 0) {
       return;
     }
-    if ((oldonground === 0) && (ent.entity.waterlevel === 0.0)) {
+    if ((oldonground === 0) && (ent.entity.waterlevel === Defs.waterlevel.WATERLEVEL_NONE)) {
       return;
     }
     if (ent.entity.movetype !== Defs.moveType.MOVETYPE_WALK) {
@@ -291,8 +291,8 @@ export class ServerClientPhysics {
       return;
     }
 
-    if ((SV.server.time > ent.entity.teleport_time) || (ent.entity.waterlevel === 0.0)) {
-      ent.entity.flags &= (~Defs.flags.FL_WATERJUMP >>> 0);
+    if ((SV.server.time > ent.entity.teleport_time) || (ent.entity.waterlevel === Defs.waterlevel.WATERLEVEL_NONE)) {
+      ent.entity.flags &= ~Defs.flags.FL_WATERJUMP;
       ent.entity.teleport_time = 0.0;
     }
 
@@ -363,7 +363,7 @@ export class ServerClientPhysics {
 
     ent.entity.punchangle = punchangle.multiply(len);
 
-    if (ent.entity.health <= 0.0) {
+    if (ent.entity.health <= 0) {
       return;
     }
 
@@ -382,7 +382,7 @@ export class ServerClientPhysics {
 
     if (ent.entity.flags & Defs.flags.FL_WATERJUMP) {
       this.waterJump(ent);
-    } else if (ent.entity.waterlevel >= 2.0 && ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
+    } else if (ent.entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST && ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
       this.waterMove(ent, client);
     } else if (ent.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
       this.noclipMove(ent, client);

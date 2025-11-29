@@ -10,6 +10,9 @@ eventBus.subscribe('registry.frozen', () => {
   SV = registry.SV;
 });
 
+/**
+ * Everything related to moving entities around.
+ */
 export class ServerMovement {
   constructor() {
   }
@@ -172,7 +175,7 @@ export class ServerMovement {
       if (value instanceof ServerEdict) {
         return value;
       }
-      return value.edict ?? null;
+      return value.edict || null;
     };
 
     const goalEdict = resolveEdict(ent.entity.goalentity);
@@ -195,10 +198,10 @@ export class ServerMovement {
     return false;
   }
 
-  changeYaw(ent) {
-    const angle1 = ent.entity.angles[1];
+  changeYaw(edict) {
+    const angle1 = edict.entity.angles[1];
     const current = Vector.anglemod(angle1);
-    const ideal = ent.entity.ideal_yaw;
+    const ideal = edict.entity.ideal_yaw;
 
     if (current === ideal) {
       return angle1;
@@ -214,7 +217,7 @@ export class ServerMovement {
       move += 360.0;
     }
 
-    const speed = ent.entity.yaw_speed;
+    const speed = edict.entity.yaw_speed || 0;
 
     if (move > 0.0) {
       if (move > speed) {

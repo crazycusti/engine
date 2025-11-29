@@ -5,6 +5,8 @@ import { eventBus, registry } from '../registry.mjs';
 
 let { Con, SV } = registry;
 
+/** @typedef {import('./Client.mjs').ServerEdict} ServerEdict */
+
 eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   SV = registry.SV;
@@ -17,7 +19,7 @@ eventBus.subscribe('registry.frozen', () => {
  * @property {boolean} startsolid whether start position was solid
  * @property {Vector} endpos final position after the trace
  * @property {{normal: Vector, dist: number}} plane collision plane information
- * @property {*} ent entity that was hit, if any
+ * @property {ServerEdict} ent entity that was hit, if any
  * @property {boolean} [inopen] true if open space was encountered
  * @property {boolean} [inwater] true if water was encountered
  */
@@ -80,6 +82,11 @@ export class ServerCollision {
    * @returns {boolean} true if traversal should continue downward
    */
   recursiveHullCheck(hull, num, p1f, p2f, p1, p2, trace) {
+    // check for early exit - already hit something nearer
+    if (trace.fraction <= p1f) {
+      return false;
+    }
+
     if (num < 0) {
       if (num !== Defs.content.CONTENT_SOLID) {
         trace.allsolid = false;
@@ -124,8 +131,8 @@ export class ServerCollision {
       return false;
     }
 
-    if (this.hullPointContents(hull, node.children[1 - side], mid) !== Defs.content.CONTENT_SOLID) {
-      return this.recursiveHullCheck(hull, node.children[1 - side], midf, p2f, mid, p2, trace);
+    if (this.hullPointContents(hull, node.children[side ^ 1], mid) !== Defs.content.CONTENT_SOLID) {
+      return this.recursiveHullCheck(hull, node.children[side ^ 1], midf, p2f, mid, p2, trace);
     }
 
     if (trace.allsolid) {
@@ -162,7 +169,7 @@ export class ServerCollision {
 
   /**
    * Traces a moving box against a target entity.
-   * @param {import('./Edict.mjs').ServerEdict} ent entity to collide with
+   * @param {ServerEdict} ent entity to collide with
    * @param {Vector} start start position
    * @param {Vector} mins minimum extents of the moving box
    * @param {Vector} maxs maximum extents of the moving box
@@ -181,8 +188,11 @@ export class ServerCollision {
 
     const offset = new Vector();
     const hull = SV.area.hullForEntity(ent, mins, maxs, offset);
-    this.recursiveHullCheck(hull, hull.firstclipnode, 0.0, 1.0, start.copy().subtract(offset), end.copy().subtract(offset), trace);
+    const start_l = start.copy().subtract(offset);
+    const end_l = end.copy().subtract(offset);
+    this.recursiveHullCheck(hull, hull.firstclipnode, 0.0, 1.0, start_l, end_l, trace);
 
+    // fix trace up by the offset
     if (trace.fraction !== 1.0) {
       trace.endpos.add(offset);
     }
@@ -273,9 +283,9 @@ export class ServerCollision {
    * @param {Vector} mins minimum extents of the moving box
    * @param {Vector} maxs maximum extents of the moving box
    * @param {Vector} end end position
-   * @param {number} type move type constant from Defs.moveTypes
-   * @param {import('./Edict.mjs').ServerEdict} passedict entity to skip
-   * @param {(import('./Edict.mjs').ServerEdict|number)[]} ignoreedicts additional entities to ignore
+   * @param {Defs.moveTypes} type move type constant from Defs.moveTypes
+   * @param {ServerEdict} passedict entity to skip
+   * @param {(ServerEdict|number)[]} ignoreedicts additional entities to ignore
    * @returns {Trace} collision result
    */
   move(start, mins, maxs, end, type, passedict, ignoreedicts = []) {
@@ -310,7 +320,7 @@ export class ServerCollision {
 
   /**
    * Tests whether an entity is currently stuck in solid geometry.
-   * @param {import('./Edict.mjs').ServerEdict} ent entity to test
+   * @param {ServerEdict} ent entity to test
    * @returns {boolean} true if the entity is stuck
    */
   testEntityPosition(ent) {

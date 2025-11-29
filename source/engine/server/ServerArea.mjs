@@ -9,8 +9,6 @@ eventBus.subscribe('registry.frozen', () => {
   SV = registry.SV;
 });
 
-// DEPRECATED: moveTypes was moved to Defs.moveTypes
-
 /**
  * Manages spatial partitioning and entity linking for efficient collision detection.
  * Handles the area node BSP tree used for spatial queries.

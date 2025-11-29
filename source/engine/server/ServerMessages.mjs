@@ -51,7 +51,6 @@ export class ServerMessages {
   }
 
   startSound(edict, channel, sample, volume, attenuation) {
-
     console.assert(volume >= 0 && volume <= 255, 'volume out of range', volume);
     console.assert(attenuation >= 0.0 && attenuation <= 4.0, 'attenuation out of range', attenuation);
     console.assert(channel >= 0 && channel <= 7, 'channel out of range', channel);
@@ -76,11 +75,12 @@ export class ServerMessages {
     }
 
     let fieldMask = 0;
+
     if (volume !== 255) {
-      fieldMask += 1;
+      fieldMask |= 1;
     }
     if (attenuation !== 1.0) {
-      fieldMask += 2;
+      fieldMask |= 2;
     }
 
     MSG.WriteByte(datagram, Protocol.svc.sound);
@@ -210,7 +210,6 @@ export class ServerMessages {
   }
 
   addToFatPVS(org, node) {
-
     while (true) {
       if (node.contents < 0) {
         if (node.contents !== Defs.content.CONTENT_SOLID) {
@@ -239,7 +238,6 @@ export class ServerMessages {
   }
 
   fatPVS(org) {
-
     this.fatbytes = (SV.server.worldmodel.leafs.length + 31) >> 3;
     for (let i = 0; i < this.fatbytes; i++) {
       this.fatpvs[i] = 0;
@@ -249,7 +247,6 @@ export class ServerMessages {
   }
 
   *traversePVS(pvs, ignoreEdictIds = [], alwaysIncludeEdictIds = [], includeFree = false) {
-
     for (let e = 1; e < SV.server.num_edicts; e++) {
       const ent = SV.server.edicts[e];
 
@@ -599,7 +596,6 @@ export class ServerMessages {
   }
 
   writeClientdataToMessage(clientEdict, msg) {
-
     if ((clientEdict.entity.dmg_take || clientEdict.entity.dmg_save) && clientEdict.entity.dmg_inflictor) {
       const other = clientEdict.entity.dmg_inflictor.edict ? clientEdict.entity.dmg_inflictor.edict : clientEdict.entity.dmg_inflictor;
       const vec = !other.isFree() ? other.entity.origin.copy().add(other.entity.mins.copy().add(other.entity.maxs).multiply(0.5)) : clientEdict.entity.origin;
@@ -641,27 +637,27 @@ export class ServerMessages {
     if (clientEdict.entity.flags & Defs.flags.FL_ONGROUND) {
       bits += Protocol.su.onground;
     }
-    if (clientEdict.entity.waterlevel >= 2.0) {
+    if (clientEdict.entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST) {
       bits += Protocol.su.inwater;
     }
 
     const punchangle = clientEdict.entity.punchangle;
 
     if (punchangle[0] !== 0.0) {
-      bits += Protocol.su.punch1;
+      bits |= Protocol.su.punch1;
     }
     if (punchangle[1] !== 0.0) {
-      bits += Protocol.su.punch2;
+      bits |= Protocol.su.punch2;
     }
     if (punchangle[2] !== 0.0) {
-      bits += Protocol.su.punch3;
+      bits |= Protocol.su.punch3;
     }
 
     if (clientEdict.entity.weaponframe !== 0.0) {
-      bits += Protocol.su.weaponframe;
+      bits |= Protocol.su.weaponframe;
     }
     if (clientEdict.entity.armorvalue !== 0.0) {
-      bits += Protocol.su.armor;
+      bits |= Protocol.su.armor;
     }
 
     MSG.WriteByte(msg, Protocol.svc.clientdata);
@@ -808,7 +804,6 @@ export class ServerMessages {
   }
 
   updateToReliableMessages() {
-
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const currentClient = SV.svs.clients[i];
       const frags = currentClient.edict.entity ? currentClient.edict.entity.frags | 0 : 0;
@@ -838,8 +833,8 @@ export class ServerMessages {
   }
 
   sendClientMessages() {
-
     this.updateToReliableMessages();
+
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
       if (!client.active) {

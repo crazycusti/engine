@@ -7,7 +7,7 @@ import {
   VELOCITY_EPSILON,
   MAX_BUMP_COUNT,
   BlockedFlags,
-} from './PhysicsConstants.mjs';
+} from './Defs.mjs';
 
 let { Con, Host, SV } = registry;
 
@@ -158,7 +158,7 @@ export class ServerPhysics {
    * Performs sliding movement with up to four collision planes.
    * @param {import('../Edict.mjs').ServerEdict} ent entity to move
    * @param {number} time frame time slice
-   * @returns {{blocked: number, steptrace: import('./CollisionCore.mjs').Trace | null}} result with blocked flags and optional wall trace
+   * @returns {{blocked: number, steptrace: import('../ServerCollision.mjs').Trace | null}} result with blocked flags and optional wall trace
    */
   flyMove(ent, time) {
     const planes = [];
@@ -281,7 +281,7 @@ export class ServerPhysics {
    * Pushes an entity by the provided vector and performs collision handling.
    * @param {import('../Edict.mjs').ServerEdict} ent entity to move
    * @param {Vector} pushVector movement vector
-   * @returns {import('./CollisionCore.mjs').Trace} resulting trace
+   * @returns {import('../ServerCollision.mjs').Trace} resulting trace
    */
   pushEntity(ent, pushVector) {
     const end = ent.entity.origin.copy().add(pushVector);
@@ -485,30 +485,30 @@ export class ServerPhysics {
   checkWater(ent) {
     const entity = ent.entity;
     const point = entity.origin.copy().add(new Vector(0.0, 0.0, entity.mins[2] + 1.0));
-    entity.waterlevel = 0.0;
+    entity.waterlevel = Defs.waterlevel.WATERLEVEL_NONE;
     entity.watertype = Defs.content.CONTENT_EMPTY;
     let cont = SV.collision.pointContents(point);
     if (cont > Defs.content.CONTENT_WATER) {
       return false;
     }
     entity.watertype = cont;
-    entity.waterlevel = 1.0;
+    entity.waterlevel = Defs.waterlevel.WATERLEVEL_FEET;
     const origin = entity.origin;
     point[2] = origin[2] + (entity.mins[2] + entity.maxs[2]) * 0.5;
     cont = SV.collision.pointContents(point);
     if (cont <= Defs.content.CONTENT_WATER) {
-      entity.waterlevel = 2.0;
+      entity.waterlevel = Defs.waterlevel.WATERLEVEL_WAIST;
       if ('view_ofs' in entity) {
         point[2] = origin[2] + entity.view_ofs[2];
         cont = SV.collision.pointContents(point);
         if (cont <= Defs.content.CONTENT_WATER) {
-          entity.waterlevel = 3.0;
+          entity.waterlevel = Defs.waterlevel.WATERLEVEL_HEAD;
         }
       } else {
-        entity.waterlevel = 3.0;
+        entity.waterlevel = Defs.waterlevel.WATERLEVEL_HEAD;
       }
     }
-    return entity.waterlevel > 1.0;
+    return entity.waterlevel > Defs.waterlevel.WATERLEVEL_FEET;
   }
 
   /**
@@ -518,9 +518,9 @@ export class ServerPhysics {
   checkWaterTransition(ent) {
     const cont = SV.collision.pointContents(ent.entity.origin);
 
-    if (ent.entity.watertype === 0.0) {
+    if (!ent.entity.watertype) { // just spawned here
       ent.entity.watertype = cont;
-      ent.entity.waterlevel = 1.0;
+      ent.entity.waterlevel = Defs.waterlevel.WATERLEVEL_FEET;
       return;
     }
 
@@ -529,15 +529,17 @@ export class ServerPhysics {
         SV.messages.startSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0);
       }
       ent.entity.watertype = cont;
-      ent.entity.waterlevel = 1.0;
+      ent.entity.waterlevel = Defs.waterlevel.WATERLEVEL_WAIST;
       return;
     }
 
     if (ent.entity.watertype !== Defs.content.CONTENT_EMPTY) {
+      // just walked into water
       SV.messages.startSound(ent, 0, 'misc/h2ohit1.wav', 255, 1.0);
     }
+
     ent.entity.watertype = Defs.content.CONTENT_EMPTY;
-    ent.entity.waterlevel = cont;
+    ent.entity.waterlevel = cont; // CR: I’m not sure whether this is correct or should be e.g. WATERLEVEL_NONE
   }
 
   /**
