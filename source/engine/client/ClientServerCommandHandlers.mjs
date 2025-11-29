@@ -11,23 +11,13 @@ import { eventBus, registry } from '../registry.mjs';
 /** @typedef {typeof import('./CL.mjs').default} ClientLayer */
 /** @typedef {import('./ClientMessages.mjs').ClientMessages} ClientMessages */
 
-/**
- * Carries everything individual server-command handlers need to mutate client state.
- * @typedef {object} ServerCommandContext
- * @property {ClientLayer} CL Client facade coordinating shared state.
- * @property {ClientMessages} parser Message parser bound to the active client.
- * @property {() => void} updateEntities Callback tracking how many entity deltas arrived.
- */
+let { CL, Con, SCR, S, R, V, Host, SV, NET, Mod, PR, COM } = registry;
 
-/**
- * Function signature shared by all server command handlers.
- * @callback ServerCommandHandler
- * @param {ServerCommandContext} ctx Shared handler context.
- */
-
-let { Con, SCR, S, R, V, Host, SV, NET, Mod, PR, COM } = registry;
+/** Tracks entity updates during message parsing */
+let entitiesReceived = 0;
 
 eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
   Con = registry.Con;
   SCR = registry.SCR;
   S = registry.S;
@@ -43,11 +33,10 @@ eventBus.subscribe('registry.frozen', () => {
 
 /**
  * Creates a score slot wrapper that keeps the entity getter wired back to the client state.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  * @param {number} index Player slot index.
  * @returns {{name: string, entertime: number, frags: number, colors: number, ping: number, readonly isActive: boolean, readonly entity: import('./ClientEntities.mjs').ClientEdict}} Scoreboard slot view.
  */
-function createScoreSlot(CL, index) {
+function createScoreSlot(index) {
   return {
     name: '',
     entertime: 0.0,
@@ -65,9 +54,8 @@ function createScoreSlot(CL, index) {
 
 /**
  * Parses the serverdata payload and prepares the client for the new map.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseServerData(CL) {
+function parseServerData() {
   Con.DPrint('Serverdata packet received.\n');
   CL.ClearState();
 
@@ -119,12 +107,12 @@ function parseServerData(CL) {
   CL.state.scores.length = 0;
 
   for (let i = 0; i < CL.state.maxclients; i++) {
-    CL.state.scores[i] = createScoreSlot(CL, i);
+    CL.state.scores[i] = createScoreSlot(i);
   }
 
   CL.state.levelname = MSG.ReadString();
 
-  parsePmovevars(CL);
+  // parsePmovevars(CL);
 
   Con.Print('\n\n\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f\n\n');
   Con.Print('\x02' + CL.state.levelname + '\n\n');
@@ -265,9 +253,8 @@ function parseServerData(CL) {
 
 /**
  * Reads pmove configuration values from the network stream.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parsePmovevars(CL) {
+function parsePmovevars() {
   const movevars = CL.pmove.movevars;
   movevars.gravity = MSG.ReadFloat();
   movevars.stopspeed = MSG.ReadFloat();
@@ -285,9 +272,8 @@ function parsePmovevars(CL) {
 
 /**
  * Parses a lightstyle definition.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseLightstylePacket(CL) {
+function parseLightstylePacket() {
   const index = MSG.ReadByte();
   if (index >= Def.limits.lightstyles) {
     throw new HostError('svc_lightstyle > MAX_LIGHTSTYLES');
@@ -298,9 +284,8 @@ function parseLightstylePacket(CL) {
 
 /**
  * Parses a spatialized sound start request.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseStartSoundPacket(CL) {
+function parseStartSoundPacket() {
   const fieldMask = MSG.ReadByte();
   const volume = ((fieldMask & 1) !== 0) ? MSG.ReadByte() : 255;
   const attenuation = ((fieldMask & 2) !== 0) ? MSG.ReadByte() * 0.015625 : 1.0;
@@ -315,9 +300,8 @@ function parseStartSoundPacket(CL) {
 
 /**
  * Parses a static entity definition.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseStaticEntity(CL) {
+function parseStaticEntity() {
   const ent = CL.state.clientEntities.allocateClientEntity(MSG.ReadString());
   ent.model = CL.state.model_precache[MSG.ReadByte()];
   ent.frame = MSG.ReadByte();
@@ -332,9 +316,8 @@ function parseStaticEntity(CL) {
 
 /**
  * Parses a static ambient sound definition.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseStaticSound(CL) {
+function parseStaticSound() {
   const org = MSG.ReadCoordVector();
   const soundId = MSG.ReadByte();
   const vol = MSG.ReadByte();
@@ -344,9 +327,8 @@ function parseStaticSound(CL) {
 
 /**
  * Applies server cvar updates.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseServerCvars(CL) {
+function parseServerCvars() {
   let count = MSG.ReadByte();
 
   while (count-- > 0) {
@@ -368,10 +350,9 @@ function parseServerCvars(CL) {
 
 /**
  * Parses beam-style temporary entities.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  * @param {import('../common/model/BaseModel.mjs').BaseModel} model Model to attach to the beam.
  */
-function parseBeam(CL, model) {
+function parseBeam(model) {
   const ent = MSG.ReadShort();
   const start = MSG.ReadCoordVector();
   const end = MSG.ReadCoordVector();
@@ -403,23 +384,22 @@ function parseBeam(CL, model) {
 
 /**
  * Decodes temporary entities (explosions, splashes, etc.).
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parseTemporaryEntity(CL) {
+function parseTemporaryEntity() {
   const type = MSG.ReadByte();
 
   switch (type) {
     case Protocol.te.lightning1:
-      parseBeam(CL, Mod.ForName('progs/bolt.mdl', true));
+      parseBeam(Mod.ForName('progs/bolt.mdl', true));
       return;
     case Protocol.te.lightning2:
-      parseBeam(CL, Mod.ForName('progs/bolt2.mdl', true));
+      parseBeam(Mod.ForName('progs/bolt2.mdl', true));
       return;
     case Protocol.te.lightning3:
-      parseBeam(CL, Mod.ForName('progs/bolt3.mdl', true));
+      parseBeam(Mod.ForName('progs/bolt3.mdl', true));
       return;
     case Protocol.te.beam:
-      parseBeam(CL, Mod.ForName('progs/beam.mdl', true));
+      parseBeam(Mod.ForName('progs/beam.mdl', true));
       return;
   }
 
@@ -483,9 +463,8 @@ function parseTemporaryEntity(CL) {
 
 /**
  * Applies entity deltas for the current frame.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-function parsePacketEntities(CL) {
+function parsePacketEntities() {
   while (true) {
     const edictNum = MSG.ReadShort();
 
@@ -632,18 +611,16 @@ function handleNop() {}
 
 /**
  * Handles svc_time by forwarding to the high-level parser.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleTime(ctx) {
-  ctx.parser.parseTime();
+function handleTime() {
+  CL.state.clientMessages.parseTime();
 }
 
 /**
  * Handles svc_clientdata and populates the incremental client snapshot.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleClientData(ctx) {
-  ctx.parser.parseClient();
+function handleClientData() {
+  CL.state.clientMessages.parseClient();
 }
 
 /**
@@ -681,10 +658,9 @@ function handleCenterPrint() {
 
 /**
  * Handles chat payloads and appends them to the client chat log.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleChatMessage(ctx) {
-  ctx.CL.AppendChatMessage(MSG.ReadString(), MSG.ReadString(), MSG.ReadByte() === 1);
+function handleChatMessage() {
+  CL.AppendChatMessage(MSG.ReadString(), MSG.ReadString(), MSG.ReadByte() === 1);
 }
 
 /**
@@ -703,56 +679,50 @@ function handleDamage() {
 
 /**
  * Parses svc_serverdata and reinitialises renderer state.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleServerData(ctx) {
-  parseServerData(ctx.CL);
+function handleServerData() {
+  parseServerData();
   SCR.recalc_refdef = true;
 }
 
 /**
  * Processes map transitions and resets client signon state.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleChangeLevel(ctx) {
+function handleChangeLevel() {
   const mapname = MSG.ReadString();
-  ctx.CL.SetConnectingStep(5, 'Changing level to ' + mapname);
-  ctx.CL.cls.signon = 0;
-  ctx.CL.cls.changelevel = true;
+  CL.SetConnectingStep(5, 'Changing level to ' + mapname);
+  CL.cls.signon = 0;
+  CL.cls.changelevel = true;
 }
 
 /**
  * Updates the authoritative view angles of the local player.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSetAngle(ctx) {
-  ctx.CL.state.viewangles.set(MSG.ReadAngleVector());
+function handleSetAngle() {
+  CL.state.viewangles.set(MSG.ReadAngleVector());
 }
 
 /**
  * Selects the entity the client should render from.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSetView(ctx) {
-  ctx.CL.state.viewentity = MSG.ReadShort();
+function handleSetView() {
+  CL.state.viewentity = MSG.ReadShort();
 }
 
 /**
  * Updates lightstyle definitions used for dynamic lighting.
- * @param {ServerCommandContext} ctx Shared handler context.
  * @returns {void}
  */
-function handleLightStyle(ctx) {
-  parseLightstylePacket(ctx.CL);
+function handleLightStyle() {
+  parseLightstylePacket();
 }
 
 /**
  * Triggers spatialised sounds for the given entity/channel tuple.
- * @param {ServerCommandContext} ctx Shared handler context.
  * @returns {void}
  */
-function handleSound(ctx) {
-  parseStartSoundPacket(ctx.CL);
+function handleSound() {
+  parseStartSoundPacket();
 }
 
 /**
@@ -765,67 +735,62 @@ function handleStopSound() {
 
 /**
  * Updates the server-specified sound precache entry.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleLoadSound(ctx) {
+function handleLoadSound() {
   const index = MSG.ReadByte();
-  ctx.CL.state.sound_precache[index] = S.PrecacheSound(MSG.ReadString());
-  Con.DPrint(`CL.ParseServerMessage: load sound "${ctx.CL.state.sound_precache[index].name}" (${ctx.CL.state.sound_precache[index].state}) on slot ${index}\n`);
+  CL.state.sound_precache[index] = S.PrecacheSound(MSG.ReadString());
+  Con.DPrint(`CL.ParseServerMessage: load sound "${CL.state.sound_precache[index].name}" (${CL.state.sound_precache[index].state}) on slot ${index}\n`);
 }
 
 /**
  * Mirrors scoreboard name updates and broadcasts change events.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleUpdateName(ctx) {
+function handleUpdateName() {
   const slot = MSG.ReadByte();
-  if (slot >= ctx.CL.state.maxclients) {
+  if (slot >= CL.state.maxclients) {
     throw new HostError('CL.ParseServerMessage: svc_updatename > MAX_SCOREBOARD');
   }
   const newName = MSG.ReadString();
-  if (ctx.CL.state.scores[slot].name !== '' && newName !== '' && newName !== ctx.CL.state.scores[slot].name) {
-    Con.Print(`${ctx.CL.state.scores[slot].name} renamed to ${newName}\n`);
-    eventBus.publish('client.players.name-changed', slot, ctx.CL.state.scores[slot].name, newName);
+  if (CL.state.scores[slot].name !== '' && newName !== '' && newName !== CL.state.scores[slot].name) {
+    Con.Print(`${CL.state.scores[slot].name} renamed to ${newName}\n`);
+    eventBus.publish('client.players.name-changed', slot, CL.state.scores[slot].name, newName);
   }
-  ctx.CL.state.scores[slot].name = newName;
+  CL.state.scores[slot].name = newName;
 }
 
 /**
  * Updates frag counts for a player and notifies listeners.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleUpdateFrags(ctx) {
+function handleUpdateFrags() {
   const slot = MSG.ReadByte();
-  if (slot >= ctx.CL.state.maxclients) {
+  if (slot >= CL.state.maxclients) {
     throw new HostError('CL.ParseServerMessage: svc_updatefrags > MAX_SCOREBOARD');
   }
-  ctx.CL.state.scores[slot].frags = MSG.ReadShort();
-  eventBus.publish('client.players.frags-updated', slot, ctx.CL.state.scores[slot].frags);
+  CL.state.scores[slot].frags = MSG.ReadShort();
+  eventBus.publish('client.players.frags-updated', slot, CL.state.scores[slot].frags);
 }
 
 /**
  * Updates color indices for a player and notifies listeners.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleUpdateColors(ctx) {
+function handleUpdateColors() {
   const slot = MSG.ReadByte();
-  if (slot >= ctx.CL.state.maxclients) {
+  if (slot >= CL.state.maxclients) {
     throw new HostError('CL.ParseServerMessage: svc_updatecolors > MAX_SCOREBOARD');
   }
-  ctx.CL.state.scores[slot].colors = MSG.ReadByte();
-  eventBus.publish('client.players.colors-updated', slot, ctx.CL.state.scores[slot].colors);
+  CL.state.scores[slot].colors = MSG.ReadByte();
+  eventBus.publish('client.players.colors-updated', slot, CL.state.scores[slot].colors);
 }
 
 /**
  * Updates ping information for a player.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleUpdatePings(ctx) {
+function handleUpdatePings() {
   const slot = MSG.ReadByte();
-  if (slot >= ctx.CL.state.maxclients) {
+  if (slot >= CL.state.maxclients) {
     throw new HostError('CL.ParseServerMessage: svc_updatepings > MAX_SCOREBOARD');
   }
-  ctx.CL.state.scores[slot].ping = MSG.ReadShort() / 10;
+  CL.state.scores[slot].ping = MSG.ReadShort() / 10;
 }
 
 /**
@@ -844,27 +809,24 @@ function handleSpawnBaseline() {
 
 /**
  * Adds a static entity to the scene.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSpawnStatic(ctx) {
-  parseStaticEntity(ctx.CL);
+function handleSpawnStatic() {
+  parseStaticEntity();
 }
 
 /**
  * Parses temporary entities such as explosions and beam effects.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleTempEntity(ctx) {
-  parseTemporaryEntity(ctx.CL);
+function handleTempEntity() {
+  parseTemporaryEntity();
 }
 
 /**
  * Toggles the paused state and publishes pause events.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSetPause(ctx) {
-  ctx.CL.state.paused = MSG.ReadByte() !== 0;
-  if (ctx.CL.state.paused) {
+function handleSetPause() {
+  CL.state.paused = MSG.ReadByte() !== 0;
+  if (CL.state.paused) {
     eventBus.publish('client.paused');
   } else {
     eventBus.publish('client.unpaused');
@@ -873,98 +835,89 @@ function handleSetPause(ctx) {
 
 /**
  * Tracks the server signon phase and advances the handshake.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSignonNum(ctx) {
+function handleSignonNum() {
   const signon = MSG.ReadByte();
-  if (signon <= ctx.CL.cls.signon) {
-    throw new HostError('Received signon ' + signon + ' when at ' + ctx.CL.cls.signon);
+  if (signon <= CL.cls.signon) {
+    throw new HostError('Received signon ' + signon + ' when at ' + CL.cls.signon);
   }
   console.assert(signon >= 0 && signon <= 4, 'signon must be in range 0-4');
-  ctx.CL.cls.signon = /** @type {0|1|2|3|4} */ (signon);
+  CL.cls.signon = /** @type {0|1|2|3|4} */ (signon);
   Con.DPrint(`Received signon ${signon}\n`);
-  ctx.CL.SignonReply();
+  CL.SignonReply();
 }
 
 /**
  * Increments the monster kill statistic.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleKilledMonster(ctx) {
+function handleKilledMonster() {
   console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'killedmonster requires CAP_LEGACY_UPDATESTAT');
-  ctx.CL.state.stats[Def.stat.monsters]++;
+  CL.state.stats[Def.stat.monsters]++;
 }
 
 /**
  * Increments the secret discovery statistic.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleFoundSecret(ctx) {
+function handleFoundSecret() {
   console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'foundsecret requires CAP_LEGACY_UPDATESTAT');
-  ctx.CL.state.stats[Def.stat.secrets]++;
+  CL.state.stats[Def.stat.secrets]++;
 }
 
 /**
  * Updates an individual HUD/statistic entry.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleUpdateStat(ctx) {
+function handleUpdateStat() {
   console.assert(SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT), 'updatestat requires CAP_LEGACY_UPDATESTAT');
   const index = MSG.ReadByte();
-  console.assert(index >= 0 && index < ctx.CL.state.stats.length, 'updatestat must be in range');
-  ctx.CL.state.stats[index] = MSG.ReadLong();
+  console.assert(index >= 0 && index < CL.state.stats.length, 'updatestat must be in range');
+  CL.state.stats[index] = MSG.ReadLong();
 }
 
 /**
  * Queues a static ambient sound.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleSpawnStaticSound(ctx) {
-  parseStaticSound(ctx.CL);
+function handleSpawnStaticSound() {
+  parseStaticSound();
 }
 
 /**
  * Starts or overrides the current CD track.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleCdTrack(ctx) {
-  ctx.CL.state.cdtrack = MSG.ReadByte();
+function handleCdTrack() {
+  CL.state.cdtrack = MSG.ReadByte();
   MSG.ReadByte();
-  if (((ctx.CL.cls.demoplayback === true) || (ctx.CL.cls.demorecording === true)) && (ctx.CL.cls.forcetrack !== -1)) {
-    eventBus.publish('client.cdtrack', ctx.CL.cls.forcetrack);
+  if (((CL.cls.demoplayback === true) || (CL.cls.demorecording === true)) && (CL.cls.forcetrack !== -1)) {
+    eventBus.publish('client.cdtrack', CL.cls.forcetrack);
   } else {
-    eventBus.publish('client.cdtrack', ctx.CL.state.cdtrack);
+    eventBus.publish('client.cdtrack', CL.state.cdtrack);
   }
 }
 
 /**
  * Enters the intermission state.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleIntermission(ctx) {
-  ctx.CL.state.intermission = 1;
-  ctx.CL.state.completed_time = ctx.CL.state.time;
+function handleIntermission() {
+  CL.state.intermission = 1;
+  CL.state.completed_time = CL.state.time;
   SCR.recalc_refdef = true;
 }
 
 /**
  * Displays the finale text block.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleFinale(ctx) {
-  ctx.CL.state.intermission = 2;
-  ctx.CL.state.completed_time = ctx.CL.state.time;
+function handleFinale() {
+  CL.state.intermission = 2;
+  CL.state.completed_time = CL.state.time;
   SCR.recalc_refdef = true;
   SCR.CenterPrint(MSG.ReadString());
 }
 
 /**
  * Plays a cutscene by showing a center print.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleCutscene(ctx) {
-  ctx.CL.state.intermission = 3;
-  ctx.CL.state.completed_time = ctx.CL.state.time;
+function handleCutscene() {
+  CL.state.intermission = 3;
+  CL.state.completed_time = CL.state.time;
   SCR.recalc_refdef = true;
   SCR.CenterPrint(MSG.ReadString());
 }
@@ -978,47 +931,41 @@ function handleSellScreen() {
 
 /**
  * Updates client-only movement variables such as gravity.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handlePmoveVars(ctx) {
-  parsePmovevars(ctx.CL);
+function handlePmoveVars() {
+  parsePmovevars();
 }
 
 /**
  * Updates player-specific interpolation data.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handlePlayerInfo(ctx) {
-  ctx.parser.parsePlayer();
+function handlePlayerInfo() {
+  CL.state.clientMessages.parsePlayer();
 }
 
 /**
  * Applies delta compressed packet entities.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleDeltaPacketEntities(ctx) {
-  ctx.updateEntities();
-  parsePacketEntities(ctx.CL);
+function handleDeltaPacketEntities() {
+  entitiesReceived++;
+  parsePacketEntities();
 }
 
 /**
  * Applies server-sent configuration variables.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleCvar(ctx) {
-  parseServerCvars(ctx.CL);
+function handleCvar() {
+  parseServerCvars();
 }
 
 /**
  * Passes custom client events to the game API.
- * @param {ServerCommandContext} ctx Shared handler context.
  */
-function handleClientEvent(ctx) {
-  console.assert(ctx.CL.state.gameAPI !== null, 'ClientGameAPI required');
-  ctx.CL.state.clientMessages.parseClientEvent();
+function handleClientEvent() {
+  console.assert(CL.state.gameAPI !== null, 'ClientGameAPI required');
+  CL.state.clientMessages.parseClientEvent();
 }
 
-/** @type {Map<number, ServerCommandHandler>} */
 const serverCommandHandlers = new Map([
   [Protocol.svc.nop, handleNop],
   [Protocol.svc.time, handleTime],
@@ -1066,9 +1013,8 @@ const serverCommandHandlers = new Map([
 
 /**
  * Dispatches one in-flight server message through dedicated opcode handlers.
- * @param {ClientLayer} CL Client singleton coordinating shared state.
  */
-export function parseServerMessage(CL) {
+export function parseServerMessage() {
   if (CL.shownet.value === 1) {
     Con.Print(NET.message.cursize + ' ');
   } else if (CL.shownet.value === 2) {
@@ -1081,14 +1027,7 @@ export function parseServerMessage(CL) {
     return;
   }
 
-  const parser = CL.state.clientMessages;
-  let entitiesReceived = 0;
-  /**
-   * Tracks how many entity deltas were parsed in this network frame.
-   */
-  const updateEntities = () => {
-    entitiesReceived++;
-  };
+  entitiesReceived = 0;
 
   if (CL.connection.processingServerDataState === 3) {
     CL.connection.processingServerDataState = 0;
@@ -1122,7 +1061,7 @@ export function parseServerMessage(CL) {
     const handler = serverCommandHandlers.get(cmd);
 
     if (handler) {
-      handler({ CL, parser, updateEntities });
+      handler();
       continue;
     }
 

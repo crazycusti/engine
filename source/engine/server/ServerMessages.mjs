@@ -125,7 +125,7 @@ export class ServerMessages {
 
     MSG.WriteByte(message, SV.svs.maxclients);
     MSG.WriteString(message, SV.server.edicts[0].entity.message || SV.server.mapname);
-    SV.pmove.movevars.sendToClient(message);
+    // SV.pmove.movevars.sendToClient(message);
     for (let i = 1; i < SV.server.model_precache.length; i++) {
       MSG.WriteString(message, SV.server.model_precache[i]);
     }

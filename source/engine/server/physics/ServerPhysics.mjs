@@ -158,7 +158,7 @@ export class ServerPhysics {
    * Performs sliding movement with up to four collision planes.
    * @param {import('../Edict.mjs').ServerEdict} ent entity to move
    * @param {number} time frame time slice
-   * @returns {{blocked: number, steptrace: import('../ServerCollision.mjs').Trace | null}} result with blocked flags and optional wall trace
+   * @returns {{blocked: number, steptrace: import('./ServerCollision.mjs').Trace | null}} result with blocked flags and optional wall trace
    */
   flyMove(ent, time) {
     const planes = [];
@@ -281,7 +281,7 @@ export class ServerPhysics {
    * Pushes an entity by the provided vector and performs collision handling.
    * @param {import('../Edict.mjs').ServerEdict} ent entity to move
    * @param {Vector} pushVector movement vector
-   * @returns {import('../ServerCollision.mjs').Trace} resulting trace
+   * @returns {import('./ServerCollision.mjs').Trace} resulting trace
    */
   pushEntity(ent, pushVector) {
     const end = ent.entity.origin.copy().add(pushVector);

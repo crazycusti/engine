@@ -1,11 +1,11 @@
-import Vector from '../../shared/Vector.mjs';
-import * as Defs from '../../shared/Defs.mjs';
-import { DIST_EPSILON } from '../common/Pmove.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import Vector from '../../../shared/Vector.mjs';
+import * as Defs from '../../../shared/Defs.mjs';
+import { DIST_EPSILON } from '../../common/Pmove.mjs';
+import { eventBus, registry } from '../../registry.mjs';
 
 let { Con, SV } = registry;
 
-/** @typedef {import('./Client.mjs').ServerEdict} ServerEdict */
+/** @typedef {import('../Client.mjs').ServerEdict} ServerEdict */
 
 eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;

@@ -1,8 +1,8 @@
-import Vector from '../../shared/Vector.mjs';
-import * as Defs from '../../shared/Defs.mjs';
-import { STEPSIZE } from '../common/Pmove.mjs';
-import { ServerEdict } from './Edict.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import Vector from '../../../shared/Vector.mjs';
+import * as Defs from '../../../shared/Defs.mjs';
+import { STEPSIZE } from '../../common/Pmove.mjs';
+import { ServerEdict } from '../Edict.mjs';
+import { eventBus, registry } from '../../registry.mjs';
 
 let { SV } = registry;
 
@@ -21,7 +21,7 @@ export class ServerMovement {
    * Checks if an entity has solid ground beneath all four bottom corners.
    * If all corners are solid, returns true immediately. Otherwise performs
    * a more detailed trace check to validate the ground surface.
-   * @param {import('./Edict.mjs').ServerEdict} ent entity to check
+   * @param {import('../Edict.mjs').ServerEdict} ent entity to check
    * @returns {boolean} true if entity has solid ground beneath it
    */
   checkBottom(ent) {

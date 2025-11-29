@@ -1,7 +1,5 @@
 import Cvar from '../common/Cvar.mjs';
 import { MoveVars } from '../common/Pmove.mjs';
-import { ServerPmove } from './ServerPmove.mjs';
-import { PlayerMover } from './PlayerMover.mjs';
 import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -15,9 +13,9 @@ import { Navigation } from './Navigation.mjs';
 import { ServerPhysics } from './physics/ServerPhysics.mjs';
 import { ServerClientPhysics } from './physics/ServerClientPhysics.mjs';
 import { ServerMessages } from './ServerMessages.mjs';
-import { ServerMovement } from './ServerMovement.mjs';
-import { ServerArea } from './ServerArea.mjs';
-import { ServerCollision } from './ServerCollision.mjs';
+import { ServerMovement } from './physics/ServerMovement.mjs';
+import { ServerArea } from './physics/ServerArea.mjs';
+import { ServerCollision } from './physics/ServerCollision.mjs';
 
 let { COM, Con, Host, Mod, NET, PR } = registry;
 
@@ -178,12 +176,6 @@ export default class SV {
   static area = new ServerArea();
   static collision = new ServerCollision();
 
-  // Player movement
-  /** @type {ServerPmove} */
-  static pmove = null;
-  /** @type {PlayerMover} */
-  static playerMover = null;
-
   // Entity state class
   static EntityState = ServerEntityState;
 
@@ -212,9 +204,7 @@ export default class SV {
   // ===== STATIC METHODS =====
 
   static InitPmove() {
-    SV.pmove = new ServerPmove();
-    SV.pmove.movevars = new PlayerMoveCvars();
-    SV.playerMover = new PlayerMover(SV.pmove);
+    // TODO: pmove
   }
 
   static Init() {
@@ -751,8 +741,6 @@ export default class SV {
       SV.server.active = false;
       return false;
     }
-
-    SV.pmove.setWorldmodel(SV.server.worldmodel);
 
     Con.DPrint('World model loaded\n');
 

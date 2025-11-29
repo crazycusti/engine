@@ -11,7 +11,7 @@ try {
 /**
  * Loads a game module by directory name
  * @param {string} gameDir - The game directory name (e.g., 'id1', etc.)
- * @returns {Promise<any>} The loaded game module
+ * @returns {Promise<import("./GameLoader").GameModuleInterface>} The loaded game module
  */
 export async function loadGameModule(gameDir) {
   const modulePath = `../../game/${gameDir}/main.mjs`;

@@ -141,11 +141,11 @@ export default class CL {
   }
 
   static ReadFromServer() {
-    CL.connection.readFromServer(CL);
+    CL.connection.readFromServer();
   }
 
   static ParseServerMessage() {
-    CL.connection.parseServerMessage(CL);
+    CL.connection.parseServerMessage();
   }
 
   static PrintLastServerMessages() {

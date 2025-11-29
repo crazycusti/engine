@@ -1,6 +1,6 @@
-import Vector from '../../shared/Vector.mjs';
-import * as Defs from '../../shared/Defs.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import Vector from '../../../shared/Vector.mjs';
+import * as Defs from '../../../shared/Defs.mjs';
+import { eventBus, registry } from '../../registry.mjs';
 
 let { Mod, SV } = registry;
 
@@ -53,7 +53,7 @@ export class ServerArea {
 
   /**
    * Resolves the hull that should be used when clipping against a given entity.
-   * @param {import('./Edict.mjs').ServerEdict} ent edict to create a hull for
+   * @param {import('../Edict.mjs').ServerEdict} ent edict to create a hull for
    * @param {Vector} mins minimum extents of the moving object
    * @param {Vector} maxs maximum extents of the moving object
    * @param {Vector} out_offset receives the hull offset relative to entity origin
@@ -137,7 +137,7 @@ export class ServerArea {
 
   /**
    * Removes an edict from any area lists it is currently linked to.
-   * @param {import('./Edict.mjs').ServerEdict} ent edict to unlink
+   * @param {import('../Edict.mjs').ServerEdict} ent edict to unlink
    */
   unlinkEdict(ent) {
     if (ent.area.prev) {
@@ -151,7 +151,7 @@ export class ServerArea {
 
   /**
    * Iterates all trigger edicts that potentially overlap the provided entity.
-   * @param {import('./Edict.mjs').ServerEdict} ent subject edict
+   * @param {import('../Edict.mjs').ServerEdict} ent subject edict
    * @param {*} node current area node
    */
   touchLinks(ent, node) {
@@ -193,7 +193,7 @@ export class ServerArea {
 
   /**
    * Populates the leaf list for an entity by traversing the BSP tree.
-   * @param {import('./Edict.mjs').ServerEdict} ent subject edict
+   * @param {import('../Edict.mjs').ServerEdict} ent subject edict
    * @param {*} node current BSP node
    */
   findTouchedLeafs(ent, node) {
@@ -223,7 +223,7 @@ export class ServerArea {
 
   /**
    * Inserts an edict into the area lists and optionally processes trigger touches.
-   * @param {import('./Edict.mjs').ServerEdict} ent edict to link
+   * @param {import('../Edict.mjs').ServerEdict} ent edict to link
    * @param {boolean} touchTriggers whether triggers should be evaluated
    */
   linkEdict(ent, touchTriggers = false) {

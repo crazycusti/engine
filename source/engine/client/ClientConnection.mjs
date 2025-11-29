@@ -10,9 +10,10 @@ import * as Def from '../common/Def.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
 import { parseServerMessage as parseServerCommandMessage } from './ClientServerCommandHandlers.mjs';
 
-let { Con, Host, IN, Mod, NET, SCR, S, SV } = registry;
+let { CL, Con, Host, IN, Mod, NET, SCR, S, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
   Con = registry.Con;
   Host = registry.Host;
   IN = registry.IN;
@@ -268,7 +269,7 @@ export default class ClientConnection {
     eventBus.publish('client.signon', this.cls.signon);
   }
 
-  readFromServer(CL) {
+  readFromServer() {
     while (true) {
       if (this.processingServerDataState === 1) {
         return;
@@ -288,7 +289,7 @@ export default class ClientConnection {
       }
 
       this.state.last_received_message = Host.realtime;
-      this.parseServerMessage(CL);
+      this.parseServerMessage();
       if (this.cls.state !== Def.clientConnectionState.connected) {
         break;
       }
@@ -299,8 +300,8 @@ export default class ClientConnection {
     }
   }
 
-  parseServerMessage(CL) {
-    parseServerCommandMessage(CL);
+  parseServerMessage() {
+    parseServerCommandMessage();
   }
 
   printLastServerMessages() {
