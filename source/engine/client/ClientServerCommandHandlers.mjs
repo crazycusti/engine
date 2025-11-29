@@ -885,7 +885,8 @@ function handleSpawnStaticSound() {
  */
 function handleCdTrack() {
   CL.state.cdtrack = MSG.ReadByte();
-  MSG.ReadByte();
+  MSG.ReadByte(); // unused (usually always the same as cdtrack)
+
   if (((CL.cls.demoplayback === true) || (CL.cls.demorecording === true)) && (CL.cls.forcetrack !== -1)) {
     eventBus.publish('client.cdtrack', CL.cls.forcetrack);
   } else {

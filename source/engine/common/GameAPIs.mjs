@@ -317,7 +317,11 @@ export class ServerEngineAPI extends CommonEngineAPI {
     const edicts = [];
 
     for (const ent of this.#FindInAreaNode(SV.areanodes[0], mins, maxs)) {
-      if (ent.num === 0 || ent.isFree() || ent.entity.solid === solid.SOLID_NOT) {
+      if (ent.num === 0 || ent.isFree()) {
+        continue;
+      }
+
+      if (ent.entity.solid === solid.SOLID_NOT) {
         continue;
       }
 

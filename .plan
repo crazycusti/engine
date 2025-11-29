@@ -125,6 +125,7 @@ Grouped by sections and then sorted by priority (more or less).
 - cleaned up server code after trying to spin it off into smaller chunks
 - cleaned up client code as well
 - cleaned up sound code, since it was the first thing I worked on almost a year ago
+- need to focus on game code some time, added a bunch of improvements today
 
 ### 2025-11-24
 

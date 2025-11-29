@@ -158,7 +158,9 @@ export class ServerMessages {
 
     // only play cd track automatically if set in worldspawn
     if (typeof cdtrack === 'number') {
-      ServerEngineAPI.PlayTrack(cdtrack);
+      MSG.WriteByte(message, Protocol.svc.cdtrack);
+      MSG.WriteByte(message, cdtrack);
+      MSG.WriteByte(message, 0); // unused
     }
 
     MSG.WriteByte(message, Protocol.svc.setview);
