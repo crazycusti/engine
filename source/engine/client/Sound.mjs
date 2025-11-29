@@ -91,8 +91,8 @@ class SoundBaseChannel {
     this.pos = 0.0;
 
     this.master_vol = 0.0;
-    this.left_vol = 0.0;
-    this.right_vol = 0.0;
+    this.channel_vol = 0.0;
+    this.pan = 0.0;
 
     this._playFailedTime = null;
     this._state = SoundBaseChannel.STATE.NOT_READY;
@@ -148,24 +148,24 @@ class SoundBaseChannel {
   }
 
   /**
-   * (Re)computes left_vol and right_vol for a channel based on the listener position/orientation.
+   * (Re)computes pan and channel_vol for a channel based on the listener position/orientation.
    * @returns {this} the channel
    */
   spatialize() {
-    // If channel is from the player's own gun, full volume in both ears
+    // local sound goes full volume and center pan
     if (this.entnum === CL.state.viewentity) {
-      this.left_vol = this.master_vol;
-      this.right_vol = this.master_vol;
+      this.pan = 0.0;
+      this.channel_vol = this.master_vol;
       this.updateVol();
       return this;
     }
 
     // Calculate distance from the listener
-    const source = [
+    const source = new Vector(
       this.origin[0] - this._S._listenerOrigin[0],
       this.origin[1] - this._S._listenerOrigin[1],
       this.origin[2] - this._S._listenerOrigin[2],
-    ];
+    );
 
     let dist = Math.hypot(source[0], source[1], source[2]);
     if (dist !== 0.0) {
@@ -175,19 +175,14 @@ class SoundBaseChannel {
     }
     dist *= this.dist_mult;
 
-    // Dot product with the listener's right vector
-    const dot = (
-      this._S._listenerRight[0] * source[0] +
-      this._S._listenerRight[1] * source[1] +
-      this._S._listenerRight[2] * source[2]
-    );
+    // Dot product with the listener’s right vector
+    const dot = source.dot(this._S._listenerRight);
 
     const adjustedVolume = (1.0 - dist);
-    const left = adjustedVolume * (1.0 - dot);
-    const right = adjustedVolume * (1.0 + dot);
 
-    this.right_vol = Math.max(0, this.master_vol * right);
-    this.left_vol = Math.max(0, this.master_vol * left);
+    this.pan = dot;
+    this.channel_vol = Math.max(0, adjustedVolume * this.master_vol);
+
     this.updateVol();
 
     return this;
@@ -202,8 +197,8 @@ class AudioContextChannel extends SoundBaseChannel {
   reset() {
     super.reset();
 
-  this._nodes = null;
-  this._startTime = null; // used for AudioContextChannel to track when playback started
+    this._nodes = null;
+    this._startTime = null; // used for AudioContextChannel to track when playback started
 
     return this;
   }
@@ -218,11 +213,8 @@ class AudioContextChannel extends SoundBaseChannel {
 
     const nodes = {
       source: this._S._context.createBufferSource(),
-      merger1: this._S._context.createChannelMerger(2),
-      splitter: this._S._context.createChannelSplitter(2),
-      gain0: this._S._context.createGain(),
-      gain1: this._S._context.createGain(),
-      merger2: this._S._context.createChannelMerger(2),
+      panner: this._S._context.createStereoPanner(),
+      gain: this._S._context.createGain(),
       effectWet: this._S._context.createGain(),
       effectDry: this._S._context.createGain(),
     };
@@ -236,20 +228,12 @@ class AudioContextChannel extends SoundBaseChannel {
       nodes.source.loopEnd = sc.data.duration;
     }
 
-    // Duplicate into left & right channels
-    nodes.source.connect(nodes.merger1);
-    nodes.source.connect(nodes.merger1, 0, 1);
-    nodes.merger1.connect(nodes.splitter);
+    // Chain: Source -> Panner -> Gain -> (Wet/Dry) -> Destination
+    nodes.source.connect(nodes.panner);
+    nodes.panner.connect(nodes.gain);
 
-    // Gains
-    nodes.splitter.connect(nodes.gain0, 0);
-    nodes.splitter.connect(nodes.gain1, 1);
-
-    // Merge back to stereo
-    nodes.gain0.connect(nodes.merger2, 0, 0);
-    nodes.gain1.connect(nodes.merger2, 0, 1);
-    nodes.merger2.connect(nodes.effectDry);
-    nodes.merger2.connect(nodes.effectWet);
+    nodes.gain.connect(nodes.effectDry);
+    nodes.gain.connect(nodes.effectWet);
 
     // Connect to the context destination
     nodes.effectDry.connect(this._S._context.destination);
@@ -277,10 +261,8 @@ class AudioContextChannel extends SoundBaseChannel {
       return this;
     }
 
-    const leftVol = Math.min(this.left_vol, 1.0) * this._S.volume.value;
-    const rightVol = Math.min(this.right_vol, 1.0) * this._S.volume.value;
-    this._nodes.gain0.gain.value = leftVol;
-    this._nodes.gain1.gain.value = rightVol;
+    this._nodes.panner.pan.value = Math.min(1, Math.max(-1, this.pan));
+    this._nodes.gain.gain.value = this.channel_vol * this._S.volume.value;
 
     if (this._S._listenerUnderwater && this.entchannel >= 0) {
       this._nodes.effectWet.gain.value = 1.0;
@@ -348,20 +330,16 @@ class AudioContextChannel extends SoundBaseChannel {
       this.pos += elapsed;
 
       // If looped, wrap into loop region
-      try {
-        const sc = this.sfx && this.sfx.cache;
-        if (sc && sc.data && sc.loopstart !== null) {
-          const duration = sc.data.duration;
-          const loopStart = sc.loopstart;
-          const loopLen = duration - loopStart;
-          if (loopLen > 0) {
-            if (this.pos >= duration) {
-              this.pos = loopStart + ((this.pos - loopStart) % loopLen);
-            }
+      const sc = this.sfx && this.sfx.cache;
+      if (sc && sc.data && sc.loopstart !== null) {
+        const duration = sc.data.duration;
+        const loopStart = sc.loopstart;
+        const loopLen = duration - loopStart;
+        if (loopLen > 0) {
+          if (this.pos >= duration) {
+            this.pos = loopStart + ((this.pos - loopStart) % loopLen);
           }
         }
-      } catch {
-        // ignore
       }
     }
 
@@ -410,139 +388,6 @@ class AudioContextChannel extends SoundBaseChannel {
     }
 
     this.start();
-    return this;
-  }
-}
-
-class AudioElementChannel extends SoundBaseChannel {
-  // eslint-disable-next-line @typescript-eslint/require-await
-  static async decodeAudioData(rawData) {
-    return new Audio(`data:audio/wav;base64,${Q.btoa(new Uint8Array(rawData))}`);
-  }
-
-  loadData() {
-    if (!this._S._started || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
-      this._state = SoundBaseChannel.STATE.NOT_READY;
-      return this;
-    }
-
-    this._audio = this.sfx.cache.data.cloneNode();
-    this._audio.pause();
-
-    this._audio.loop = this.sfx.cache.loopstart !== null;
-
-    this.updateVol();
-
-    this._state = SoundBaseChannel.STATE.STOPPED;
-
-    return this;
-  }
-
-  updateVol() {
-    if (!this._audio) {
-      return this;
-    }
-
-    const volume = Math.min((this.left_vol + this.right_vol) * 0.5, 1.0);
-    this._audio.volume = volume * this._S.volume.value;
-
-    return this;
-  }
-
-  updateLoop() {
-    if (!this.sfx || !this.sfx.cache) {
-      return this;
-    }
-
-    try {
-      this._audio.currentTime = this.sfx.cache.loopstart;
-      this.end = Host.realtime + this.sfx.cache.length - (this.sfx.cache.loopstart || 0);
-    } catch (err) {
-      Con.DPrint(`AudioElementChannel.updateLoop: failed to set currentTime, ${err.message}`);
-      this.end = Host.realtime;
-    }
-
-    return this;
-  }
-
-  stop() {
-    if (this._state !== SoundBaseChannel.STATE.PLAYING) {
-      return this;
-    }
-
-    this._audio.pause();
-
-    this._state = SoundBaseChannel.STATE.STOPPED;
-    return this;
-  }
-
-  pause() {
-    if (this._state !== SoundBaseChannel.STATE.PLAYING) {
-      return this;
-    }
-
-    try {
-      this.pos = this._audio.currentTime;
-    } catch {
-      // ignore
-    }
-
-    this._audio.pause();
-    this._state = SoundBaseChannel.STATE.STOPPED;
-    return this;
-  }
-
-  resume() {
-    if (this._state === SoundBaseChannel.STATE.PLAYING) {
-      return this;
-    }
-
-    if (!this._audio) {
-      this.loadData();
-    }
-
-    if (!this._audio || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
-      return this;
-    }
-
-    // If not looped and position is past length, nothing to resume
-    try {
-      const sc = this.sfx.cache;
-      if (sc && sc.length && sc.loopstart === null && this.pos >= sc.length) {
-        return this;
-      }
-    } catch {
-      // ignore
-    }
-
-    this._audio.currentTime = this.pos;
-    this._audio.play().catch((err) => {
-      Con.Print(`AudioElementChannel.resume: failed to resume audio, ${err.message}\n`);
-    });
-
-    this._state = SoundBaseChannel.STATE.PLAYING;
-    return this;
-  }
-
-  start() {
-    if (this._state !== SoundBaseChannel.STATE.STOPPED) {
-      return this;
-    }
-
-    // If we tried playing too recently, wait a bit
-    if (Host.realtime - (this._playFailedTime || 0) < 3) {
-      return this;
-    }
-
-    this._audio.currentTime = this.pos;
-    this._audio.play().catch((e) => {
-      Con.Print(`AudioElementChannel.start: failed to play audio, ${e.message}, retrying later\n`);
-      this._playFailedTime = Host.realtime;
-    }).then(() => {
-      this._playFailedTime = null;
-    });
-
-    this._state = SoundBaseChannel.STATE.PLAYING;
     return this;
   }
 }
@@ -660,13 +505,15 @@ const S = {
       this._channelDriver = AudioContextChannel;
 
       this._underwaterFilter = this._MakeUnderwaterChain();
+      this._started = true;
     } catch (err) {
-      Con.Print(`S.Init: failed to initialize AudioContextChannel (${err.message}), falling back to AudioElementChannel.\n`);
-      this._context = null;
-      this._channelDriver = AudioElementChannel;
+      Con.Print(`S.Init: failed to initialize AudioContext (${err.message}). Sound disabled.\n`);
+      this._started = false;
     }
 
-    this._started = true;
+    if (!this._started) {
+      return;
+    }
 
     // Initialize ambient channels
     for (const ambientSfx of ['water1', 'wind2']) {
@@ -846,152 +693,25 @@ const S = {
       return false;
     }
 
-    // Minimal parsing of a WAV
-    let view = new DataView(data);
-    // Minimal WAV sanity check - we need at least a RIFF header and a WAVE marker
-    if (data.byteLength < 12) {
-      Con.Print(`S.LoadSound: ${sfx.name} is too small to be a valid WAV file (size=${data.byteLength})\n`);
-      sfx.state = SFX.STATE.FAILED;
-      return false;
-    }
-    // Quick check for 'RIFF' & 'WAVE'
-    if (view.getUint32(0, true) !== 0x46464952 || view.getUint32(8, true) !== 0x45564157) {
-      Con.Print(`S.LoadSound: Missing RIFF/WAVE chunks on ${sfx.name}\n`);
+    // Parse loop info from WAV chunks
+    const loopInfo = this._ParseWavLoopInfo(data, sfx.name);
+
+    try {
+      sc.data = await this._channelDriver.decodeAudioData(data);
+    } catch (e) {
+      Con.PrintError(`S.LoadSound: decodeAudioData failed for ${sfx.name}: ${e.message}\n`);
       sfx.state = SFX.STATE.FAILED;
       return false;
     }
 
-    let p = 12;
-    let fmt = null;
-    let dataOfs = null;
-    let dataLen = null;
-    let loopstart = null;
-    let cueFound = false;
-    let totalSamples = null;
+    sc.length = sc.data.duration;
+    sc.size = data.byteLength;
 
-    // Only iterate while a full chunk header (8 bytes) is present
-    while (p + 8 <= data.byteLength) {
-      const chunkId = view.getUint32(p, true);
-      const chunkSize = view.getUint32(p + 4, true);
-
-      // Compute how many bytes remain after the header, clamp if chunk claims more
-      const remain = data.byteLength - (p + 8);
-      let actualChunkSize = chunkSize;
-      if (chunkSize > remain) {
-        // Instead of failing outright, accept a malformed size and continue parsing
-        Con.PrintWarning(`S.LoadSound: ${sfx.name} claims chunk at ${p} has ${chunkSize} bytes but only ${remain} available - clamping\n`);
-        actualChunkSize = remain;
-      }
-      switch (chunkId) {
-          case 0x20746d66: // 'fmt '
-            // fmt chunk must be at least 16 bytes for the fields we read
-            if (actualChunkSize < 16) {
-              Con.PrintError(`S.LoadSound: ${sfx.name} has invalid fmt chunk (size ${chunkSize})\n`);
-              sfx.state = SFX.STATE.FAILED;
-              return false;
-            }
-          if (view.getInt16(p + 8, true) !== 1) {
-            Con.PrintError(`S.LoadSound: ${sfx.name} is not in Microsoft PCM format\n`);
-            sfx.state = SFX.STATE.FAILED;
-            return false;
-          }
-          fmt = {
-            channels: view.getUint16(p + 10, true),
-            samplesPerSec: view.getUint32(p + 12, true),
-            avgBytesPerSec: view.getUint32(p + 16, true),
-            blockAlign: view.getUint16(p + 20, true),
-            bitsPerSample: view.getUint16(p + 22, true),
-          };
-          break;
-          case 0x61746164: // 'data'
-          dataOfs = p + 8;
-          dataLen = actualChunkSize;
-          break;
-          case 0x20657563: // 'cue '
-            // Ensure chunk is large enough to contain the fields we access. Use actualChunkSize check.
-            if (actualChunkSize >= 36) {
-              cueFound = true;
-              loopstart = view.getUint32(p + 32, true);
-            } else {
-              Con.PrintWarning(`S.LoadSound: ${sfx.name} has a truncated cue chunk at offset ${p} (size ${actualChunkSize})\n`);
-            }
-          break;
-          case 0x5453494c: // 'LIST'
-          if (cueFound === true) {
-            // 'cue' chunk was found earlier, so let's interpret the 'LIST' chunk
-            cueFound = false;
-            // Check bounds before reading from the LIST chunk
-            if (actualChunkSize >= 32) {
-              if (view.getUint32(p + 28, true) === 0x6b72616d) { // 'mark'
-                // Check the subfield we read (p + 24) is available within actualChunkSize
-                if (actualChunkSize >= 28) {
-                  totalSamples = loopstart + view.getUint32(p + 24, true);
-                }
-              }
-            } else {
-              Con.PrintWarning(`S.LoadSound: ${sfx.name} has a truncated LIST chunk at offset ${p} (size ${actualChunkSize})\n`);
-            }
-          }
-          break;
-        default:
-          break;
-      }
-      p += (actualChunkSize + 8);
-      if (p & 1) { // pad if needed
-        p += 1;
-      }
+    if (loopInfo.loopstartSamples !== null) {
+      sc.loopstart = loopInfo.loopstartSamples / sc.data.sampleRate;
+      Con.DPrint(`S.LoadSound: ${sfx.name} loopstart ${loopInfo.loopstartSamples} samples -> ${sc.loopstart}s\n`);
     }
 
-    if (!fmt) {
-      Con.PrintError(`S.LoadSound: ${sfx.name} is missing the fmt chunk\n`);
-      sfx.state = SFX.STATE.FAILED;
-      return false;
-    }
-    if (dataOfs === null) {
-      Con.PrintError(`S.LoadSound: ${sfx.name} is missing the data chunk\n`);
-      sfx.state = SFX.STATE.FAILED;
-      return false;
-    }
-
-    // Convert loopstart from "samples" to "seconds" if we have it
-    if (loopstart !== null) {
-      sc.loopstart = loopstart * fmt.blockAlign / fmt.samplesPerSec;
-    } else {
-      sc.loopstart = null;
-    }
-
-    if (totalSamples !== null) {
-      sc.length = totalSamples / fmt.samplesPerSec;
-    } else {
-      sc.length = dataLen / fmt.avgBytesPerSec;
-    }
-    sc.size = dataLen + 44;
-    if (sc.size & 1) {
-      sc.size++;
-    }
-
-    // Construct a new valid WAV in an ArrayBuffer
-    const out = new ArrayBuffer(sc.size);
-    view = new DataView(out);
-    // RIFF
-    view.setUint32(0, 0x46464952, true); // 'RIFF'
-    view.setUint32(4, sc.size - 8, true);
-    view.setUint32(8, 0x45564157, true); // 'WAVE'
-    // fmt
-    view.setUint32(12, 0x20746d66, true); // 'fmt '
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); // PCM
-    view.setUint16(22, fmt.channels, true);
-    view.setUint32(24, fmt.samplesPerSec, true);
-    view.setUint32(28, fmt.avgBytesPerSec, true);
-    view.setUint16(32, fmt.blockAlign, true);
-    view.setUint16(34, fmt.bitsPerSample, true);
-    // data
-    view.setUint32(36, 0x61746164, true); // 'data'
-    view.setUint32(40, dataLen, true);
-    new Uint8Array(out, 44, dataLen).set(new Uint8Array(data, dataOfs, dataLen));
-
-    sc.data = await this._channelDriver.decodeAudioData(out);
     // eslint-disable-next-line require-atomic-updates
     sfx.cache = sc;
     sfx.makeAvailable();
@@ -999,13 +719,100 @@ const S = {
     return true;
   },
 
+  _ParseWavLoopInfo(data, name) {
+    const view = new DataView(data);
+    // Minimal WAV sanity check
+    if (data.byteLength < 12 || view.getUint32(0, true) !== 0x46464952 || view.getUint32(8, true) !== 0x45564157) {
+      Con.PrintWarning(`S._ParseWavLoopInfo: ${name} not a valid WAV file\n`);
+      return { loopstartSamples: null };
+    }
+
+    let p = 12;
+    let loopstartSamples = null;
+    let cueFound = false;
+    let cueLoopStart = null;
+
+    while (p + 8 <= data.byteLength) {
+      const chunkId = view.getUint32(p, true);
+      const chunkSize = view.getUint32(p + 4, true);
+
+      const remain = data.byteLength - (p + 8);
+      let actualChunkSize = chunkSize;
+      if (chunkSize > remain) {
+        actualChunkSize = remain;
+      }
+
+      switch (chunkId) {
+        case 0x20657563: // 'cue '
+          if (actualChunkSize >= 28) {
+            cueFound = true;
+            cueLoopStart = view.getUint32(p + 32, true);
+          }
+          break;
+        case 0x5453494c: // 'LIST'
+          if (cueFound && actualChunkSize >= 4) {
+            let q = p + 8 + 4; // skip list type
+            const listEnd = p + 8 + actualChunkSize;
+            while (q + 8 <= listEnd) {
+              const subId = view.getUint32(q, true);
+              const subSize = view.getUint32(q + 4, true);
+              if (subId === 0x6b72616d && subSize >= 4) { // 'mark'
+                // Found loop length in samples?
+                // The original code used this to calculate totalSamples, but didn't use it for loopstart directly?
+                // Actually original code: totalSamples = loopstart + maybeSampleCount
+                // But sc.loopstart was set from cueLoopStart / sampleRate.
+                // So we just need cueLoopStart.
+                break;
+              }
+              q += subSize + 8;
+              if (q & 1) {
+                q += 1;
+              }
+            }
+          }
+          break;
+        case 0x6c706d73: // 'smpl'
+          if (actualChunkSize >= 60) { // 36 header + 24 loop descriptor
+            try {
+              const numLoops = view.getUint32(p + 8 + 28, true);
+              if (numLoops >= 1) {
+                const loopOffset = p + 8 + 36;
+                const startSample = view.getUint32(loopOffset + 8, true);
+                loopstartSamples = startSample;
+              }
+            } catch {
+              Con.PrintWarning(`S._ParseWavLoopInfo: ${name} 'smpl' parse failure\n`);
+            }
+          }
+          break;
+      }
+
+      p += actualChunkSize + 8;
+      if (p & 1) {
+        p += 1;
+      }
+    }
+
+    if (loopstartSamples === null && cueLoopStart !== null) {
+      loopstartSamples = cueLoopStart;
+    }
+
+    return { loopstartSamples };
+  },
+
   //
   // --- Playing sounds
   //
 
   StartSound(entnum, entchannel, sfx, origin, vol, attenuation) {
-    if (this._nosound.value !== 0 || !sfx) {
+    if (!this._started || this._nosound.value !== 0 || !sfx) {
       return;
+    }
+
+    if (this._context && this._context.state === 'suspended') {
+      this._context.resume().catch((err) => {
+        Con.Print(`S.StartSound: failed to resume context, ${err.message}\n`);
+      });
     }
 
     // 1) Create a local callback that sets up the channel once data is loaded
@@ -1022,7 +829,7 @@ const S = {
       targetChan.spatialize();
 
       // Out of reach
-      if (targetChan.left_vol <= 0 && targetChan.right_vol <= 0) {
+      if (targetChan.channel_vol <= 0) {
         return;
       }
 
@@ -1078,8 +885,7 @@ const S = {
 
     // Ambient channels
     for (const ch of this._ambientChannels) {
-      ch.right_vol = 0;
-      ch.left_vol = 0;
+      ch.channel_vol = 0;
       ch.updateVol();
     }
 
@@ -1133,7 +939,7 @@ const S = {
   },
 
   StaticSound(sfx, origin, vol, attenuation) {
-    if (this._nosound.value !== 0 || !sfx) {
+    if (!this._started || this._nosound.value !== 0 || !sfx) {
       return;
     }
 
@@ -1245,8 +1051,7 @@ const S = {
   UpdateAmbientSounds() {
     if (!CL.state.worldmodel) {
       for (const ch of this._ambientChannels) {
-        ch.right_vol = 0;
-        ch.left_vol = 0;
+        ch.channel_vol = 0;
         ch.updateVol();
       }
 
@@ -1259,8 +1064,7 @@ const S = {
       // turn off all ambients
 
       for (const ch of this._ambientChannels) {
-        ch.right_vol = 0;
-        ch.left_vol = 0;
+        ch.channel_vol = 0;
         ch.updateVol();
       }
       return;
@@ -1292,8 +1096,7 @@ const S = {
         ch.master_vol = 1.0;
       }
 
-      ch.right_vol = ch.master_vol;
-      ch.left_vol = ch.master_vol;
+      ch.channel_vol = ch.master_vol;
 
       ch.updateVol();
     }
@@ -1330,7 +1133,7 @@ const S = {
       ch.spatialize();
 
       // Only load sound files when really needed
-      if (ch.sfx.state === SFX.STATE.NEW && (ch.left_vol > 0 || ch.right_vol > 0)) {
+      if (ch.sfx.state === SFX.STATE.NEW && ch.channel_vol > 0) {
         ch.sfx.load().catch((err) => {
           Con.Print(`S.UpdateStaticSounds: failed to lazy load ${ch.sfx.name}, ${err.message}\n`);
         });
@@ -1340,16 +1143,19 @@ const S = {
     // Combine channels that share the same sfx
     for (let i = 0; i < this._staticChannels.length; i++) {
       const ch = this._staticChannels[i];
-      if (ch.left_vol <= 0.0 && ch.right_vol <= 0.0) {
+      if (ch.channel_vol <= 0.0) {
         continue;
       }
       for (let j = i + 1; j < this._staticChannels.length; j++) {
         const ch2 = this._staticChannels[j];
         if (ch.sfx === ch2.sfx) {
-          ch.left_vol += ch2.left_vol;
-          ch.right_vol += ch2.right_vol;
-          ch2.left_vol = 0.0;
-          ch2.right_vol = 0.0;
+          // Weighted average for pan
+          const totalVol = ch.channel_vol + ch2.channel_vol;
+          if (totalVol > 0) {
+            ch.pan = (ch.pan * ch.channel_vol + ch2.pan * ch2.channel_vol) / totalVol;
+            ch.channel_vol = totalVol;
+          }
+          ch2.channel_vol = 0.0;
         }
       }
     }

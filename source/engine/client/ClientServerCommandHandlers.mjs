@@ -966,50 +966,51 @@ function handleClientEvent() {
   CL.state.clientMessages.parseClientEvent();
 }
 
-const serverCommandHandlers = new Map([
-  [Protocol.svc.nop, handleNop],
-  [Protocol.svc.time, handleTime],
-  [Protocol.svc.clientdata, handleClientData],
-  [Protocol.svc.version, handleVersion],
-  [Protocol.svc.disconnect, handleDisconnect],
-  [Protocol.svc.print, handlePrint],
-  [Protocol.svc.centerprint, handleCenterPrint],
-  [Protocol.svc.chatmsg, handleChatMessage],
-  [Protocol.svc.stufftext, handleStuffText],
-  [Protocol.svc.damage, handleDamage],
-  [Protocol.svc.serverdata, handleServerData],
-  [Protocol.svc.changelevel, handleChangeLevel],
-  [Protocol.svc.setangle, handleSetAngle],
-  [Protocol.svc.setview, handleSetView],
-  [Protocol.svc.lightstyle, handleLightStyle],
-  [Protocol.svc.sound, handleSound],
-  [Protocol.svc.stopsound, handleStopSound],
-  [Protocol.svc.loadsound, handleLoadSound],
-  [Protocol.svc.updatename, handleUpdateName],
-  [Protocol.svc.updatefrags, handleUpdateFrags],
-  [Protocol.svc.updatecolors, handleUpdateColors],
-  [Protocol.svc.updatepings, handleUpdatePings],
-  [Protocol.svc.particle, handleParticle],
-  [Protocol.svc.spawnbaseline, handleSpawnBaseline],
-  [Protocol.svc.spawnstatic, handleSpawnStatic],
-  [Protocol.svc.temp_entity, handleTempEntity],
-  [Protocol.svc.setpause, handleSetPause],
-  [Protocol.svc.signonnum, handleSignonNum],
-  [Protocol.svc.killedmonster, handleKilledMonster],
-  [Protocol.svc.foundsecret, handleFoundSecret],
-  [Protocol.svc.updatestat, handleUpdateStat],
-  [Protocol.svc.spawnstaticsound, handleSpawnStaticSound],
-  [Protocol.svc.cdtrack, handleCdTrack],
-  [Protocol.svc.intermission, handleIntermission],
-  [Protocol.svc.finale, handleFinale],
-  [Protocol.svc.cutscene, handleCutscene],
-  [Protocol.svc.sellscreen, handleSellScreen],
-  [Protocol.svc.pmovevars, handlePmoveVars],
-  [Protocol.svc.playerinfo, handlePlayerInfo],
-  [Protocol.svc.deltapacketentities, handleDeltaPacketEntities],
-  [Protocol.svc.cvar, handleCvar],
-  [Protocol.svc.clientevent, handleClientEvent],
-]);
+/** @type {Record<number, Function>} */
+const serverCommandHandlers = {
+  [Protocol.svc.nop]: handleNop,
+  [Protocol.svc.time]: handleTime,
+  [Protocol.svc.clientdata]: handleClientData,
+  [Protocol.svc.version]: handleVersion,
+  [Protocol.svc.disconnect]: handleDisconnect,
+  [Protocol.svc.print]: handlePrint,
+  [Protocol.svc.centerprint]: handleCenterPrint,
+  [Protocol.svc.chatmsg]: handleChatMessage,
+  [Protocol.svc.stufftext]: handleStuffText,
+  [Protocol.svc.damage]: handleDamage,
+  [Protocol.svc.serverdata]: handleServerData,
+  [Protocol.svc.changelevel]: handleChangeLevel,
+  [Protocol.svc.setangle]: handleSetAngle,
+  [Protocol.svc.setview]: handleSetView,
+  [Protocol.svc.lightstyle]: handleLightStyle,
+  [Protocol.svc.sound]: handleSound,
+  [Protocol.svc.stopsound]: handleStopSound,
+  [Protocol.svc.loadsound]: handleLoadSound,
+  [Protocol.svc.updatename]: handleUpdateName,
+  [Protocol.svc.updatefrags]: handleUpdateFrags,
+  [Protocol.svc.updatecolors]: handleUpdateColors,
+  [Protocol.svc.updatepings]: handleUpdatePings,
+  [Protocol.svc.particle]: handleParticle,
+  [Protocol.svc.spawnbaseline]: handleSpawnBaseline,
+  [Protocol.svc.spawnstatic]: handleSpawnStatic,
+  [Protocol.svc.temp_entity]: handleTempEntity,
+  [Protocol.svc.setpause]: handleSetPause,
+  [Protocol.svc.signonnum]: handleSignonNum,
+  [Protocol.svc.killedmonster]: handleKilledMonster,
+  [Protocol.svc.foundsecret]: handleFoundSecret,
+  [Protocol.svc.updatestat]: handleUpdateStat,
+  [Protocol.svc.spawnstaticsound]: handleSpawnStaticSound,
+  [Protocol.svc.cdtrack]: handleCdTrack,
+  [Protocol.svc.intermission]: handleIntermission,
+  [Protocol.svc.finale]: handleFinale,
+  [Protocol.svc.cutscene]: handleCutscene,
+  [Protocol.svc.sellscreen]: handleSellScreen,
+  [Protocol.svc.pmovevars]: handlePmoveVars,
+  [Protocol.svc.playerinfo]: handlePlayerInfo,
+  [Protocol.svc.deltapacketentities]: handleDeltaPacketEntities,
+  [Protocol.svc.cvar]: handleCvar,
+  [Protocol.svc.clientevent]: handleClientEvent,
+};
 
 /**
  * Dispatches one in-flight server message through dedicated opcode handlers.
@@ -1058,7 +1059,7 @@ export function parseServerMessage() {
       CL.connection.lastServerMessages.shift();
     }
 
-    const handler = serverCommandHandlers.get(cmd);
+    const handler = serverCommandHandlers[cmd];
 
     if (handler) {
       handler();

@@ -122,7 +122,9 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### 2025-11-29
 
-- cleaning up server code after trying to spin it off into smaller chunks
+- cleaned up server code after trying to spin it off into smaller chunks
+- cleaned up client code as well
+- cleaned up sound code, since it was the first thing I worked on almost a year ago
 
 ### 2025-11-24
 
