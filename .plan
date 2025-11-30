@@ -125,7 +125,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 - went down the rabbit hole of replacing area nodes with an Octree
 - proper polish on how models are organized, however I want to make all load methods completely async
-- I noticed that group animated models are not rendered
+- ~~I noticed that group animated models are not rendered~~ _I’m just stupid lol_
 - also the async model loading breaks the QuakeC VM right now
 
 ### 2025-11-29

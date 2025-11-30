@@ -798,7 +798,7 @@ R._CalculateLightValues = function (e) {
     shadelight[2] = Math.max(shadelight[2], ambientlight[2]);
   }
 
-  if (e.effects & effect.EF_FULLBRIGHT) { // TODO: move this up before we do all the math
+  if (e.effects & (effect.EF_FULLBRIGHT | effect.EF_MUZZLEFLASH)) { // TODO: move this up before we do all the math
     ambientlight.setTo(255.0, 255.0, 255.0);
     shadelight.set(ambientlight);
   }

@@ -550,6 +550,7 @@ export default class ClientEntities {
     }
 
     ent.free = false;
+    ent.updatecount = 1; // force it to be considered for rendering
 
     // find a free static entity slot
     for (let i = 0; i < this.static_entities.length; i++) {
