@@ -109,11 +109,11 @@ export class BSP29Loader extends ModelLoader {
     this._loadNodes(loadmodel, buffer);
     this._loadClipnodes(loadmodel, buffer);
     this._makeHull0(loadmodel);
-    this._loadSubmodels(loadmodel, buffer);
     this._loadBSPX(loadmodel, buffer);
     this._loadLightingRGB(loadmodel, buffer);
     this._loadDeluxeMap(loadmodel, buffer);
     this._loadLightgridOctree(loadmodel, buffer);
+    this._loadSubmodels(loadmodel, buffer); // CR: must be last, since it’s creating additional models based on this one
 
     if (loadmodel.coloredlights && !loadmodel.lightdata_rgb) {
       this._loadExternalLighting(loadmodel, name);
@@ -924,6 +924,7 @@ export class BSP29Loader extends ModelLoader {
       ];
       out.textures = loadmodel.textures;
       out.lightdata = loadmodel.lightdata;
+      out.lightdata_rgb = loadmodel.lightdata_rgb;
       out.faces = loadmodel.faces;
       out.firstface = view.getUint32(fileofs + 56, true);
       out.numfaces = view.getUint32(fileofs + 60, true);
