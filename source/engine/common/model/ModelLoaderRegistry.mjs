@@ -38,18 +38,17 @@ export class ModelLoaderRegistry {
    * Load a model using the appropriate loader.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} name The model name/path
-   * @param {import('./BaseModel.mjs').BaseModel} loadmodel The model object to populate
    * @returns {import('./BaseModel.mjs').BaseModel} The loaded model
    * @throws {NotImplementedError} If no suitable loader is found
    */
-  load(buffer, name, loadmodel) {
+  load(buffer, name) {
     const loader = this.findLoader(buffer, name);
 
     if (!loader) {
       throw new NotImplementedError(`No loader found for model format: ${name}`);
     }
 
-    return loader.load(buffer, name, loadmodel);
+    return loader.load(buffer, name);
   }
 
   /**

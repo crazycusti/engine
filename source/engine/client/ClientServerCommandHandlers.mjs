@@ -356,6 +356,9 @@ function parseBeam(model) {
   const ent = MSG.ReadShort();
   const start = MSG.ReadCoordVector();
   const end = MSG.ReadCoordVector();
+  if (!model) {
+    return;
+  }
   for (let i = 0; i < Def.limits.beams; i++) {
     const beam = CL.state.clientEntities.beams[i];
     if (beam.entity !== ent) {
@@ -390,16 +393,16 @@ function parseTemporaryEntity() {
 
   switch (type) {
     case Protocol.te.lightning1:
-      parseBeam(Mod.ForName('progs/bolt.mdl', true));
+      parseBeam(CL.state.clientEntities.tempEntityModels['progs/bolt.mdl']);
       return;
     case Protocol.te.lightning2:
-      parseBeam(Mod.ForName('progs/bolt2.mdl', true));
+      parseBeam(CL.state.clientEntities.tempEntityModels['progs/bolt2.mdl']);
       return;
     case Protocol.te.lightning3:
-      parseBeam(Mod.ForName('progs/bolt3.mdl', true));
+      parseBeam(CL.state.clientEntities.tempEntityModels['progs/bolt3.mdl']);
       return;
-    case Protocol.te.beam:
-      parseBeam(Mod.ForName('progs/beam.mdl', true));
+    case Protocol.te.beam: // CR: this model does not exist
+      parseBeam(CL.state.clientEntities.tempEntityModels['progs/beam.mdl']);
       return;
   }
 

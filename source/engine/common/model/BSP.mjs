@@ -176,6 +176,8 @@ export class BrushModel extends BaseModel {
   /** @type {boolean} Whether RGB lighting is used */
   coloredlights = false;
 
+  type = 0; // Mod.type.brush;
+
   /**
    * Find the leaf node for a given point in 3D space
    * @param {Vector} p position

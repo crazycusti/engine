@@ -1,11 +1,12 @@
 import Vector from '../../../shared/Vector.mjs';
 import * as Defs from '../../../shared/Defs.mjs';
+import { Octree } from '../../../shared/Octree.mjs';
 import { eventBus, registry } from '../../registry.mjs';
+import { BrushModel } from '../../../engine/common/Mod.mjs';
 
-let { Mod, SV } = registry;
+let { SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  Mod = registry.Mod;
   SV = registry.SV;
 });
 
@@ -78,7 +79,8 @@ export class ServerArea {
       'requires SOLID_BSP with MOVETYPE_NONE, use MOVETYPE_PUSH instead');
 
     const model = SV.server.models[ent.entity.modelindex];
-    console.assert(model && model.type === Mod.type.brush, 'model is null or not a brush');
+
+    console.assert(model && model instanceof BrushModel, 'model is null or not a brush');
 
     const size = maxs[0] - mins[0];
     let hull;
@@ -101,38 +103,28 @@ export class ServerArea {
 
   /**
    * Recursively builds the area node BSP used for spatial queries.
-   * @param {number} depth recursion depth
    * @param {Vector} mins minimum bounds
    * @param {Vector} maxs maximum bounds
-   * @returns {*} constructed area node
    */
-  createAreaNode(depth, mins, maxs) {
-    const anode = { depth, mins, maxs };
-    SV.areanodes[0] = anode;
+  initOctree(mins, maxs) {
+    // center is the midpoint of mins/maxs
+    const center = mins.copy().add(maxs).multiply(0.5);
 
-    anode.trigger_edicts = { ent: null };
-    anode.trigger_edicts.prev = anode.trigger_edicts.next = anode.trigger_edicts;
-    anode.solid_edicts = { ent: null };
-    anode.solid_edicts.prev = anode.solid_edicts.next = anode.solid_edicts;
+    // compute the largest extent and make a cubic octree size that covers it
+    const d = maxs.copy().subtract(mins);
+    const maxDim = Math.max(d[0], d[1], d[2], 1.0);
 
-    if (depth === 4) {
-      anode.axis = -1;
-      anode.children = [];
-      return anode;
+    // add a small margin, round up to next integer, then to the next power-of-two
+    const fullSize = Math.ceil(maxDim + 2.0);
+    let pow2 = 1;
+
+    while (pow2 < fullSize) {
+      pow2 <<= 1;
     }
 
-    anode.axis = (maxs[0] - mins[0]) > (maxs[1] - mins[1]) ? 0 : 1;
-    anode.dist = 0.5 * (maxs[anode.axis] + mins[anode.axis]);
+    const halfSize = pow2 / 2;
 
-    const maxs1 = maxs.copy();
-    const mins2 = mins.copy();
-    maxs1[anode.axis] = mins2[anode.axis] = anode.dist;
-    anode.children = [
-      this.createAreaNode(depth + 1, mins2, maxs),
-      this.createAreaNode(depth + 1, mins, maxs1),
-    ];
-
-    return anode;
+    this.tree = new Octree(center, halfSize, 16, 64);
   }
 
   /**
@@ -140,28 +132,21 @@ export class ServerArea {
    * @param {import('../Edict.mjs').ServerEdict} ent edict to unlink
    */
   unlinkEdict(ent) {
-    if (ent.area.prev) {
-      ent.area.prev.next = ent.area.next;
+    if (ent.octreeNode) {
+      ent.octreeNode.remove(ent);
+      ent.octreeNode = null;
     }
-    if (ent.area.next) {
-      ent.area.next.prev = ent.area.prev;
-    }
-    ent.area.prev = ent.area.next = null;
   }
 
   /**
    * Iterates all trigger edicts that potentially overlap the provided entity.
    * @param {import('../Edict.mjs').ServerEdict} ent subject edict
-   * @param {*} node current area node
    */
-  touchLinks(ent, node) {
+  touchLinks(ent) {
     const absmin = ent.entity.absmin;
     const absmax = ent.entity.absmax;
 
-    for (let l = node.trigger_edicts.next, next = null; l !== node.trigger_edicts; l = next) {
-      next = l.next;
-      const touch = l.ent;
-
+    for (const touch of this.tree.queryAABB(absmin, absmax)) {
       if (touch === ent) {
         continue;
       }
@@ -170,24 +155,8 @@ export class ServerArea {
         continue;
       }
 
-      if (!absmin.lte(touch.entity.absmax) || !absmax.gte(touch.entity.absmin)) {
-        continue;
-      }
-
       SV.server.gameAPI.time = SV.server.time;
       touch.entity.touch(!ent.isFree() ? ent.entity : null);
-    }
-
-    if (node.axis === -1) {
-      return;
-    }
-
-    if (absmax[node.axis] > node.dist) {
-      this.touchLinks(ent, node.children[0]);
-    }
-
-    if (absmax[node.axis] < node.dist) {
-      this.touchLinks(ent, node.children[1]);
     }
   }
 
@@ -241,7 +210,7 @@ export class ServerArea {
     absmin.add(ent.entity.mins).add(new Vector(-1.0, -1.0, -1.0));
     absmax.add(ent.entity.maxs).add(new Vector(1.0, 1.0, 1.0));
 
-    if ((ent.entity.flags & Defs.flags.FL_ITEM) !== 0) {
+    if ((ent.entity.flags & Defs.flags.FL_ITEM) !== 0) { // TODO: should be a feature flag for the game
       absmin.add(new Vector(-14.0, -14.0, 1.0));
       absmax.add(new Vector(14.0, 14.0, -1.0));
     }
@@ -258,26 +227,11 @@ export class ServerArea {
       return;
     }
 
-    let node = SV.areanodes[0];
-    while (node.axis !== -1) {
-      if (ent.entity.absmin[node.axis] > node.dist) {
-        node = node.children[0];
-      } else if (ent.entity.absmax[node.axis] < node.dist) {
-        node = node.children[1];
-      } else {
-        break;
-      }
-    }
-
-    const before = (ent.entity.solid === Defs.solid.SOLID_TRIGGER) ? node.trigger_edicts : node.solid_edicts;
-    ent.area.next = before;
-    ent.area.prev = before.prev;
-    ent.area.prev.next = ent.area;
-    ent.area.next.prev = ent.area;
-    ent.area.ent = ent;
+    const node = this.tree.insert(ent);
+    ent.octreeNode = node;
 
     if (ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP && touchTriggers) {
-      this.touchLinks(ent, SV.areanodes[0]);
+      this.touchLinks(ent);
     }
   }
 }

@@ -21,11 +21,11 @@ export default class ClientLifecycle {
   static async init() {
     CL.ClearState();
     ClientInput.Init();
-    clientRuntimeState.clientEntities.initTempEntities(S);
     CL.pmove = new Pmove();
     CL.pmove.movevars = new MoveVars();
     this.#registerCvars();
     this.#registerCommands();
+    await clientRuntimeState.clientEntities.initTempEntities();
     CL.ConfigureConnectionIdentity({ name: CL.name, color: CL.color, rcon_password: CL.rcon_password });
     CL.sfx_talk = S.PrecacheSound('misc/talk.wav');
     this.initGame();

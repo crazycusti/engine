@@ -50,10 +50,9 @@ export class ModelLoader {
    * Load the model from the buffer.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} name The model name/path
-   * @param {import('./BaseModel.mjs').BaseModel} loadmodel The model object to populate
    * @returns {import('./BaseModel.mjs').BaseModel} The loaded model
    */
-  load(buffer, name, loadmodel) { // eslint-disable-line no-unused-vars
+  load(buffer, name) { // eslint-disable-line no-unused-vars
     throw new NotImplementedError('ModelLoader.load must be implemented');
   }
 

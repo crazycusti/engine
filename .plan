@@ -36,7 +36,7 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
 - [_] `CL.state.intermission`/`ExitIntermission`: unsure what happens next on DS
 - [_] remove C style code that is almost verbatim from Quake
-- [_] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
+- [X] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
 - [_] reorganize shaders
 
 ### Network improvements
@@ -57,8 +57,9 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Random issues
 
-- [_] a not precached resource will cause dropping Promises, game code needs model right away
+- [_] a not precached resource will cause dropping Promises, game code needs model right away, QuakeC VM broken
 - [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
+- [_] group animated models are not rendered anymore
 
 ### LibreQuake support
 
@@ -119,6 +120,13 @@ Grouped by sections and then sorted by priority (more or less).
 - https://github.com/khreathor/mdl-for-blender mdl support
 
 ## Log
+
+### 2025-11-30
+
+- went down the rabbit hole of replacing area nodes with an Octree
+- proper polish on how models are organized, however I want to make all load methods completely async
+- I noticed that group animated models are not rendered
+- also the async model loading breaks the QuakeC VM right now
 
 ### 2025-11-29
 

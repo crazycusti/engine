@@ -4,11 +4,11 @@ import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 import W from '../../common/W.mjs';
 
-let { CL, Host, R } = registry;
+let { CL, Host, R, Con } = registry;
 let gl = /** @type {WebGL2RenderingContext} */ (null);
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ CL, Host, R } = registry);
+  ({ CL, Host, R, Con } = registry);
 });
 
 eventBus.subscribe('gl.ready', () => {
@@ -144,9 +144,7 @@ export class AliasModelRenderer extends ModelRenderer {
 
     // Validate frame number
     if ((num >= clmodel.frames.length) || (num < 0)) {
-      if (registry.Con) {
-        registry.Con.DPrint('AliasModelRenderer: no such frame ' + num + '\n');
-      }
+      Con.DPrint('AliasModelRenderer: no such frame ' + num + '\n');
       num = 0;
     }
 
@@ -194,9 +192,7 @@ export class AliasModelRenderer extends ModelRenderer {
 
     // Validate skin number
     if ((num >= clmodel.skins.length) || (num < 0)) {
-      if (registry.Con) {
-        registry.Con.DPrint('AliasModelRenderer: no such skin # ' + num + '\n');
-      }
+      Con.DPrint('AliasModelRenderer: no such skin # ' + num + '\n');
       num = 0;
     }
 
@@ -232,7 +228,6 @@ export class AliasModelRenderer extends ModelRenderer {
 
   /**
    * Prepare alias model for rendering (build vertex buffers from triangle data).
-   * Uses global `gl` from registry.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to prepare
    * @param {boolean} isWorldModel Whether this model is the world model
    */
@@ -240,14 +235,11 @@ export class AliasModelRenderer extends ModelRenderer {
   prepareModel(model, isWorldModel = false) {
     // This will be implemented in a later task
     // For now, vertex buffer building is still done in Mod.mjs
-    if (registry.Con) {
-      registry.Con.DPrint(`AliasModelRenderer.prepareModel: TODO - implement for ${model.name}\n`);
-    }
+    Con.DPrint(`AliasModelRenderer.prepareModel: TODO - implement for ${model.name}\n`);
   }
 
   /**
    * Free GPU resources for this alias model.
-   * Uses global `gl` from registry.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to cleanup
    */
   cleanupModel(model) {

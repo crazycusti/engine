@@ -30,7 +30,7 @@ export class WavefrontOBJLoader extends ModelLoader {
    * @returns {string} Loader name
    */
   getName() {
-    return 'Wavefront OBJ';
+    return 'Wavefront .obj';
   }
 
   /**
@@ -54,23 +54,10 @@ export class WavefrontOBJLoader extends ModelLoader {
    * Load a Wavefront OBJ model from buffer
    * @param {ArrayBuffer} buffer The model file data
    * @param {string} name The model name/path
-   * @param {import('../BaseModel.mjs').BaseModel} model The model object to populate
-   * @returns {import('../MeshModel.mjs').MeshModel} The loaded model
+   * @returns {MeshModel} The loaded model
    */
-  load(buffer, name, model) {
-    // Ensure we're using a MeshModel instance
-    /** @type {import('../MeshModel.mjs').MeshModel} */
-    let loadmodel;
-
-    if (!(model instanceof MeshModel)) {
-      const meshModel = new MeshModel(name);
-      Object.assign(meshModel, model);
-      loadmodel = meshModel;
-    } else {
-      loadmodel = model;
-    }
-
-    loadmodel.type = 3; // Mod.type.mesh
+  load(buffer, name) {
+    const loadmodel = new MeshModel(name);
 
     // Convert ArrayBuffer to text
     const decoder = new TextDecoder('utf-8');
@@ -109,7 +96,7 @@ export class WavefrontOBJLoader extends ModelLoader {
 
   /**
    * Parse OBJ text format into indexed data
-   * @private
+   * @protected
    * @param {string} text OBJ file content
    * @returns {object} Parsed OBJ data with positions, texcoords, normals, faces
    */
@@ -214,7 +201,7 @@ export class WavefrontOBJLoader extends ModelLoader {
 
   /**
    * Parse a face vertex specification (v, v/vt, v/vt/vn, v//vn)
-   * @private
+   * @protected
    * @param {string} spec Face vertex specification
    * @returns {object} Object with v, vt, vn indices (1-based, can be negative)
    */
@@ -229,7 +216,7 @@ export class WavefrontOBJLoader extends ModelLoader {
 
   /**
    * Build mesh data from parsed OBJ (expand indices to flat arrays)
-   * @private
+   * @protected
    * @param {object} objData Parsed OBJ data
    * @returns {object} Mesh data with flat vertices, normals, texcoords, indices
    */
@@ -312,7 +299,7 @@ export class WavefrontOBJLoader extends ModelLoader {
 
   /**
    * Resolve OBJ index (1-based, negative) to 0-based array index
-   * @private
+   * @protected
    * @param {number} index OBJ index
    * @param {number} arrayLength Length of the array being indexed
    * @returns {number} 0-based array index, or -1 if invalid
@@ -330,7 +317,7 @@ export class WavefrontOBJLoader extends ModelLoader {
 
   /**
    * Calculate bounding box for the model
-   * @private
+   * @protected
    * @param {import('../MeshModel.mjs').MeshModel} model The model
    */
   _calculateBounds(model) {
@@ -371,7 +358,7 @@ export class WavefrontOBJLoader extends ModelLoader {
   /**
    * Generate tangent and bitangent vectors for normal mapping
    * Based on "Lengyel's Method" for computing tangent space basis
-   * @private
+   * @protected
    * @param {import('../MeshModel.mjs').MeshModel} model The model
    */
   _generateTangentSpace(model) {

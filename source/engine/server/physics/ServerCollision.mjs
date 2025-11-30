@@ -205,26 +205,33 @@ export class ServerCollision {
   }
 
   /**
-   * Clips a motion box against all solid edicts in the specified node tree.
-   * @param {*} node current area node
-   * @param {*} clip clip context
+   * Recursively checks the links in the area node BSP for collision.
+   * @param {*} clip clip data
    */
-  clipToLinks(node, clip) {
-    for (let l = node.solid_edicts.next; l !== node.solid_edicts; l = l.next) {
-      const touch = l.ent;
-      const solid = touch.entity.solid;
-
-      if ((solid === Defs.solid.SOLID_NOT) || (touch === clip.passedict)) {
+  clipToLinks(clip) {
+    for (const touch of SV.area.tree.queryAABB(clip.boxmins, clip.boxmaxs)) {
+      if (touch === clip.passedict) {
         continue;
       }
 
-      console.assert(solid !== Defs.solid.SOLID_TRIGGER, 'trigger not in clipping list');
-
-      if (clip.type === Defs.moveTypes.MOVE_NOMONSTERS && solid !== Defs.solid.SOLID_BSP) {
+      if (touch.entity.solid === Defs.solid.SOLID_NOT) {
         continue;
       }
 
-      if (!clip.boxmins.lte(touch.entity.absmax) || !clip.boxmaxs.gte(touch.entity.absmin)) {
+      if (touch.entity.solid === Defs.solid.SOLID_TRIGGER) {
+        continue;
+      }
+
+      if (clip.type === Defs.moveTypes.MOVE_NOMONSTERS && touch.entity.solid !== Defs.solid.SOLID_BSP) {
+        continue;
+      }
+
+      if (clip.boxmins[0] > touch.entity.absmax[0] ||
+          clip.boxmins[1] > touch.entity.absmax[1] ||
+          clip.boxmins[2] > touch.entity.absmax[2] ||
+          clip.boxmaxs[0] < touch.entity.absmin[0] ||
+          clip.boxmaxs[1] < touch.entity.absmin[1] ||
+          clip.boxmaxs[2] < touch.entity.absmin[2]) {
         continue;
       }
 
@@ -247,10 +254,6 @@ export class ServerCollision {
         }
       }
 
-      if (clip.ignoreedicts && clip.ignoreedicts.includes(touch.num)) {
-        continue;
-      }
-
       const trace = (touch.entity.flags & Defs.flags.FL_MONSTER) !== 0
         ? this.clipMoveToEntity(touch, clip.start, clip.mins2, clip.maxs2, clip.end)
         : this.clipMoveToEntity(touch, clip.start, clip.mins, clip.maxs, clip.end);
@@ -258,22 +261,10 @@ export class ServerCollision {
       if (trace.allsolid || trace.startsolid || trace.fraction < clip.trace.fraction) {
         trace.ent = touch;
         clip.trace = trace;
-        if (trace.startsolid) {
-          clip.trace.startsolid = true;
+        if (clip.trace.allsolid) {
+          return;
         }
       }
-    }
-
-    if (node.axis === -1) {
-      return;
-    }
-
-    if (clip.boxmaxs[node.axis] > node.dist) {
-      this.clipToLinks(node.children[0], clip);
-    }
-
-    if (clip.boxmins[node.axis] < node.dist) {
-      this.clipToLinks(node.children[1], clip);
     }
   }
 
@@ -285,10 +276,9 @@ export class ServerCollision {
    * @param {Vector} end end position
    * @param {Defs.moveTypes} type move type constant from Defs.moveTypes
    * @param {ServerEdict} passedict entity to skip
-   * @param {(ServerEdict|number)[]} ignoreedicts additional entities to ignore
    * @returns {Trace} collision result
    */
-  move(start, mins, maxs, end, type, passedict, ignoreedicts = []) {
+  move(start, mins, maxs, end, type, passedict) {
     const clip = {
       trace: this.clipMoveToEntity(SV.server.edicts[0], start, mins, maxs, end),
       start,
@@ -299,7 +289,6 @@ export class ServerCollision {
       maxs2: type === Defs.moveTypes.MOVE_MISSILE ? new Vector(15.0, 15.0, 15.0) : maxs,
       type,
       passedict,
-      ignoreedicts,
       boxmins: new Vector(),
       boxmaxs: new Vector(),
     };
@@ -314,7 +303,7 @@ export class ServerCollision {
       }
     }
 
-    this.clipToLinks(SV.areanodes[0], clip);
+    this.clipToLinks(clip);
     return clip.trace;
   }
 
@@ -327,4 +316,4 @@ export class ServerCollision {
     const origin = ent.entity.origin.copy();
     return this.move(origin, ent.entity.mins, ent.entity.maxs, origin, 0, ent).startsolid;
   }
-};
+}

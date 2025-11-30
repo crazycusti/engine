@@ -41,28 +41,17 @@ export class AliasMDLLoader extends ModelLoader {
    * @returns {string} Loader name
    */
   getName() {
-    return 'Quake Alias MDL';
+    return 'Quake Alias';
   }
 
   /**
    * Load an Alias MDL model from buffer
    * @param {ArrayBuffer} buffer - The model file data
    * @param {string} name - The model name/path
-   * @param {import('../BaseModel.mjs').BaseModel} model - The model object to populate
-   * @returns {import('../AliasModel.mjs').AliasModel} The loaded model
+   * @returns {AliasModel} The loaded model
    */
-  load(buffer, name, model) {
-    // Ensure we're using an AliasModel instance
-    /** @type {import('../AliasModel.mjs').AliasModel} */
-    let loadmodel;
-
-    if (!(model instanceof AliasModel)) {
-      const aliasModel = new AliasModel(name);
-      Object.assign(aliasModel, model);
-      loadmodel = aliasModel;
-    } else {
-      loadmodel = model;
-    }
+  load(buffer, name) {
+    const loadmodel = new AliasModel(name);
 
     loadmodel.type = 2; // Mod.type.alias
     loadmodel.player = name === 'progs/player.mdl';

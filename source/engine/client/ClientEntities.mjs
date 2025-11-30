@@ -6,8 +6,9 @@ import Chase from './Chase.mjs';
 import { DefaultClientEdictHandler } from './ClientLegacy.mjs';
 import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
+import { SFX } from './Sound.mjs';
 
-let { CL, Con, Mod, PR, R } = registry;
+let { CL, Con, Mod, PR, R, S } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -15,6 +16,7 @@ eventBus.subscribe('registry.frozen', () => {
   Mod = registry.Mod;
   PR = registry.PR;
   R = registry.R;
+  S = registry.S;
 });
 
 export class ClientDlight {
@@ -368,29 +370,48 @@ export default class ClientEntities {
   num_visedicts = 0;
 
   tempEntitySounds = {
+    /** @type {SFX} */
     wizhit: null,
+    /** @type {SFX} */
     knighthit: null,
+    /** @type {SFX} */
     tink1: null,
+    /** @type {SFX} */
     ric1: null,
+    /** @type {SFX} */
     ric2: null,
+    /** @type {SFX} */
     ric3: null,
+    /** @type {SFX} */
     explosion: null,
   };
+
+  /** @type {Record<string, import('../common/Mod.mjs').BaseModel>} available tent models, initialized in initTempEntities */
+  tempEntityModels = {};
 
   constructor() {
     this.clear();
   }
 
-  initTempEntities(soundSystem) {
+  async initTempEntities() {
     this.tempEntitySounds = {
-      wizhit: soundSystem.PrecacheSound('wizard/hit.wav'),
-      knighthit: soundSystem.PrecacheSound('hknight/hit.wav'),
-      tink1: soundSystem.PrecacheSound('weapons/tink1.wav'),
-      ric1: soundSystem.PrecacheSound('weapons/ric1.wav'),
-      ric2: soundSystem.PrecacheSound('weapons/ric2.wav'),
-      ric3: soundSystem.PrecacheSound('weapons/ric3.wav'),
-      explosion: soundSystem.PrecacheSound('weapons/r_exp3.wav'),
+      wizhit: S.PrecacheSound('wizard/hit.wav'),
+      knighthit: S.PrecacheSound('hknight/hit.wav'),
+      tink1: S.PrecacheSound('weapons/tink1.wav'),
+      ric1: S.PrecacheSound('weapons/ric1.wav'),
+      ric2: S.PrecacheSound('weapons/ric2.wav'),
+      ric3: S.PrecacheSound('weapons/ric3.wav'),
+      explosion: S.PrecacheSound('weapons/r_exp3.wav'),
     };
+
+    for (const {model, name} of await Promise.all([
+      'progs/bolt.mdl',
+      'progs/bolt2.mdl',
+      'progs/bolt3.mdl',
+      'progs/beam.mdl', // CR: does not exist in Quake
+    ].map((model) => Mod.ForNameAsync(model, false).then((m) => ({ model: m, name: model }))))) {
+      this.tempEntityModels[name] = model;
+    }
   }
 
   /**

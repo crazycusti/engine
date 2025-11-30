@@ -83,23 +83,12 @@ export class BSP29Loader extends ModelLoader {
    * Load a BSP29 map model from buffer
    * @param {ArrayBuffer} buffer - The BSP file data
    * @param {string} name - The model name/path
-   * @param {import('../BaseModel.mjs').BaseModel} model - The model object to populate
-   * @returns {import('../BSP.mjs').BrushModel} The loaded model
+   * @returns {BrushModel} The loaded model
    */
-  load(buffer, name, model) {
-    // Ensure we're using a BrushModel instance
-    /** @type {import('../BSP.mjs').BrushModel} */
-    let loadmodel;
+  load(buffer, name) {
+    const loadmodel = new BrushModel(name);
 
-    if (!(model instanceof BrushModel)) {
-      const brushModel = new BrushModel(name);
-      Object.assign(brushModel, model);
-      loadmodel = brushModel;
-    } else {
-      loadmodel = model;
-    }
-
-    loadmodel.type = 0; // Mod.type.brush
+    loadmodel.type = Mod.type.brush;
     loadmodel.version = /** @type {29|844124994} */ ((new DataView(buffer)).getUint32(0, true));
     loadmodel.bspxoffset = 0;
 
@@ -141,7 +130,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Calculate the bounding radius of the model from its vertices
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
   _calculateRadius(loadmodel) {
@@ -167,7 +156,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load texture information and create GL textures from BSP texture lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -282,7 +271,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load material definitions from .qsmat.json file if available
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
   _loadMaterials(loadmodel) {
@@ -318,7 +307,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load lighting data from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -342,7 +331,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load visibility data for potentially visible set (PVS) calculations
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -364,7 +353,7 @@ export class BSP29Loader extends ModelLoader {
   /**
    * Load entities from BSP lump and parse worldspawn properties.
    * Also this tries to parse light entities to determine if RGB lighting is used and whether we need to load the .lit file.
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -431,7 +420,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load vertices from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If vertex lump size is not a multiple of 12
@@ -459,7 +448,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load edges from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If edge lump size is not a multiple of 4
@@ -483,7 +472,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load surface edges from BSP lump (indices into edge array, negative = reversed)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -502,7 +491,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load planes from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If planes lump size is not a multiple of 20
@@ -537,7 +526,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load texture coordinate information from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If texinfo lump size is not a multiple of 40
@@ -573,7 +562,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load faces (surfaces) from BSP lump and calculate face normals
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If faces lump size is not a multiple of 20
@@ -662,7 +651,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Recursively set parent references for BSP tree nodes
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').Node} node - The node to set parent for
    * @param {import('../BSP.mjs').Node|null} parent - The parent node
    */
@@ -679,7 +668,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load BSP tree nodes from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If nodes lump is empty or incorrectly sized
@@ -740,7 +729,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load BSP leaf nodes from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If leafs lump size is not a multiple of 28
@@ -783,7 +772,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load collision clipnodes and initialize physics hulls
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -825,7 +814,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Create hull0 (point hull) from BSP nodes for collision detection
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
   _makeHull0(loadmodel) {
@@ -852,7 +841,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load marksurfaces (face indices visible from each leaf)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If marksurface index is out of bounds
@@ -877,7 +866,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load submodels (brush models for doors, lifts, etc.)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If no submodels found
@@ -902,9 +891,7 @@ export class BSP29Loader extends ModelLoader {
 
     const clipnodes = loadmodel.hulls[0].clipnodes;
     for (let i = 1; i < count; i++) {
-      const out = Mod.FindName('*' + i);
-      out.needload = false;
-      out.type = 0; // Mod.type.brush
+      const out = new BrushModel('*' + i);
       out.submodel = true;
       out.mins = new Vector(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
       out.maxs = new Vector(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
@@ -946,13 +933,15 @@ export class BSP29Loader extends ModelLoader {
       for (let j = 0; j < out.numfaces; j++) {
         out.faces[out.firstface + j].submodel = true;
       }
+
+      Mod.RegisterModel(out);
     }
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs);
   }
 
   /**
    * Load BSPX extended format data (optional extra lumps)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buffer - The BSP file buffer
    */
@@ -983,7 +972,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load RGB colored lighting from BSPX lump if available
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -1022,7 +1011,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load deluxemap (directional lighting normals) from BSPX lump if available
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -1038,7 +1027,7 @@ export class BSP29Loader extends ModelLoader {
 
   /**
    * Load lightgrid octree from BSPX lump if available
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */

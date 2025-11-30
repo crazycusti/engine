@@ -554,30 +554,7 @@ class ProgsEntity {
   }
 };
 
-// cmds
-
-PR.CheckEmptyString = function(s) {
-  const c = s.charCodeAt(0);
-  if (Q.isNaN(c) || c <= 32) {
-    PR.RunError('Bad string');
-  }
-};
-
 // edict
-
-PR._NewString = function(string) {
-  const newstring = [];
-  for (let i = 0; i < string.length; i++) {
-    const c = string.charCodeAt(i);
-    if ((c === 92) && (i < (string.length - 1))) {
-      i++;
-      newstring[newstring.length] = (string.charCodeAt(i) === 110) ? '\n' : '\\';
-    } else {
-      newstring[newstring.length] = String.fromCharCode(c);
-    }
-  }
-  return PR.SetString(null, newstring.join(''));
-};
 
 /**
  * Retrieves the global definition at the specified offset.

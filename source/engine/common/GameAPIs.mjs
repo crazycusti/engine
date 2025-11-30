@@ -272,35 +272,6 @@ export class ServerEngineAPI extends CommonEngineAPI {
     Cmd.text += `changelevel ${mapname}\n`;
   }
 
-  static *#FindInAreaNode(areaNode, mins, maxs) {
-    if (areaNode.mins.gt(maxs) || areaNode.maxs.lt(mins)) {
-      return; // areaNode is out of bounds
-    }
-
-    if (areaNode.children) {
-      for (const child of areaNode.children) {
-        yield *this.#FindInAreaNode(child, mins, maxs);
-      }
-    }
-
-    for (let ent = areaNode.solid_edicts.next; ent !== areaNode.solid_edicts; ent = ent.next) {
-      /** @type {ServerEdict} */
-      const edict = ent.ent;
-
-      if (!edict || edict.isFree()) {
-        continue;
-      }
-
-      if (edict.entity.absmin[0] > maxs[0] || edict.entity.absmax[0] < mins[0] ||
-          edict.entity.absmin[1] > maxs[1] || edict.entity.absmax[1] < mins[1] ||
-          edict.entity.absmin[2] > maxs[2] || edict.entity.absmax[2] < mins[2]) {
-        continue;
-      }
-
-      yield edict;
-    }
-  }
-
   /**
    * Finds all edicts around origin in given radius.
    * @param {Vector} origin point in space
@@ -316,12 +287,8 @@ export class ServerEngineAPI extends CommonEngineAPI {
     /** @type {ServerEdict[]} */
     const edicts = [];
 
-    for (const ent of this.#FindInAreaNode(SV.areanodes[0], mins, maxs)) {
+    for (const ent of SV.area.tree.queryAABB(mins, maxs)) {
       if (ent.num === 0 || ent.isFree()) {
-        continue;
-      }
-
-      if (ent.entity.solid === solid.SOLID_NOT) {
         continue;
       }
 

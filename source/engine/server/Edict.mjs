@@ -7,6 +7,7 @@ import { eventBus, registry } from '../registry.mjs';
 import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
+import { OctreeNode } from '../../shared/Octree.mjs';
 
 /** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
 /** @typedef {import('../../game/id1/entity/Worldspawn.mjs').WorldspawnEntity} WorldspawnEntity */
@@ -291,6 +292,9 @@ export class ServerEdict {
     this.area = {
       ent: this,
     };
+    /** @type {OctreeNode|null} used for fast lookup */
+    this.octreeNode = null;
+    /** @type {number[]} used for PVS lookup */
     this.leafnums = [];
     this.freetime = 0.0;
     /** @type {BaseEntity|null} entity managed by the game code */
@@ -310,6 +314,18 @@ export class ServerEdict {
    */
   isFree() {
     return this.free || !this.entity;
+  }
+
+  get origin() { // for Octree use
+    return this.entity ? this.entity.origin : null;
+  }
+
+  get absmin() { // for Octree use
+    return this.entity ? this.entity.absmin : null;
+  }
+
+  get absmax() { // for Octree use
+    return this.entity ? this.entity.absmax : null;
   }
 
   toString() {

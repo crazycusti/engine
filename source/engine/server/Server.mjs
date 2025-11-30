@@ -161,8 +161,6 @@ export default class SV {
     gamestate: null,
   };
 
-  static areanodes = [];
-
   // Physics box hull (used for collision detection)
   static box_clipnodes = null;
   static box_planes = null;
@@ -403,9 +401,7 @@ export default class SV {
     }
 
     // Setup area nodes for spatial partitioning
-    // eslint-disable-next-line require-atomic-updates
-    SV.areanodes.length = 0;
-    SV.area.createAreaNode(0, SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
+    SV.area.initOctree(SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
 
     // Setup model and sound precache
     SV.#setupModelPrecache();

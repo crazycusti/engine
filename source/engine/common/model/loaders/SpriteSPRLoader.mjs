@@ -40,21 +40,10 @@ export class SpriteSPRLoader extends ModelLoader {
    * Load a Sprite SPR model from buffer
    * @param {ArrayBuffer} buffer - The model file data
    * @param {string} name - The model name/path
-   * @param {import('../BaseModel.mjs').BaseModel} model - The model object to populate
-   * @returns {import('../SpriteModel.mjs').SpriteModel} The loaded model
+   * @returns {SpriteModel} The loaded model
    */
-  load(buffer, name, model) {
-    // Ensure we're using a SpriteModel instance
-    /** @type {import('../SpriteModel.mjs').SpriteModel} */
-    let loadmodel;
-
-    if (!(model instanceof SpriteModel)) {
-      const spriteModel = new SpriteModel(name);
-      Object.assign(spriteModel, model);
-      loadmodel = spriteModel;
-    } else {
-      loadmodel = model;
-    }
+  load(buffer, name) {
+    const loadmodel = new SpriteModel(name);
 
     loadmodel.type = 1; // Mod.type.sprite
 
@@ -131,7 +120,7 @@ export class SpriteSPRLoader extends ModelLoader {
 
   /**
    * Load a single sprite frame from buffer
-   * @private
+   * @protected
    * @param {string} identifier - Frame texture identifier
    * @param {ArrayBuffer} buffer - The model file data
    * @param {number} inframe - Current offset in buffer

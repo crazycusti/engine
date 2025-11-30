@@ -51,7 +51,7 @@ Mod.hull = {
   crouch: 3,
 };
 
-Mod.known = /** @type {BaseModel[]} */ ([]);
+Mod.known = /** @type {Record<string, BaseModel>} */ ({});
 
 Mod.modelLoaderRegistry = new ModelLoaderRegistry();
 
@@ -118,108 +118,62 @@ Mod.LeafPVS = function (leaf, model) {
   return Mod.DecompressVis(leaf.visofs, model);
 };
 
+/**
+ * Despite the name, it clears brush models only.
+ */
 Mod.ClearAll = function () {
-  // TODO: clean out all like this
-  //        - while length > 0, shift
-  //        - model.Free (in turn will call deleteBuffer etc.)
-  //        - keep everything non brush
+  for (const name of Object.keys(Mod.known)) {
+    const mod = Mod.known[name];
 
-  for (let i = 0; i < Mod.known.length; i++) {
-    const mod = Mod.known[i];
     if (mod.type !== Mod.type.brush) {
       continue;
     }
-    // eslint-disable-next-line eqeqeq
-    if (mod.cmds != null) {
+
+    if (mod.cmds !== null) { // TODO: move responsibility to model.free or the renderer
       gl.deleteBuffer(mod.cmds);
     }
-    Mod.known[i] = {
-      name: mod.name,
-      needload: true,
-    };
+
+    delete Mod.known[name];
   }
 };
 
-Mod.FindName = function (name) { // private method (refactor into _RegisterModel)
-  if (name.length === 0) {
-    throw new Error('Mod.FindName: NULL name');
-  }
-  let i;
-  for (i = 0; i < Mod.known.length; i++) {
-    // eslint-disable-next-line eqeqeq
-    if (Mod.known[i] == null) {
-      continue;
-    }
-    if (Mod.known[i].name === name) {
-      return Mod.known[i];
-    }
-  }
-  for (i = 0; i <= Mod.known.length; i++) {
-    // eslint-disable-next-line eqeqeq
-    if (Mod.known[i] != null) {
-      continue;
-    }
-    Mod.known[i] = { name: name, needload: true };
-    return Mod.known[i];
-  }
-  return null;
+Mod.LoadModelFromBuffer = function (name, buffer) {
+  const model = Mod.modelLoaderRegistry.load(buffer, name);
+
+  Mod.RegisterModel(model);
+
+  return model;
 };
 
-Mod.LoadModelFromBuffer = function (loadmodel, buffer) {
-  // Use the new loader registry system
-  return Mod.modelLoaderRegistry.load(buffer, loadmodel.name, loadmodel);
+Mod.RegisterModel = function (model) {
+  Mod.known[model.name] = model;
 };
 
 /**
- * @param {BaseModel} mod model to load into
- * @param {boolean} crash whether to throw an error if the model is not found
- * @returns {BaseModel|null} the loaded model or null if not found
- * @deprecated use Mod.LoadModelAsync instead
- */
-Mod.LoadModel = function (mod, crash) { // private method
-  if (mod.needload !== true) {
-    return mod;
-  }
-  const buf = COM.LoadFile(mod.name);
-  if (buf === null) {
-    if (crash === true) {
-      throw new MissingResourceError(mod.name);
-    }
-    return null;
-  }
-  return Mod.LoadModelFromBuffer(mod, buf);
-};
-
-/**
- * @param {BaseModel} mod model to load into
+ * @param {string} name model to load
  * @param {boolean} crash whether to throw an error if the model is not found
  * @returns {Promise<BaseModel|null>} the loaded model or null if not found
  */
-Mod.LoadModelAsync = async function (mod, crash) { // private method
-  if (mod.needload !== true) {
-    return mod;
-  }
-  const buf = await COM.LoadFileAsync(mod.name);
+Mod.LoadModelAsync = async function (name, crash) { // private method
+  const buf = await COM.LoadFileAsync(name);
   if (buf === null) {
     if (crash === true) {
-      throw new MissingResourceError(mod.name);
+      throw new MissingResourceError(name);
     }
     return null;
   }
-  return Mod.LoadModelFromBuffer(mod, buf);
+  return Mod.LoadModelFromBuffer(name, buf);
 };
 
 /**
+ * Load submodels. For anything else, use Mod.ForNameAsync instead.
  * @param {string} name filename
- * @param {boolean} crash whether to throw an error if the model is not found
  * @returns {BaseModel|null} the loaded model or null if not found
- * @deprecated use Mod.LoadModelAsync instead
  */
-Mod.ForName = function (name, crash = false) { // public method
-  if (name[0] !== '*') {
-    console.trace('Mod.ForName called', name);
-  }
-  return Mod.LoadModel(Mod.FindName(name), crash);
+Mod.ForName = function (name) { // public method
+  console.assert(name[0] === '*', 'only submodels supported in Mod.ForName');
+
+  return Mod.known[name] || null;
 };
 
 /**
@@ -228,7 +182,11 @@ Mod.ForName = function (name, crash = false) { // public method
  * @returns {Promise<BaseModel|null>} the loaded model or null if not found
  */
 Mod.ForNameAsync = async function (name, crash = false) { // public method
-  return await Mod.LoadModelAsync(Mod.FindName(name), crash);
+  if (name[0] === '*') {
+    return Mod.ForName(name);
+  }
+
+  return await Mod.LoadModelAsync(name, crash);
 };
 
 /** @typedef {import('../../shared/GameInterfaces.d.ts').ParsedQC} ParsedQC_t */

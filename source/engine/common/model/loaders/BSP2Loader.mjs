@@ -40,7 +40,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load faces from BSP lump (BSP2 version with 32-bit indices)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If faces lump size is not a multiple of 28
@@ -134,7 +134,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load BSP tree nodes from BSP lump (BSP2 version with 32-bit children indices)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If nodes lump is empty or incorrectly sized
@@ -205,7 +205,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load BSP leaf nodes from BSP lump (BSP2 version with 32-bit indices)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If leafs lump size is not a multiple of 44
@@ -252,7 +252,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load marksurfaces from BSP lump (BSP2 version with 32-bit indices)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If marksurfaces lump size is not a multiple of 4
@@ -279,7 +279,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load collision clipnodes and initialize physics hulls (BSP2 version with 32-bit children)
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
@@ -328,7 +328,7 @@ export class BSP2Loader extends BSP29Loader {
 
   /**
    * Load edges from BSP lump
-   * @private
+   * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If edge lump size is not a multiple of 4
