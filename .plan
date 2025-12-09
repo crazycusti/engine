@@ -6,7 +6,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Modern JavaScript
 
-- [_] `COM` we need to completely get rid of synchroneously loading files, it’s flagged as deprecated
+- [X] `COM` we need to completely get rid of synchroneously loading files, it’s flagged as deprecated
 - [_] since IO is no longer blocking, things need to be more aware of stuff still stuck on loading
 - [_] considering replacing Sys.Print and Con.Print with console.info, console.warn, etc.
 - [_] use more Exceptions and better Exception classes, also more console.asserts
@@ -52,14 +52,15 @@ Grouped by sections and then sorted by priority (more or less).
 ### Rendering improvements
 
 - [_] lerp view model animations
-- [_] water transparency should be configured through other means such as worldspawnInfo
+- [_] water transparency should be configured through other means such as worldspawnInfo (wateralpha, lavaalpha, telealpha, slimealpha)
 - [X] texture cache can return wrong textures when they share the same name across maps but are actually different
+- [_] more interesting warp: https://www.shadertoy.com/view/ctXyW8
 
 ### Random issues
 
 - [_] a not precached resource will cause dropping Promises, game code needs model right away, QuakeC VM broken
 - [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
-- [_] group animated models are not rendered anymore
+- [X] group animated models are not rendered anymore
 
 ### LibreQuake support
 
@@ -67,6 +68,16 @@ Grouped by sections and then sorted by priority (more or less).
 - [X] add back `.lit` support (right now it’s only looking for RGBLIGHTING bspxlump)
 - [X] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
 - [_] try to get QuakeC’s progs.dat going
+
+### Quake 2 Port
+
+- [_] BSP38 loader
+- [_] port physics code from Quake 2 (there are a bunch of fixes)
+- [_] PCX loader
+- [_] skybox renderer
+- [_] WAL loader
+- [_] md2 loader and renderer
+- [_] game port
 
 ### Documentation and Hackability™
 
@@ -120,6 +131,11 @@ Grouped by sections and then sorted by priority (more or less).
 - https://github.com/khreathor/mdl-for-blender mdl support
 
 ## Log
+
+### 2025-12-09
+
+- got completely rid of non-async IO
+- planning on porting Quake 2
 
 ### 2025-11-30
 

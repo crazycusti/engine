@@ -210,7 +210,7 @@ export default class Sys {
         // e.g. "/data/id1/progs/player.mdl" -> "id1/progs/player.mdl"
         const requestedPath = req.path.substring(skipChars);
 
-        const fileData = await COM.LoadFileAsync(requestedPath);
+        const fileData = await COM.LoadFile(requestedPath);
 
         if (!fileData) {
           // File not found or empty result

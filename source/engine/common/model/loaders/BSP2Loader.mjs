@@ -61,7 +61,7 @@ export class BSP2Loader extends BSP29Loader {
     const count = filelen / 28;
     loadmodel.firstface = 0;
     loadmodel.numfaces = count;
-    loadmodel.faces = [];
+    loadmodel.faces.length = count;
 
     for (let i = 0; i < count; i++) {
       const styles = new Uint8Array(buf, fileofs + 20, 4);
@@ -152,7 +152,7 @@ export class BSP2Loader extends BSP29Loader {
       throw new Error('BSP2Loader: nodes lump size is invalid in ' + loadmodel.name);
     }
     const count = filelen / 44;
-    loadmodel.nodes = [];
+    loadmodel.nodes.length = count;
 
     for (let i = 0; i < count; i++) {
       loadmodel.nodes[i] = /** @type {import('../BSP.mjs').Node} */ ({
@@ -223,7 +223,7 @@ export class BSP2Loader extends BSP29Loader {
       throw new Error('BSP2Loader: leafs lump size is not a multiple of 44 in ' + loadmodel.name);
     }
     const count = filelen / 44;
-    loadmodel.leafs = [];
+    loadmodel.leafs.length = count;
 
     for (let i = 0; i < count; i++) {
       loadmodel.leafs[i] = /** @type {import('../BSP.mjs').Node} */ ({
@@ -268,7 +268,7 @@ export class BSP2Loader extends BSP29Loader {
       throw new CorruptedResourceError(loadmodel.name, 'BSP2Loader: marksurfaces lump size is not a multiple of 4');
     }
     const count = filelen >> 2;
-    loadmodel.marksurfaces = [];
+    loadmodel.marksurfaces.length = count;
 
     for (let i = 0; i < count; i++) {
       loadmodel.marksurfaces[i] = view.getUint32(fileofs, true); // uint32 instead of uint16
@@ -295,10 +295,10 @@ export class BSP2Loader extends BSP29Loader {
       throw new Error('BSP2Loader: clipnodes lump size is not a multiple of 12 in ' + loadmodel.name);
     }
     const count = filelen / 12;
-    loadmodel.clipnodes = [];
+    loadmodel.clipnodes.length = count;
 
     // Initialize hulls (same as BSP29)
-    loadmodel.hulls = [];
+    loadmodel.hulls.length = 3;
     loadmodel.hulls[1] = {
       clipnodes: loadmodel.clipnodes,
       firstclipnode: 0,
@@ -342,7 +342,7 @@ export class BSP2Loader extends BSP29Loader {
       throw new CorruptedResourceError(loadmodel.name, 'BSP2Loader: edges lump size is not a multiple of 4');
     }
     const count = filelen >> 2;
-    loadmodel.edges = [];
+    loadmodel.edges.length = count;
     for (let i = 0; i < count; i++) {
       loadmodel.edges[i] = [view.getUint32(fileofs, true), view.getUint32(fileofs + 4, true)];
       fileofs += 8;

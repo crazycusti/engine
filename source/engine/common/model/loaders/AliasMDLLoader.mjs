@@ -48,9 +48,10 @@ export class AliasMDLLoader extends ModelLoader {
    * Load an Alias MDL model from buffer
    * @param {ArrayBuffer} buffer - The model file data
    * @param {string} name - The model name/path
-   * @returns {AliasModel} The loaded model
+   * @returns {Promise<AliasModel>} The loaded model
    */
-  load(buffer, name) {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async load(buffer, name) {
     const loadmodel = new AliasModel(name);
 
     loadmodel.type = 2; // Mod.type.alias
@@ -133,7 +134,7 @@ export class AliasMDLLoader extends ModelLoader {
    */
   _loadSTVerts(loadmodel, buffer, inmodel) {
     const view = new DataView(buffer);
-    loadmodel._stverts = [];
+    loadmodel._stverts.length = loadmodel._num_verts;
 
     for (let i = 0; i < loadmodel._num_verts; i++) {
       loadmodel._stverts[i] = {
@@ -157,7 +158,7 @@ export class AliasMDLLoader extends ModelLoader {
    */
   _loadTriangles(loadmodel, buffer, inmodel) {
     const view = new DataView(buffer);
-    loadmodel._triangles = [];
+    loadmodel._triangles.length = loadmodel._num_tris;
 
     for (let i = 0; i < loadmodel._num_tris; i++) {
       loadmodel._triangles[i] = {
@@ -255,7 +256,7 @@ export class AliasMDLLoader extends ModelLoader {
    * @private
    */
   _loadAllSkins(loadmodel, buffer, inmodel) {
-    loadmodel.skins = [];
+    loadmodel.skins.length = loadmodel._num_skins;
     const view = new DataView(buffer);
     const skinsize = loadmodel._skin_width * loadmodel._skin_height;
 

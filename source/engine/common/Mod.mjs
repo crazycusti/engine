@@ -137,8 +137,8 @@ Mod.ClearAll = function () {
   }
 };
 
-Mod.LoadModelFromBuffer = function (name, buffer) {
-  const model = Mod.modelLoaderRegistry.load(buffer, name);
+Mod.LoadModelFromBuffer = async function (name, buffer) {
+  const model = await Mod.modelLoaderRegistry.load(buffer, name);
 
   Mod.RegisterModel(model);
 
@@ -155,14 +155,14 @@ Mod.RegisterModel = function (model) {
  * @returns {Promise<BaseModel|null>} the loaded model or null if not found
  */
 Mod.LoadModelAsync = async function (name, crash) { // private method
-  const buf = await COM.LoadFileAsync(name);
+  const buf = await COM.LoadFile(name);
   if (buf === null) {
     if (crash === true) {
       throw new MissingResourceError(name);
     }
     return null;
   }
-  return Mod.LoadModelFromBuffer(name, buf);
+  return await Mod.LoadModelFromBuffer(name, buf);
 };
 
 /**

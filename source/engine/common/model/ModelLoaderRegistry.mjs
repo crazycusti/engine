@@ -38,17 +38,17 @@ export class ModelLoaderRegistry {
    * Load a model using the appropriate loader.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} name The model name/path
-   * @returns {import('./BaseModel.mjs').BaseModel} The loaded model
+   * @returns {Promise<import('./BaseModel.mjs').BaseModel>} The loaded model
    * @throws {NotImplementedError} If no suitable loader is found
    */
-  load(buffer, name) {
+  async load(buffer, name) {
     const loader = this.findLoader(buffer, name);
 
     if (!loader) {
       throw new NotImplementedError(`No loader found for model format: ${name}`);
     }
 
-    return loader.load(buffer, name);
+    return await loader.load(buffer, name);
   }
 
   /**
@@ -63,6 +63,6 @@ export class ModelLoaderRegistry {
    * Clear all registered loaders.
    */
   clear() {
-    this.loaders = [];
+    this.loaders.length = 0;
   }
 };

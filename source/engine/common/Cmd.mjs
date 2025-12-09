@@ -213,7 +213,7 @@ export default class Cmd {
       }
       const slot = new ExecSlot(filename);
       Cmd.#execSlots.push(slot);
-      const f = await COM.LoadTextFileAsync(filename);
+      const f = await COM.LoadTextFile(filename);
       slot.isReady = true;
       slot.content = f;
     }

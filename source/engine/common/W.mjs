@@ -103,7 +103,7 @@ export default class W {
    * @returns {Promise<WadFileInterface>} the loaded WAD file or null if not found
    */
   static async LoadFile(filename) {
-    const base = await COM.LoadFileAsync(filename);
+    const base = await COM.LoadFile(filename);
 
     if (!base) {
       throw new MissingResourceError(filename);
@@ -128,7 +128,7 @@ export default class W {
    * @param {string} filename palette file path, e.g. 'gfx/palette.lmp'
    */
   static async LoadPalette(filename) {
-    const palette = await COM.LoadFileAsync(filename);
+    const palette = await COM.LoadFile(filename);
 
     if (palette === null) {
       throw new MissingResourceError(filename);
@@ -155,7 +155,7 @@ export default class W {
    * @returns {Promise<WadLumpTexture>} the loaded lump texture
    */
   static async LoadLump(filename) { // TODO: this should take a type parameter to specify the type of the lump
-    const buf = await COM.LoadFileAsync(filename);
+    const buf = await COM.LoadFile(filename);
 
     if (buf === null) {
       throw new MissingResourceError(filename);

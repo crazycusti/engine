@@ -54,9 +54,10 @@ export class WavefrontOBJLoader extends ModelLoader {
    * Load a Wavefront OBJ model from buffer
    * @param {ArrayBuffer} buffer The model file data
    * @param {string} name The model name/path
-   * @returns {MeshModel} The loaded model
+   * @returns {Promise<MeshModel>} The loaded model
    */
-  load(buffer, name) {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async load(buffer, name) {
     const loadmodel = new MeshModel(name);
 
     // Convert ArrayBuffer to text

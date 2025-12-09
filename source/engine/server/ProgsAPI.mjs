@@ -329,10 +329,6 @@ PF.findradius = _PF_GenerateBuiltinFunction('findradius', (origin, radius) => {
   return chain;
 }, [etype.ev_vector, etype.ev_float], etype.ev_entity);
 
-PF.dprint = function dprint() { // EngineInterface
-  Con.DPrint(PF._VarString(0));
-};
-
 PF.dprint = _PF_GenerateBuiltinFunction('dprint', (str) => ServerEngineAPI.ConsoleDebug(str), [etype.ev_strings]);
 
 PF.ftos = _PF_GenerateBuiltinFunction('ftos', (f) => (+f|0) === +f ? f.toString() : f.toFixed(1), [etype.ev_float], etype.ev_string);

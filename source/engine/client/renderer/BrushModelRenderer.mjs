@@ -347,7 +347,7 @@ export class BrushModelRenderer extends ModelRenderer {
     const program = GL.UseProgram('turbulent');
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-    gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
+    gl.uniform1f(program.uTime, Host.realtime);
 
     // Setup vertex attributes
     this._setupBrushVertexAttributes(program, clmodel.waterchain);

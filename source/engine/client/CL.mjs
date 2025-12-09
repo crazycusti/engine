@@ -84,8 +84,8 @@ export default class CL {
     this.#clientDemos.startDemos(demos);
   }
 
-  static StartPlayback(demoname, timedemo = false) {
-    this.#clientDemos.startPlayback(demoname, timedemo);
+  static async StartPlayback(demoname, timedemo = false) {
+    await this.#clientDemos.startPlayback(demoname, timedemo);
   }
 
   static StopPlayback() { // public, by Host.js
@@ -96,8 +96,8 @@ export default class CL {
     this.#clientDemos.startRecording(demoname, forcetrack);
   }
 
-  static StopRecording() {
-    this.#clientDemos.stopRecording();
+  static async StopRecording() {
+    await this.#clientDemos.stopRecording();
   }
 
   static NextDemo() { // public, by Host.js, M.js
@@ -169,12 +169,12 @@ export default class CL {
   }
 
   static Stop_f = class StopRecordingCommand extends ConsoleCommand { // private
-    run() {
+    async run() {
       if (this.client) {
         return;
       }
 
-      CL.StopRecording();
+      await CL.StopRecording();
     }
   };
 
@@ -250,7 +250,7 @@ export default class CL {
   };
 
   static PlayDemo_f = class StartPlaybackCommand extends ConsoleCommand {
-    run(demoname) {
+    async run(demoname) {
       if (this.client) {
         return;
       }
@@ -261,12 +261,12 @@ export default class CL {
       }
 
       CL.Disconnect();
-      CL.StartPlayback(demoname);
+      await CL.StartPlayback(demoname);
     }
   };
 
   static TimeDemo_f = class TimeDemoCommand extends ConsoleCommand { // private
-    run(demoname) {
+    async run(demoname) {
       if (this.client) {
         return;
       }
@@ -277,7 +277,7 @@ export default class CL {
       }
 
       CL.Disconnect();
-      CL.StartPlayback(demoname, true);
+      await CL.StartPlayback(demoname, true);
     }
   };
 

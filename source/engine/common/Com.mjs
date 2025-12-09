@@ -153,7 +153,7 @@ export default class COM {
 
   static async CheckRegistered() {
     const filename = 'gfx/pop.lmp';
-    const h = await this.LoadFileAsync(filename);
+    const h = await this.LoadFile(filename);
 
     if (h === null) {
       Con.PrintSuccess('Playing shareware version.\n');
@@ -290,16 +290,10 @@ export default class COM {
 
   /**
    * @param {string} filename virtual filename
-   * @returns {ArrayBuffer} binary content
-   * @deprecated this blocks the main thread – use async version instead
+   * @returns {Promise<ArrayBuffer>} binary content
    */
-  static LoadFile(filename) {
-    console.warn('COM.LoadFile: sync IO requested', filename);
-
+  static async LoadFile(filename) {
     filename = filename.toLowerCase();
-
-    const xhr = new XMLHttpRequest();
-    xhr.overrideMimeType('text/plain; charset=x-user-defined');
 
     eventBus.publish('com.fs.being', filename);
 
@@ -316,47 +310,6 @@ export default class COM {
     }
 
     // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
-    xhr.open('GET', netpath, false);
-    try {
-      xhr.send();
-    } catch {
-      // File doesn't exist
-    }
-
-    if (xhr.status >= 200 && xhr.status <= 299) {
-      Sys.Print(`COM.LoadFile: ${netpath}\n`);
-      eventBus.publish('com.fs.end', filename);
-      return Q.strmem(xhr.responseText);
-    }
-
-    // File not found
-    Sys.Print(`COM.LoadFile: can't find ${filename}\n`);
-    eventBus.publish('com.fs.end', filename);
-    return null;
-  };
-
-  /**
-   * @param {string} filename virtual filename
-   * @returns {Promise<ArrayBuffer>} binary content
-   */
-  static async LoadFileAsync(filename) {
-    filename = filename.toLowerCase();
-
-    eventBus.publish('com.fs.being', filename);
-
-    // Determine file path based on active game directory
-    const gameDir = this.GetGamedir();
-    const netpath = this.GetNetpath(filename, gameDir);
-
-    // 1) Try localStorage first
-    const localData = localStorage.getItem(`Quake.${gameDir}/${filename}`);
-    if (localData !== null) {
-      Sys.Print(`COM.LoadFileAsync: ${netpath} (localStorage)\n`);
-      eventBus.publish('com.fs.end', filename);
-      return Q.strmem(localData);
-    }
-
-    // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
     try {
       const directResponse = await fetch(netpath, {
         signal: this.abortController.signal,
@@ -364,7 +317,7 @@ export default class COM {
 
       if (directResponse.ok) {
         const data = await directResponse.arrayBuffer();
-        Sys.Print(`COM.LoadFileAsync: ${netpath}\n`);
+        Sys.Print(`COM.LoadFile: ${netpath}\n`);
         eventBus.publish('com.fs.end', filename);
         return data;
       }
@@ -373,30 +326,9 @@ export default class COM {
     }
 
     // File not found
-    Sys.Print(`COM.LoadFileAsync: can't find ${filename}\n`);
+    Sys.Print(`COM.LoadFile: can't find ${filename}\n`);
     eventBus.publish('com.fs.end', filename);
     return null;
-  }
-
-  /**
-   * Lods a text file.
-   * @param {string} filename filename
-   * @returns {string} content of the file as a string
-   * @deprecated use async version instead
-   */
-  static LoadTextFile(filename) {
-    const buf = this.LoadFile(filename);
-    if (buf === null) {
-      return null;
-    }
-    const bufview = new Uint8Array(buf);
-    const f = [];
-    for (let i = 0; i < bufview.length; i++) {
-      if (bufview[i] !== 13) {
-        f[f.length] = String.fromCharCode(bufview[i]);
-      }
-    }
-    return f.join('');
   }
 
   /**
@@ -404,8 +336,8 @@ export default class COM {
    * @param {string} filename filename
    * @returns {Promise<string>} content of the file as a string
    */
-  static async LoadTextFileAsync(filename) {
-    const buf = await this.LoadFileAsync(filename);
+  static async LoadTextFile(filename) {
+    const buf = await this.LoadFile(filename);
     if (buf === null) {
       return null;
     }

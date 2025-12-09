@@ -45,14 +45,14 @@ export class ModelLoader {
     return false;
   }
 
-  // eslint-disable-next-line jsdoc/require-returns-check
   /**
    * Load the model from the buffer.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} name The model name/path
-   * @returns {import('./BaseModel.mjs').BaseModel} The loaded model
+   * @returns {Promise<import('./BaseModel.mjs').BaseModel>} The loaded model
    */
-  load(buffer, name) { // eslint-disable-line no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async load(buffer, name) { // eslint-disable-line no-unused-vars
     throw new NotImplementedError('ModelLoader.load must be implemented');
   }
 

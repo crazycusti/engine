@@ -2,6 +2,7 @@ import { NotImplementedError } from './Errors.mjs';
 
 /** Base class for Sys implementations. */
 export default class Sys {
+  // eslint-disable-next-line @typescript-eslint/require-await
   static async Init() {
     throw new NotImplementedError('Sys.Init must be implemented in a subclass');
   }

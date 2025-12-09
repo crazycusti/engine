@@ -721,8 +721,8 @@ PR.GlobalStringNoContents = function(ofs) {
   return line;
 };
 
-PR.LoadProgs = function() {
-  const progs = COM.LoadFile('progs.dat');
+PR.LoadProgs = async function() {
+  const progs = await COM.LoadFile('progs.dat');
   if (progs === null) {
     throw new MissingResourceError('progs.dat');
   }

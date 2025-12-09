@@ -233,9 +233,22 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
   Cmd.ExecuteString('listen 0'); // TODO: proper method over at NET
 };
 
+Host.ConfigReady_f = function() {
+  eventBus.publish('host.config.loaded');
+  Con.DPrint('Loaded configuration\n');
+};
+
 Host.WriteConfiguration = function() {
   Host.ScheduleInFuture('Host.WriteConfiguration', () => {
-    COM.WriteTextFile('config.cfg', (!registry.isDedicatedServer ? Key.WriteBindings() + '\n\n\n': '') + Cvar.WriteVariables());
+    const config = `
+${(!registry.isDedicatedServer ? Key.WriteBindings() + '\n\n\n': '')}
+
+${Cvar.WriteVariables()}
+
+configready
+`;
+
+    COM.WriteTextFile('config.cfg', config);
     Con.DPrint('Wrote configuration\n');
   }, 5.000);
 };
@@ -938,7 +951,7 @@ Host.Loadgame_f = async function (savename) {
   CL.cls.demonum = -1;
   const name = COM.DefaultExtension(savename, '.json');
   Con.Print('Loading game from ' + name + '...\n');
-  const data = COM.LoadTextFile(name);
+  const data = await COM.LoadTextFile(name);
   if (data === null) {
     Con.PrintError('ERROR: couldn\'t open.\n');
     return;
@@ -1590,6 +1603,7 @@ Host.InitCommands = function() {
   Cmd.AddCommand('viewprev', Host.Viewprev_f);
   // Cmd.AddCommand('mcache', Mod.Print);
   Cmd.AddCommand('writeconfig', Host.WriteConfiguration_f);
+  Cmd.AddCommand('configready', Host.ConfigReady_f);
 
   Cmd.AddCommand('error', class extends ConsoleCommand {
     run(message) {

@@ -83,9 +83,9 @@ export class BSP29Loader extends ModelLoader {
    * Load a BSP29 map model from buffer
    * @param {ArrayBuffer} buffer - The BSP file data
    * @param {string} name - The model name/path
-   * @returns {BrushModel} The loaded model
+   * @returns {Promise<BrushModel>} The loaded model
    */
-  load(buffer, name) {
+  async load(buffer, name) {
     const loadmodel = new BrushModel(name);
 
     loadmodel.type = Mod.type.brush;
@@ -98,7 +98,7 @@ export class BSP29Loader extends ModelLoader {
     this._loadEdges(loadmodel, buffer);
     this._loadSurfedges(loadmodel, buffer);
     this._loadTextures(loadmodel, buffer);
-    this._loadMaterials(loadmodel);
+    await this._loadMaterials(loadmodel);
     this._loadLighting(loadmodel, buffer);
     this._loadPlanes(loadmodel, buffer);
     this._loadTexinfo(loadmodel, buffer);
@@ -116,7 +116,7 @@ export class BSP29Loader extends ModelLoader {
     this._loadSubmodels(loadmodel, buffer); // CR: must be last, since it’s creating additional models based on this one
 
     if (loadmodel.coloredlights && !loadmodel.lightdata_rgb) {
-      this._loadExternalLighting(loadmodel, name);
+      await this._loadExternalLighting(loadmodel, name);
     }
 
     // Calculate bounding radius
@@ -165,7 +165,7 @@ export class BSP29Loader extends ModelLoader {
     const lump = BSP29Loader.#lump;
     const fileofs = view.getUint32((lump.textures << 3) + 4, true);
     const filelen = view.getUint32((lump.textures << 3) + 8, true);
-    loadmodel.textures = [];
+    loadmodel.textures.length = 0;
     const nummiptex = view.getUint32(fileofs, true);
     let dataofs = fileofs + 4;
 
@@ -274,8 +274,8 @@ export class BSP29Loader extends ModelLoader {
    * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
-  _loadMaterials(loadmodel) {
-    const matfile = COM.LoadTextFile(loadmodel.name.replace('.bsp', '.qsmat.json'));
+  async _loadMaterials(loadmodel) {
+    const matfile = await COM.LoadTextFile(loadmodel.name.replace(/\.bsp$/i, '.qsmat.json'));
 
     if (!matfile) {
       return;
@@ -434,7 +434,7 @@ export class BSP29Loader extends ModelLoader {
       throw new Error('BSP29Loader: vertexes lump size is not a multiple of 12 in ' + loadmodel.name);
     }
     const count = filelen / 12;
-    loadmodel.vertexes = [];
+    loadmodel.vertexes.length = 0;
     for (let i = 0; i < count; i++) {
       loadmodel.vertexes[i] = new Vector(
         view.getFloat32(fileofs, true),
@@ -462,7 +462,7 @@ export class BSP29Loader extends ModelLoader {
       throw new CorruptedResourceError(loadmodel.name, 'BSP29Loader: edges lump size is not a multiple of 4');
     }
     const count = filelen >> 2;
-    loadmodel.edges = [];
+    loadmodel.edges.length = 0;
     for (let i = 0; i < count; i++) {
       loadmodel.edges[i] = [view.getUint16(fileofs, true), view.getUint16(fileofs + 2, true)];
       fileofs += 4;
@@ -482,7 +482,7 @@ export class BSP29Loader extends ModelLoader {
     const fileofs = view.getUint32((lump.surfedges << 3) + 4, true);
     const filelen = view.getUint32((lump.surfedges << 3) + 8, true);
     const count = filelen >> 2;
-    loadmodel.surfedges = [];
+    loadmodel.surfedges.length = 0;
     for (let i = 0; i < count; i++) {
       loadmodel.surfedges[i] = view.getInt32(fileofs + (i << 2), true);
     }
@@ -505,7 +505,7 @@ export class BSP29Loader extends ModelLoader {
       throw new Error('BSP29Loader: planes lump size is not a multiple of 20 in ' + loadmodel.name);
     }
     const count = filelen / 20;
-    loadmodel.planes = [];
+    loadmodel.planes.length = 0;
     for (let i = 0; i < count; i++) {
       const normal = new Vector(
         view.getFloat32(fileofs, true),
@@ -540,7 +540,7 @@ export class BSP29Loader extends ModelLoader {
       throw new Error('BSP29Loader: texinfo lump size is not a multiple of 40 in ' + loadmodel.name);
     }
     const count = filelen / 40;
-    loadmodel.texinfo = [];
+    loadmodel.texinfo.length = 0;
     for (let i = 0; i < count; i++) {
       const out = {
         vecs: [
@@ -580,7 +580,7 @@ export class BSP29Loader extends ModelLoader {
     const count = filelen / 20;
     loadmodel.firstface = 0;
     loadmodel.numfaces = count;
-    loadmodel.faces = [];
+    loadmodel.faces.length = 0;
 
     for (let i = 0; i < count; i++) {
       const styles = new Uint8Array(buf, fileofs + 12, 4);
@@ -684,7 +684,7 @@ export class BSP29Loader extends ModelLoader {
     }
 
     const count = filelen / 24;
-    loadmodel.nodes = [];
+    loadmodel.nodes.length = 0;
 
     for (let i = 0; i < count; i++) {
       loadmodel.nodes[i] = /** @type {import('../BSP.mjs').Node} */ ({
@@ -743,7 +743,7 @@ export class BSP29Loader extends ModelLoader {
       throw new Error('BSP29Loader: leafs lump size is not a multiple of 28 in ' + loadmodel.name);
     }
     const count = filelen / 28;
-    loadmodel.leafs = [];
+    loadmodel.leafs.length = 0;
 
     for (let i = 0; i < count; i++) {
       loadmodel.leafs[i] = /** @type {import('../BSP.mjs').Node} */ ({
@@ -782,9 +782,9 @@ export class BSP29Loader extends ModelLoader {
     let fileofs = view.getUint32((lump.clipnodes << 3) + 4, true);
     const filelen = view.getUint32((lump.clipnodes << 3) + 8, true);
     const count = filelen >> 3;
-    loadmodel.clipnodes = [];
+    loadmodel.clipnodes.length = 0;
 
-    loadmodel.hulls = [];
+    loadmodel.hulls.length = 0;
     loadmodel.hulls[1] = {
       clipnodes: loadmodel.clipnodes,
       firstclipnode: 0,
@@ -852,7 +852,7 @@ export class BSP29Loader extends ModelLoader {
     const fileofs = view.getUint32((lump.marksurfaces << 3) + 4, true);
     const filelen = view.getUint32((lump.marksurfaces << 3) + 8, true);
     const count = filelen >> 1;
-    loadmodel.marksurfaces = [];
+    loadmodel.marksurfaces.length = 0;
 
     for (let i = 0; i < count; i++) {
       const j = view.getUint16(fileofs + (i << 1), true);
@@ -880,10 +880,10 @@ export class BSP29Loader extends ModelLoader {
     if (count === 0) {
       throw new Error('BSP29Loader: no submodels in ' + loadmodel.name);
     }
-    loadmodel.submodels = [];
+    loadmodel.submodels.length = 0;
 
-    loadmodel.mins = new Vector(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
-    loadmodel.maxs = new Vector(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
+    loadmodel.mins.setTo(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
+    loadmodel.maxs.setTo(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
     loadmodel.hulls[0].firstclipnode = view.getUint32(fileofs + 36, true);
     loadmodel.hulls[1].firstclipnode = view.getUint32(fileofs + 40, true);
     loadmodel.hulls[2].firstclipnode = view.getUint32(fileofs + 44, true);
@@ -893,9 +893,9 @@ export class BSP29Loader extends ModelLoader {
     for (let i = 1; i < count; i++) {
       const out = new BrushModel('*' + i);
       out.submodel = true;
-      out.mins = new Vector(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
-      out.maxs = new Vector(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
-      out.origin = new Vector(view.getFloat32(fileofs + 24, true), view.getFloat32(fileofs + 28, true), view.getFloat32(fileofs + 32, true));
+      out.mins.setTo(view.getFloat32(fileofs, true) - 1.0, view.getFloat32(fileofs + 4, true) - 1.0, view.getFloat32(fileofs + 8, true) - 1.0);
+      out.maxs.setTo(view.getFloat32(fileofs + 12, true) + 1.0, view.getFloat32(fileofs + 16, true) + 1.0, view.getFloat32(fileofs + 20, true) + 1.0);
+      out.origin.setTo(view.getFloat32(fileofs + 24, true), view.getFloat32(fileofs + 28, true), view.getFloat32(fileofs + 32, true));
       out.hulls = [
         {
           clipnodes: clipnodes,
@@ -992,10 +992,10 @@ export class BSP29Loader extends ModelLoader {
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    * @param {string} filename - The original BSP filename
    */
-  _loadExternalLighting(loadmodel, filename) {
+  async _loadExternalLighting(loadmodel, filename) {
     const rgbFilename = filename.replace(/\.bsp$/i, '.lit');
 
-    const data = COM.LoadFile(rgbFilename);
+    const data = await COM.LoadFile(rgbFilename);
 
     if (!data) {
       Con.DPrint(`BSP29Loader: no external RGB lighting file found: ${rgbFilename}\n`);

@@ -311,7 +311,7 @@ export class Navigation {
     const filename = `maps/${mapname}.nav`;
 
     // Try to load binary file first (ArrayBuffer). Fallback to text JSON for older files.
-    const buf = await COM.LoadFileAsync(filename);
+    const buf = await COM.LoadFile(filename);
 
     if (!buf) {
       throw new MissingResourceError(filename);

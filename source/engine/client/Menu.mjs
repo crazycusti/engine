@@ -1071,7 +1071,7 @@ M.Init = async function () {
 
   // FIXME: I really don’t like this, but it’s the only way to get the player picture translation right for now
   {
-    const lmpfile = await COM.LoadFileAsync('gfx/menuplyr.lmp');
+    const lmpfile = await COM.LoadFile('gfx/menuplyr.lmp');
 
     const view = new DataView(lmpfile, 0, 8);
     const width = view.getUint32(0, true);

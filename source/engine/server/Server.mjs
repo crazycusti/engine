@@ -390,7 +390,7 @@ export default class SV {
     // Clear memory and load game progs
     Con.DPrint('Clearing memory\n');
     Mod.ClearAll();
-    SV.#loadGameProgs();
+    await SV.#loadGameProgs();
 
     // Initialize edicts and server state
     SV.#initializeEdicts();
@@ -683,8 +683,8 @@ export default class SV {
    * Loads the game progs and initializes game API.
    * Sets up gameAPI, gameVersion, gameName, and gameCapabilities.
    */
-  static #loadGameProgs() {
-    SV.server.gameAPI = PR.QuakeJS ? new PR.QuakeJS.ServerGameAPI(ServerEngineAPI) : PR.LoadProgs();
+  static async #loadGameProgs() {
+    SV.server.gameAPI = PR.QuakeJS ? new PR.QuakeJS.ServerGameAPI(ServerEngineAPI) : await PR.LoadProgs();
     SV.server.gameVersion = `${(PR.QuakeJS ? `${PR.QuakeJS.identification.version.join('.')} QuakeJS` : `${PR.crc} CRC`)}`;
     SV.server.gameName = PR.QuakeJS ? PR.QuakeJS.identification.name : COM.game;
     SV.server.gameCapabilities = PR.QuakeJS ? PR.QuakeJS.identification.capabilities : PR.capabilities;

@@ -103,14 +103,14 @@ export default class ClientDemos {
     return 1;
   }
 
-  startPlayback(demoname, timedemo = false) {
+  async startPlayback(demoname, timedemo = false) {
     console.assert(CL.cls.state === clientConnectionState.disconnected, 'must be disconnected to start playback');
     console.assert(!this.demoplayback, 'must not be in playback mode');
 
     const name = COM.DefaultExtension(demoname, '.dem');
     Con.Print('Playing demo from ' + name + '.\n');
 
-    this.demofile = COM.LoadFile(name);
+    this.demofile = await COM.LoadFile(name);
     if (this.demofile === null) {
       Con.PrintError('ERROR: couldn\'t open ' + demoname + '\n');
       this.demonum = -1;
@@ -121,6 +121,7 @@ export default class ClientDemos {
     const demofile_u8 = new Uint8Array(this.demofile);
     this.demosize = demofile_u8.length;
     this.demoplayback = true;
+    // eslint-disable-next-line require-atomic-updates
     CL.cls.state = clientConnectionState.connected;
     this.forcetrack = 0;
 
@@ -194,7 +195,7 @@ export default class ClientDemos {
     this.demorecording = true;
   }
 
-  stopRecording() {
+  async stopRecording() {
     if (!this.demorecording) {
       Con.Print('Not recording a demo.\n');
       return false;
@@ -206,7 +207,7 @@ export default class ClientDemos {
 
     this.writeDemoMessage();
 
-    if (!COM.WriteFile(this.demoname, new Uint8Array(this.demofile), this.demoofs)) {
+    if (!await COM.WriteFile(this.demoname, new Uint8Array(this.demofile), this.demoofs)) {
       Con.PrintError(`ERROR: couldn't write demo file ${this.demoname}!`);
       return false;
     }

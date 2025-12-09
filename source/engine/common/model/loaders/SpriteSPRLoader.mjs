@@ -40,9 +40,10 @@ export class SpriteSPRLoader extends ModelLoader {
    * Load a Sprite SPR model from buffer
    * @param {ArrayBuffer} buffer - The model file data
    * @param {string} name - The model name/path
-   * @returns {SpriteModel} The loaded model
+   * @returns {Promise<SpriteModel>} The loaded model
    */
-  load(buffer, name) {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async load(buffer, name) {
     const loadmodel = new SpriteModel(name);
 
     loadmodel.type = 1; // Mod.type.sprite
@@ -77,7 +78,7 @@ export class SpriteSPRLoader extends ModelLoader {
       loadmodel.height * 0.5,
     );
 
-    loadmodel.frames = [];
+    loadmodel.frames.length = loadmodel._frames;
     let inframe = 36;
 
     for (let i = 0; i < loadmodel._frames; i++) {

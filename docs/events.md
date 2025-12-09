@@ -64,6 +64,7 @@ The engine has an event bus.
 | host.ready | - | The engine is initialized and ready to roll. |
 | host.shutting-down | - | Shutting down. Being of Host.Shutdown. |
 | host.shutdown | - | Shut down. End of Host.Shutdown. |
+| host.config.loaded | - | A saved config has been consumed. |
 
 ### Network
 

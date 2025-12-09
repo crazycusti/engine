@@ -21,17 +21,6 @@ import { BaseModel } from './BaseModel.mjs';
  */
 
 /**
- * @typedef {object} Submodel
- * @property {Vector} mins - Minimum bounding box
- * @property {Vector} maxs - Maximum bounding box
- * @property {Vector} origin - Model origin
- * @property {number[]} headnode - Head nodes for each hull
- * @property {number} visleafs - Number of visible leafs
- * @property {number} firstface - First face index
- * @property {number} numfaces - Number of faces
- */
-
-/**
  * @typedef {Record<string, string>} WorldspawnInfo
  * Parsed worldspawn entity key-value pairs
  */
@@ -143,7 +132,7 @@ export class BrushModel extends BaseModel {
   /** @type {Hull[]} Collision hulls for physics (hull0, hull1, hull2) */
   hulls = [];
 
-  /** @type {Submodel[]} Submodels (brush entities) */
+  /** @type {BrushModel[]} Submodels (brush entities) */
   submodels = [];
 
   /** @type {number} First face index for this submodel */

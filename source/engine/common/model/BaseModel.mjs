@@ -36,10 +36,11 @@ export class Face {
   // lightmap scaling
   lmshift = null;
 
+  // TODO: refactor these fields into a flags bitmap, there’s more to come
   turbulent = false;
   sky = false;
 
-  /** calculated normal with corrected direction */
+  /** calculated normal with correct direction */
   normal = new Vector();
 };
 
@@ -89,11 +90,14 @@ export class BaseModel {
     /** @type {number} Simple CRC checksum to check if things are still the same */
     this.checksum = 0;
 
-    /** @type {number[]} Bounding box minimum (required by PF, R, CL, SV on worldmodel) */
-    this.mins = [];
+    /** @type {Vector} Bounding box minimum (required by PF, R, CL, SV on worldmodel) */
+    this.mins = new Vector();
 
-    /** @type {number[]} Bounding box maximum (required by PF, R, CL, SV on worldmodel) */
-    this.maxs = [];
+    /** @type {Vector} Bounding box maximum (required by PF, R, CL, SV on worldmodel) */
+    this.maxs = new Vector();
+
+    /** @type {Vector} Origin offset for vertices */
+    this.origin = new Vector();
 
     // Public variables just for rendering purposes (IDEA: refactor into ModelRenderer classes)
 

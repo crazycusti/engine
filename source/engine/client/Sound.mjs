@@ -675,7 +675,7 @@ const S = {
 
     sfx.state = SFX.STATE.LOADING;
     sfx.loadtime = Host.realtime || null;
-    const data = await COM.LoadFileAsync(`sound/${sfx.name}`);
+    const data = await COM.LoadFile(`sound/${sfx.name}`);
 
     if (!data) {
       if (!this._started) {

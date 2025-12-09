@@ -5,7 +5,10 @@ import { WadLumpTexture } from '../common/W.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import VID from './VID.mjs';
 
-const GL = {};
+const GL = {
+  programs: [],
+  currentProgram: null,
+};
 
 export default GL;
 
@@ -179,7 +182,7 @@ export class GLTexture {
       return textureCache.get(filename);
     }
 
-    const data = await COM.LoadFileAsync(filename);
+    const data = await COM.LoadFile(filename);
 
     if (data === null) {
       throw new MissingResourceError(filename);
@@ -546,7 +549,7 @@ GL.CreateProgram = async function(identifier, uniforms, attribs, textures) {
   };
 
   const vsh = gl.createShader(gl.VERTEX_SHADER);
-  const vsource = await COM.LoadTextFileAsync(`shaders/${identifier}.vert`);
+  const vsource = await COM.LoadTextFile(`shaders/${identifier}.vert`);
   gl.shaderSource(vsh, vsource);
   gl.compileShader(vsh);
   if (gl.getShaderParameter(vsh, gl.COMPILE_STATUS) !== true) {
@@ -554,7 +557,7 @@ GL.CreateProgram = async function(identifier, uniforms, attribs, textures) {
   }
 
   const fsh = gl.createShader(gl.FRAGMENT_SHADER);
-  const fsource = await COM.LoadTextFileAsync(`shaders/${identifier}.frag`);
+  const fsource = await COM.LoadTextFile(`shaders/${identifier}.frag`);
   gl.shaderSource(fsh, fsource);
   gl.compileShader(fsh);
   if (gl.getShaderParameter(fsh, gl.COMPILE_STATUS) !== true) {
@@ -613,7 +616,7 @@ GL.CreateProgram = async function(identifier, uniforms, attribs, textures) {
 
 GL.UseProgram = function(identifier, flushStream) {
   const currentProgram = GL.currentProgram;
-  if (currentProgram != null) {
+  if (currentProgram !== null) {
     if (currentProgram.identifier === identifier) {
       return currentProgram;
     }
@@ -622,19 +625,14 @@ GL.UseProgram = function(identifier, flushStream) {
     }
   }
 
-  let program = null;
-  for (let i = 0; i < GL.programs.length; i++) {
-    if (GL.programs[i].identifier === identifier) {
-      program = GL.programs[i];
-      break;
-    }
-  }
-  if (program == null) {
+  const program = GL.programs.find((p) => p.identifier === identifier) || null;
+
+  if (program === null) {
     return null;
   }
 
   let enableAttribs = program.attribBits; let disableAttribs = 0;
-  if (currentProgram != null) {
+  if (currentProgram !== null) {
     enableAttribs &= ~currentProgram.attribBits;
     disableAttribs = currentProgram.attribBits & ~program.attribBits;
   }
@@ -655,7 +653,7 @@ GL.UseProgram = function(identifier, flushStream) {
 };
 
 GL.UnbindProgram = function() {
-  if (GL.currentProgram == null) {
+  if (GL.currentProgram === null) {
     return;
   }
   GL.StreamFlush();
@@ -722,7 +720,7 @@ GL.StreamFlush = function() {
 
 GL.StreamGetSpace = function(vertexCount) {
   const program = GL.currentProgram;
-  if (program == null) {
+  if (program === null) {
     return;
   }
   const length = vertexCount * program.vertexSize;
@@ -886,7 +884,7 @@ function GL_Shutdown() {
 
   textureCache.clear();
 
-  GL.programs = [];
+  GL.programs.length = 0;
   GL.currentProgram = null;
 
   gl = null;
