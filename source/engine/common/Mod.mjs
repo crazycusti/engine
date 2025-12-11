@@ -1,14 +1,14 @@
-import Vector from '../../shared/Vector.mjs';
 import GL from '../client/GL.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { MissingResourceError } from './Errors.mjs';
-import Q from '../../shared/Q.mjs';
 import { ModelLoaderRegistry } from './model/ModelLoaderRegistry.mjs';
 import { AliasMDLLoader } from './model/loaders/AliasMDLLoader.mjs';
 import { SpriteSPRLoader } from './model/loaders/SpriteSPRLoader.mjs';
 import { BSP29Loader } from './model/loaders/BSP29Loader.mjs';
 import { BSP2Loader } from './model/loaders/BSP2Loader.mjs';
 import { WavefrontOBJLoader } from './model/loaders/WavefrontOBJLoader.mjs';
+import ParsedQC from './model/parsers/ParsedQC.mjs';
+import { BSP38Loader } from './model/loaders/BSP38Loader.mjs';
 
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
 
@@ -59,8 +59,9 @@ Mod.Init = function () {
   Mod.novis = new Array(1024);
   Mod.novis.fill(0xff);
 
-  // Register BSP2 before BSP29 so it’s checked first (more specific format)
-  Mod.modelLoaderRegistry.register(new BSP2Loader());
+  Mod.modelLoaderRegistry.clear();
+  Mod.modelLoaderRegistry.register(new BSP38Loader());
+  Mod.modelLoaderRegistry.register(new BSP2Loader()); // Register BSP2 before BSP29 so it’s checked first (more specific format)
   Mod.modelLoaderRegistry.register(new BSP29Loader());
   Mod.modelLoaderRegistry.register(new AliasMDLLoader());
   Mod.modelLoaderRegistry.register(new SpriteSPRLoader());
@@ -138,6 +139,8 @@ Mod.ClearAll = function () {
 };
 
 Mod.LoadModelFromBuffer = async function (name, buffer) {
+  // FIXME: maybe catch at least NotImplementedError here and give a better
+  //        error message, right now it will simply crash the whole engine
   const model = await Mod.modelLoaderRegistry.load(buffer, name);
 
   Mod.RegisterModel(model);
@@ -187,89 +190,6 @@ Mod.ForNameAsync = async function (name, crash = false) { // public method
   }
 
   return await Mod.LoadModelAsync(name, crash);
-};
-
-/** @typedef {import('../../shared/GameInterfaces.d.ts').ParsedQC} ParsedQC_t */
-/** @augments ParsedQC_t */
-export class ParsedQC {
-  /** @type {string} */
-  cd = null;
-  origin = new Vector();
-  /** @type {string} */
-  base = null;
-  /** @type {string} */
-  skin = null;
-  /** @type {string[]} */
-  frames = [];
-  /** @type {Record<string, number[]>} */
-  animations = {};
-  /** @type {number} */
-  scale = 1.0;
-
-  /**
-   * @param {string} qcContent qc model source
-   * @returns {this} this
-   */
-  parseQC(qcContent) {
-    console.assert(typeof qcContent === 'string', 'qcContent must be a string');
-
-    const lines = qcContent.trim().split('\n');
-
-    for (const line of lines) {
-      if (line.trim() === '' || line.startsWith('#') || line.startsWith('//')) {
-        continue;
-      }
-
-      const parts = line.split(/\s+/);
-      const [key, value] = [parts.shift(), parts.join(' ')];
-
-      switch (key) {
-        case '$cd':
-          this.cd = value;
-          break;
-
-        case '$origin':
-          this.origin = new Vector(...value.split(/\s+/).map((n) => Q.atof(n)));
-          break;
-
-        case '$base':
-          this.base = value;
-          break;
-
-        case '$skin':
-          this.skin = value;
-          break;
-
-        case '$scale':
-          this.scale = +value;
-          break;
-
-        case '$frame': {
-          const frames = value.split(/\s+/);
-
-          this.frames.push(...frames);
-
-          for (const frame of frames) {
-            const matches = frame.match(/^([^0-9]+)([0-9]+)$/);
-
-            if (matches) {
-              if (!this.animations[matches[1]]) {
-                this.animations[matches[1]] = [];
-              }
-
-              this.animations[matches[1]].push(this.frames.indexOf(matches[0]));
-            }
-          }
-        }
-          break;
-
-        default:
-          console.assert(false, 'QC field unknown', key);
-      }
-    }
-
-    return this;
-  }
 };
 
 Mod.ParseQC = function (qcContent) {

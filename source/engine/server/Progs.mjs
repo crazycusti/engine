@@ -1544,4 +1544,5 @@ PR.capabilities = [
   gameCapabilities.CAP_CLIENTDATA_UPDATESTAT,
   gameCapabilities.CAP_CLIENTDATA_LEGACY,
   gameCapabilities.CAP_SPAWNPARMS_LEGACY,
+  gameCapabilities.CAP_ENTITY_BBOX_ADJUSTMENTS_DURING_LINK,
 ];

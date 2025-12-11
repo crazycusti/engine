@@ -240,6 +240,12 @@ Host.ConfigReady_f = function() {
 
 Host.WriteConfiguration = function() {
   Host.ScheduleInFuture('Host.WriteConfiguration', () => {
+    // never save a config during pending commands
+    if (Cmd.HasPendingCommands()) {
+      Con.PrintWarning('Writing configuration dismissed, pending commands outstanding. Try again later.\n');
+      return;
+    }
+
     const config = `
 ${(!registry.isDedicatedServer ? Key.WriteBindings() + '\n\n\n': '')}
 

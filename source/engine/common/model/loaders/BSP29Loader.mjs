@@ -18,10 +18,7 @@ eventBus.subscribe('registry.frozen', () => {
 
 /**
  * Loader for Quake BSP29 format (.bsp)
- * Magic: 29 (0x0000001D)
- *
- * Contains all BSP loading logic including textures, lighting,
- * geometry, visibility, and collision hulls.
+ * It supports vanilla BSP29 and a few BSPX extensions (such as lightgrid, RGB lighting).
  */
 export class BSP29Loader extends ModelLoader {
   /** BSP29 lump indices */
@@ -88,7 +85,6 @@ export class BSP29Loader extends ModelLoader {
   async load(buffer, name) {
     const loadmodel = new BrushModel(name);
 
-    loadmodel.type = Mod.type.brush;
     loadmodel.version = /** @type {29|844124994} */ ((new DataView(buffer)).getUint32(0, true));
     loadmodel.bspxoffset = 0;
 

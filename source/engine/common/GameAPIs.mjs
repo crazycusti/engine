@@ -17,7 +17,7 @@ import W from './W.mjs';
 /** @typedef {import('../client/GL.mjs').GLTexture} GLTexture */
 /** @typedef {import('../network/MSG.mjs').SzBuffer} SzBuffer */
 /** @typedef {import('../server/Navigation.mjs').Navigation} Navigation */
-/** @typedef {import('./Mod.mjs').ParsedQC} ParsedQC */
+/** @typedef {import('./model/parsers/ParsedQC.mjs').default} ParsedQC */
 /** @typedef {import('./Pmove.mjs').Pmove} Pmove */
 /** @typedef {import('./Pmove.mjs').Trace} Trace */
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */

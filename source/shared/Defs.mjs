@@ -270,6 +270,8 @@ export const gameCapabilities = Object.freeze({
   CAP_SPAWNPARMS_LEGACY: 'CAP_SPAWNPARMS_LEGACY',
   /** prevents chat messages from being handled by the engine, client code will handle that */
   CAP_CHAT_MANAGED: 'CAP_CHAT_MANAGED',
+  /** adds additional units to the bounding box during entity linking (e.g. for items additional 28 units in total per x/y axis) */
+  CAP_ENTITY_BBOX_ADJUSTMENTS_DURING_LINK: 'CAP_ENTITY_BBOX_ADJUSTMENTS_DURING_LINK',
 });
 
 export const cvarFlags = Object.freeze({

@@ -192,6 +192,7 @@ export class ServerArea {
 
   /**
    * Inserts an edict into the area lists and optionally processes trigger touches.
+   * NOTE: absmin/absmax will be reset.
    * @param {import('../Edict.mjs').ServerEdict} ent edict to link
    * @param {boolean} touchTriggers whether triggers should be evaluated
    */
@@ -207,12 +208,17 @@ export class ServerArea {
     const absmin = origin.copy();
     const absmax = origin.copy();
 
-    absmin.add(ent.entity.mins).add(new Vector(-1.0, -1.0, -1.0));
-    absmax.add(ent.entity.maxs).add(new Vector(1.0, 1.0, 1.0));
+    absmin.add(ent.entity.mins);
+    absmax.add(ent.entity.maxs);
 
-    if ((ent.entity.flags & Defs.flags.FL_ITEM) !== 0) { // TODO: should be a feature flag for the game
-      absmin.add(new Vector(-14.0, -14.0, 1.0));
-      absmax.add(new Vector(14.0, 14.0, -1.0));
+    if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_BBOX_ADJUSTMENTS_DURING_LINK)) {
+      absmin.add(new Vector(-1.0, -1.0, -1.0));
+      absmax.add(new Vector(1.0, 1.0, 1.0));
+
+      if ((ent.entity.flags & Defs.flags.FL_ITEM) !== 0) { // TODO: should be a feature flag for the game
+        absmin.add(new Vector(-14.0, -14.0, 1.0));
+        absmax.add(new Vector(14.0, 14.0, -1.0));
+      }
     }
 
     ent.entity.absmin = ent.entity.absmin.set(absmin);

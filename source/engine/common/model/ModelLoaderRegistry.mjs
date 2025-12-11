@@ -1,4 +1,6 @@
 import { NotImplementedError } from '../Errors.mjs';
+import { BaseModel } from './BaseModel.mjs';
+import { ModelLoader } from './ModelLoader.mjs';
 
 /**
  * Registry for managing model format loaders.
@@ -6,14 +8,14 @@ import { NotImplementedError } from '../Errors.mjs';
  */
 export class ModelLoaderRegistry {
   constructor() {
-    /** @type {import('./ModelLoader.mjs').ModelLoader[]} */
+    /** @type {ModelLoader[]} */
     this.loaders = [];
   }
 
   /**
    * Register a model loader.
    * Loaders are checked in the order they are registered.
-   * @param {import('./ModelLoader.mjs').ModelLoader} loader The loader to register
+   * @param {ModelLoader} loader The loader to register
    */
   register(loader) {
     this.loaders.push(loader);
@@ -23,7 +25,7 @@ export class ModelLoaderRegistry {
    * Find a loader that can handle the given buffer/filename.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} filename The filename
-   * @returns {import('./ModelLoader.mjs').ModelLoader|null} The loader, or null if none found
+   * @returns {ModelLoader|null} The loader, or null if none found
    */
   findLoader(buffer, filename) {
     for (const loader of this.loaders) {
@@ -38,7 +40,7 @@ export class ModelLoaderRegistry {
    * Load a model using the appropriate loader.
    * @param {ArrayBuffer} buffer The file buffer
    * @param {string} name The model name/path
-   * @returns {Promise<import('./BaseModel.mjs').BaseModel>} The loaded model
+   * @returns {Promise<BaseModel>} The loaded model
    * @throws {NotImplementedError} If no suitable loader is found
    */
   async load(buffer, name) {
@@ -49,14 +51,6 @@ export class ModelLoaderRegistry {
     }
 
     return await loader.load(buffer, name);
-  }
-
-  /**
-   * Get all registered loaders.
-   * @returns {import('./ModelLoader.mjs').ModelLoader[]} Array of loaders
-   */
-  getLoaders() {
-    return [...this.loaders];
   }
 
   /**
