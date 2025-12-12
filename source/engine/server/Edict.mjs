@@ -8,6 +8,7 @@ import Q from '../../shared/Q.mjs';
 import { ConsoleCommand } from '../common/Cmd.mjs';
 import { ClientEdict } from '../client/ClientEntities.mjs';
 import { OctreeNode } from '../../shared/Octree.mjs';
+import { Visibility } from '../common/model/BSP.mjs';
 
 /** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
 /** @typedef {import('../../game/id1/entity/Worldspawn.mjs').WorldspawnEntity} WorldspawnEntity */
@@ -283,6 +284,8 @@ export class ED {
 }
 
 export class ServerEdict {
+  static #lastcheckpvs = /** @type {Visibility|null} */ (null);
+
   /**
    * @param {number} num edict number
    */
@@ -504,7 +507,7 @@ export class ServerEdict {
         break;
       }
       SV.server.lastcheck = i;
-      SV.lastcheckpvs = Mod.LeafPVS(Mod.PointInLeaf(ent.entity.origin.copy().add(ent.entity.view_ofs), SV.server.worldmodel), SV.server.worldmodel); // FIXME: use ….worldmodel.getPointInLeaf() etc.
+      ServerEdict.#lastcheckpvs = SV.server.worldmodel.getPvsByPoint(ent.entity.origin.copy().add(ent.entity.view_ofs));
       SV.server.lastchecktime = SV.server.time;
     }
 
@@ -515,9 +518,9 @@ export class ServerEdict {
       return null;
     }
 
-    const l = Mod.PointInLeaf(this.entity.origin.copy().add(this.entity.view_ofs), SV.server.worldmodel).num - 1;
+    const l = SV.server.worldmodel.getLeafForPoint(this.entity.origin.copy().add(this.entity.view_ofs)).num - 1;
 
-    if (l < 0 || (SV.lastcheckpvs[l >> 3] & (1 << (l & 7))) === 0) {
+    if (l < 0 || !ServerEdict.#lastcheckpvs.isRevealed(l)) {
       // back side leaf or leaf is not visible according to PVS
       return null;
     }
@@ -527,17 +530,11 @@ export class ServerEdict {
 
   /**
    * Checks if this entity is in the given PVS.
-   * @param {number[]} pvs PVS to check against
+   * @param {Visibility} pvs PVS to check against
    * @returns {boolean} true, when this entity is in the PVS
    */
   isInPVS(pvs) {
-    for (let i = 0; i < this.leafnums.length; i++) {
-      if ((pvs[this.leafnums[i] >> 3] & (1 << (this.leafnums[i] & 7))) !== 0) {
-        return true;
-      }
-    }
-
-    return false;
+    return pvs.areRevealed(this.leafnums);
   }
 
   /**

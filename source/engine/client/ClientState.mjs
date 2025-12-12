@@ -6,6 +6,7 @@ import Vector from '../../shared/Vector.mjs';
 import { EventBus, eventBus } from '../registry.mjs';
 import ClientEntities, { ClientEdict } from './ClientEntities.mjs';
 import { ClientMessages } from './ClientMessages.mjs';
+import { BrushModel } from '../common/Mod.mjs';
 
 const clientGameEvents = [
   'vid.resize',
@@ -139,6 +140,7 @@ class ClientRuntimeState {
   onground = false;
   maxclients = 1;
   scores = [];
+  /** @type {BrushModel|null} */
   worldmodel = null;
   viewheight = 0;
   inwater = false;

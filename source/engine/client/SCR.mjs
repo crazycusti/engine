@@ -343,6 +343,8 @@ SCR.UpdateScreen = function() {
     return;
   }
 
+  V.PreRenderView(); // do some calculations independent of rendering
+
   requestAnimationFrame((animationTime) => {
     // we are already shutting down
     if (!gl) {

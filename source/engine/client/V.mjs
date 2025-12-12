@@ -429,8 +429,8 @@ V.CalcRefdef = function () { // TODO: Client
   }
 };
 
-V.RenderView = function () {
-  if (Con.forcedup === true) {
+V.PreRenderView = function () {
+  if (Con.forcedup) {
     return;
   }
   if (CL.state.maxclients >= 2) {
@@ -442,6 +442,13 @@ V.RenderView = function () {
     V.CalcIntermissionRefdef();
   } else if (!CL.state.paused) {
     V.CalcRefdef();
+  }
+  R.PreRenderScene();
+};
+
+V.RenderView = function () {
+  if (Con.forcedup) {
+    return;
   }
   R.PushDlights();
   R.RenderView();

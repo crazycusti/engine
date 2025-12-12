@@ -1059,7 +1059,7 @@ const S = {
       return;
     }
 
-    const l = Mod.PointInLeaf(this._listenerOrigin, CL.state.worldmodel);
+    const l = CL.state.worldmodel.getLeafForPoint(this._listenerOrigin);
     if (!l || this._ambientLevel.value === 0) {
       // turn off all ambients
 

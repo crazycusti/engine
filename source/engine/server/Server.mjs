@@ -16,6 +16,7 @@ import { ServerMessages } from './ServerMessages.mjs';
 import { ServerMovement } from './physics/ServerMovement.mjs';
 import { ServerArea } from './physics/ServerArea.mjs';
 import { ServerCollision } from './physics/ServerCollision.mjs';
+import { BrushModel } from '../common/Mod.mjs';
 
 let { COM, Con, Host, Mod, NET, PR } = registry;
 
@@ -129,7 +130,7 @@ export default class SV {
     /** @type {ServerEdict[]} */
     edicts: [],
     mapname: null,
-    worldmodel: null,
+    worldmodel: /** @type {BrushModel} */ (null),
     /** server game event bus, will be reset on every map load */
     eventBus: new EventBus('server-game'),
     /** @type {Navigation} navigation graph management */

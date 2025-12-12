@@ -16,6 +16,7 @@ import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
+import { revealedVisibility } from '../common/model/BSP.mjs';
 
 let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
 
@@ -161,9 +162,8 @@ R.MarkLights = function(light, bit, node) {
     R.MarkLights(light, bit, node.children[1]);
     return;
   }
-  let i; let surf;
-  for (i = 0; i < node.numfaces; i++) {
-    surf = CL.state.worldmodel.faces[node.firstface + i];
+  for (let i = 0; i < node.numfaces; i++) {
+    const surf = CL.state.worldmodel.faces[node.firstface + i];
     // if ((surf.sky === true) || (surf.turbulent === true)) {
     if (surf.sky) {
       continue;
@@ -186,7 +186,7 @@ R.PushDlights = function() {
     R.lightmap_modified[i] = false;
   }
 
-  let bit = 1; let j;
+  let bit = 1;
 
   for (let i = 0; i < Def.limits.dlights; i++) {
     const l = CL.state.clientEntities.dlights[i];
@@ -221,7 +221,7 @@ R.PushDlights = function() {
     if (R.lightmap_modified[i] !== true) {
       continue;
     }
-    for (j = LIGHTMAP_BLOCK_SIZE - 1; j >= i; --j) {
+    for (let j = LIGHTMAP_BLOCK_SIZE - 1; j >= i; j--) {
       if (R.lightmap_modified[j] !== true) {
         continue;
       }
@@ -1156,16 +1156,17 @@ R.SetupGL = function() {
 
 R.viewleaf = null;
 
-R.RenderScene = function() {
+R.PreRenderScene = function() {
   R.AnimateLight();
-  // FIXME: the next couple of lines need to be moved before requestAnimationFrame
   const {forward, right, up} = R.refdef.viewangles.angleVectors();
   [R.vpn, R.vright, R.vup] = [forward, right, up];
-  R.viewleaf = Mod.PointInLeaf(R.refdef.vieworg, CL.state.worldmodel);
+  R.viewleaf = CL.state.worldmodel.getLeafForPoint(R.refdef.vieworg);
   V.SetContentsColor(R.viewleaf.contents);
   V.CalcBlend();
   R.dowarp = (R.waterwarp.value !== 0) && (R.viewleaf.contents <= content.CONTENT_WATER);
+};
 
+R.RenderScene = function() {
   R.SetFrustum();
   R.SetupGL();
   R.MarkLeaves();
@@ -2261,13 +2262,12 @@ R.MarkLeaves = function() {
   }
   R.visframecount++;
   R.oldviewleaf = R.viewleaf;
-  let vis = (R.novis.value !== 0) ? Mod.novis : Mod.LeafPVS(R.viewleaf, CL.state.worldmodel);
-  let i; let node;
-  for (i = 0; i < CL.state.worldmodel.leafs.length; i++) {
-    if ((vis[i >> 3] & (1 << (i & 7))) === 0) {
+  const vis = (R.novis.value !== 0 || R.viewleaf === null) ? revealedVisibility : CL.state.worldmodel.getPvsByLeaf(R.viewleaf);
+  for (let i = 0; i < CL.state.worldmodel.leafs.length; i++) {
+    if (!vis.isRevealed(i)) {
       continue;
     }
-    for (node = CL.state.worldmodel.leafs[i + 1]; node != null; node = node.parent) {
+    for (let node = CL.state.worldmodel.leafs[i + 1]; node; node = node.parent) {
       if (node.markvisframe === R.visframecount) {
         break;
       }
@@ -2275,18 +2275,18 @@ R.MarkLeaves = function() {
     }
   }
   do {
-    if (R.novis.value !== 0) {
+    if (R.novis.value !== 0 || R.viewleaf === null) {
       break;
     }
-    // const p = [R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2]];
+    const p = R.refdef.vieworg.copy();
     let leaf;
     if (R.viewleaf.contents <= content.CONTENT_WATER) {
-      leaf = Mod.PointInLeaf([R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2] + 16.0], CL.state.worldmodel);
+      leaf = CL.state.worldmodel.getLeafForPoint(p.add([0, 0, 16.0]));
       if (leaf.contents <= content.CONTENT_WATER) {
         break;
       }
     } else {
-      leaf = Mod.PointInLeaf([R.refdef.vieworg[0], R.refdef.vieworg[1], R.refdef.vieworg[2] - 16.0], CL.state.worldmodel);
+      leaf = CL.state.worldmodel.getLeafForPoint(p.add([0, 0, -16.0]));
       if (leaf.contents > content.CONTENT_WATER) {
         break;
       }
@@ -2294,12 +2294,12 @@ R.MarkLeaves = function() {
     if (leaf === R.viewleaf) {
       break;
     }
-    vis = Mod.LeafPVS(leaf, CL.state.worldmodel);
-    for (i = 0; i < CL.state.worldmodel.leafs.length; i++) {
-      if ((vis[i >> 3] & (1 << (i & 7))) === 0) {
+    const vis = CL.state.worldmodel.getPvsByLeaf(leaf);
+    for (let i = 0; i < CL.state.worldmodel.leafs.length; i++) {
+      if (!vis.isRevealed(i)) {
         continue;
       }
-      for (node = CL.state.worldmodel.leafs[i + 1]; node != null; node = node.parent) {
+      for (let node = CL.state.worldmodel.leafs[i + 1]; node; node = node.parent) {
         if (node.markvisframe === R.visframecount) {
           break;
         }

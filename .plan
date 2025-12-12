@@ -74,7 +74,9 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] BSP38 loader
 - [_] port physics code from Quake 2 (there are a bunch of fixes)
   - [_] fixing physics (walking over entities etc.)
+- [_] add PHS support to sound subsystem
 - [_] PCX loader
+- [_] colormap.pcx support
 - [_] skybox renderer
 - [_] WAL loader
 - [_] md2 loader and renderer

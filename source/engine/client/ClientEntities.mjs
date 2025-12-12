@@ -7,6 +7,7 @@ import { DefaultClientEdictHandler } from './ClientLegacy.mjs';
 import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { SFX } from './Sound.mjs';
+import { hiddenVisibility, revealedVisibility } from '../common/model/BSP.mjs';
 
 let { CL, Con, Mod, PR, R, S } = registry;
 
@@ -703,8 +704,7 @@ export default class ClientEntities {
     }
 
     // get the PVS for the current view
-    const viewleaf = Mod.PointInLeaf(R.refdef.vieworg, CL.state.worldmodel);
-    const vis = (R.novis.value !== 0) ? Mod.novis : Mod.LeafPVS(viewleaf, CL.state.worldmodel);
+    const vis = R.novis.value !== 0 ? revealedVisibility : CL.state.worldmodel.getPvsByPoint(R.refdef.vieworg);
 
     for (const clent of this.static_entities) {
       // freed entity or invisible entity
@@ -717,15 +717,8 @@ export default class ClientEntities {
         continue;
       }
 
-      let j = 0;
-      for (; j < clent.leafs.length; j++) {
-        const leaf = clent.leafs[j];
-        if ((leaf < 0) || ((vis[leaf >> 3] & (1 << (leaf & 7))) !== 0)) {
-          break;
-        }
-      }
-
-      if (j === clent.leafs.length) {
+      // not visible in PVS
+      if (!vis.areRevealed(clent.leafs)) {
         continue;
       }
 

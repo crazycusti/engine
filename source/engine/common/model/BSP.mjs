@@ -1,3 +1,4 @@
+import { content } from '../../../shared/Defs.mjs';
 import { BaseModel } from './BaseModel.mjs';
 
 /** @typedef {import('../../../shared/Vector.mjs').default} Vector */
@@ -29,6 +30,155 @@ import { BaseModel } from './BaseModel.mjs';
  * @typedef {Record<string, {fileofs: number, filelen: number}>} BSPXLumps
  * BSPX extended lump data (RGBLIGHTING, LIGHTINGDIR, etc.)
  */
+
+const VISDATA_SIZE = 1024; // CR: might be too little (TODO: dynamic size based on leaf count)
+
+/**
+ * Visibility data for PVS/PHS
+ */
+export class Visibility {
+  #data = new Uint8Array(VISDATA_SIZE);
+
+  #model = /** @type {BrushModel} */ (null);
+
+  constructor(model = null) {
+    this.#model = model;
+
+    if (model !== null && model.visdata === null) {
+      this.revealAll();
+    }
+  }
+
+  /**
+   * Create a Visibility instance from a BrushModel.
+   * @param {BrushModel} model map model
+   * @param {number} visofs offset into model visdata
+   * @returns {Visibility} visibility instance
+   */
+  static fromBrushModel(model, visofs) {
+    console.assert(model instanceof BrushModel);
+
+    const modelVisSize = (model.leafs.length + 7) >> 3;
+
+    console.assert(modelVisSize <= VISDATA_SIZE);
+
+    const visibility = new Visibility(model);
+
+    if (model.visdata !== null) {
+      for (let _out = 0, _in = visofs; _out < modelVisSize;) {
+        if (model.visdata[_in] !== 0) {
+          visibility.#data[_out++] = model.visdata[_in++];
+          continue;
+        }
+
+        for (let c = model.visdata[_in + 1]; c > 0; c--) {
+          visibility.#data[_out++] = 0x00;
+        }
+
+        _in += 2;
+      }
+    }
+
+    return visibility;
+  }
+
+  /**
+   * Will reveal all leafs.
+   * @returns {Visibility} this
+   */
+  revealAll() {
+    this.#data.fill(0xff);
+
+    return this;
+  }
+
+  /**
+   * Will hide all leafs.
+   * @returns {Visibility} this
+   */
+  hideAll() {
+    this.#data.fill(0x00);
+
+    return this;
+  }
+
+  /**
+   * Recursive helper for addFatPoint.
+   * @param {Vector} p point in world
+   * @param {Node} node current BSP node
+   */
+  #addToFatPoint(p, node) {
+    while (true) {
+      if (node.contents < 0) {
+        if (node.contents !== content.CONTENT_SOLID) {
+          const vis = Visibility.fromBrushModel(this.#model, node.visofs);
+
+          for (let i = 0; i < this.#data.length; i++) { // merge visibility from node to ours
+            this.#data[i] |= vis.#data[i];
+          }
+        }
+        return;
+      }
+
+      const normal = node.plane.normal;
+      const d = p.dot(normal) - node.plane.dist;
+
+      if (d > 8.0) {
+        node = /** @type {Node} */ (node.children[0]);
+        continue;
+      }
+
+      if (d < -8.0) {
+        node = /** @type {Node} */ (node.children[1]);
+        continue;
+      }
+
+      this.#addToFatPoint(p, /** @type {Node} */ (node.children[0]));
+      node = /** @type {Node} */ (node.children[1]);
+    }
+  }
+
+  /**
+   * Adds a point to the visibility, merging visibility from all leafs connected.
+   * @param {Vector} p point in world
+   * @returns {Visibility} this
+   */
+  addFatPoint(p) {
+    this.#addToFatPoint(p, this.#model.nodes[0]);
+
+    return this;
+  }
+
+  /**
+   * Check if any of the given leafs are revealed.
+   * @param {number[]} leafnums leaf indices
+   * @returns {boolean} whether any of the given leafs are revealed
+   */
+  areRevealed(leafnums) {
+    for (let i = 0; i < leafnums.length; i++) {
+      if ((this.#data[leafnums[i] >> 3] & (1 << (leafnums[i] & 7))) !== 0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a given leaf is revealed.
+   * @param {number} leafnum leaf index
+   * @returns {boolean} whether the given leaf is revealed
+   */
+  isRevealed(leafnum) {
+    return (this.#data[leafnum >> 3] & (1 << (leafnum & 7))) !== 0;
+  }
+};
+
+/** @type {Visibility} @readonly */
+export const revealedVisibility = (new Visibility()).revealAll();
+
+/** @type {Visibility} @readonly */
+export const hiddenVisibility = (new Visibility()).hideAll();
 
 /**
  * BSP tree node
@@ -68,6 +218,8 @@ export class Node {
   skychain = 0;
   /** @type {number} index into waterchain list */
   waterchain = 0;
+  /** @type {number} used by the renderer to determine what to draw */
+  markvisframe = 0;
 }
 
 /**
@@ -191,4 +343,33 @@ export class BrushModel extends BaseModel {
       }
     }
   }
-}
+
+  /**
+   * @param {Vector} point point in world
+   * @returns {Visibility} visibility data for the leaf containing the point
+   */
+  getPvsByPoint(point) {
+    return this.getPvsByLeaf(this.getLeafForPoint(point));
+  }
+
+  /**
+   * @param {Node} leaf leaf node
+   * @returns {Visibility} visibility data for the given leaf
+   */
+  getPvsByLeaf(leaf) {
+    if (leaf === this.leafs[0]) {
+      return hiddenVisibility;
+    }
+
+    return Visibility.fromBrushModel(this, leaf.visofs);
+  }
+
+  /**
+   * This will merge visibility from all leafs from a given starting point.
+   * @param {Vector} point point in world
+   * @returns {Visibility} visibility data for the leaf containing the point
+   */
+  getFatPvsByPoint(point) {
+    return Visibility.fromBrushModel(this, this.leafs[0].visofs).addFatPoint(point);
+  }
+};

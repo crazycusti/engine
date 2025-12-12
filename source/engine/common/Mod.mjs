@@ -56,9 +56,6 @@ Mod.known = /** @type {Record<string, BaseModel>} */ ({});
 Mod.modelLoaderRegistry = new ModelLoaderRegistry();
 
 Mod.Init = function () {
-  Mod.novis = new Array(1024);
-  Mod.novis.fill(0xff);
-
   Mod.modelLoaderRegistry.clear();
   Mod.modelLoaderRegistry.register(new BSP38Loader());
   Mod.modelLoaderRegistry.register(new BSP2Loader()); // Register BSP2 before BSP29 so it’s checked first (more specific format)
@@ -66,57 +63,6 @@ Mod.Init = function () {
   Mod.modelLoaderRegistry.register(new AliasMDLLoader());
   Mod.modelLoaderRegistry.register(new SpriteSPRLoader());
   Mod.modelLoaderRegistry.register(new WavefrontOBJLoader());
-};
-
-Mod.PointInLeaf = function (p, model) { // public method, static access? (PF, R, S use it)
-  if (!model) {
-    throw new Error('Mod.PointInLeaf: bad model');
-  }
-  if (!model.nodes) {
-    throw new Error('Mod.PointInLeaf: bad model, missing nodes');
-  }
-  let node = model.nodes[0];
-  let normal;
-  while (true) {
-    if (node.contents < 0) {
-      return node;
-    }
-    normal = node.plane.normal;
-    if ((p[0] * normal[0] + p[1] * normal[1] + p[2] * normal[2] - node.plane.dist) > 0) {
-      node = node.children[0];
-    } else {
-      node = node.children[1];
-    }
-  }
-};
-
-Mod.DecompressVis = function (i, model) { // private method
-  const decompressed = []; let c; let out = 0; let row = (model.leafs.length + 7) >> 3;
-  // eslint-disable-next-line eqeqeq
-  if (model.visdata == null) {
-    for (; row >= 0; --row) {
-      decompressed[out++] = 0xff;
-    }
-    return decompressed;
-  }
-  for (out = 0; out < row;) {
-    if (model.visdata[i] !== 0) {
-      decompressed[out++] = model.visdata[i++];
-      continue;
-    }
-    for (c = model.visdata[i + 1]; c > 0; --c) {
-      decompressed[out++] = 0;
-    }
-    i += 2;
-  }
-  return decompressed;
-};
-
-Mod.LeafPVS = function (leaf, model) {
-  if (leaf === model.leafs[0]) {
-    return Mod.novis;
-  }
-  return Mod.DecompressVis(leaf.visofs, model);
 };
 
 /**

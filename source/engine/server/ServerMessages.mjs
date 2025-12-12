@@ -3,7 +3,6 @@ import * as Protocol from '../network/Protocol.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { ServerClient } from './Client.mjs';
 
 let { COM, Con, Host, Mod, NET, PR, SV } = registry;
@@ -23,8 +22,6 @@ eventBus.subscribe('registry.frozen', () => {
  */
 export class ServerMessages {
   constructor() {
-    this.fatpvs = [];
-    this.fatbytes = 0;
     this.nullcmd = new Protocol.UserCmd();
   }
 
@@ -209,43 +206,6 @@ export class ServerMessages {
       MSG.WriteByte(client.message, 1);
       this.writeCvar(client.message, cvar);
     }
-  }
-
-  addToFatPVS(org, node) {
-    while (true) {
-      if (node.contents < 0) {
-        if (node.contents !== Defs.content.CONTENT_SOLID) {
-          const pvs = Mod.LeafPVS(node, SV.server.worldmodel);
-          for (let i = 0; i < this.fatbytes; i++) {
-            this.fatpvs[i] |= pvs[i];
-          }
-        }
-        return;
-      }
-
-      const normal = node.plane.normal;
-      const d = org.dot(normal) - node.plane.dist;
-
-      if (d > 8.0) {
-        node = node.children[0];
-        continue;
-      }
-
-      if (d >= -8.0) {
-        this.addToFatPVS(org, node.children[0]);
-      }
-
-      node = node.children[1];
-    }
-  }
-
-  fatPVS(org) {
-    this.fatbytes = (SV.server.worldmodel.leafs.length + 31) >> 3;
-    for (let i = 0; i < this.fatbytes; i++) {
-      this.fatpvs[i] = 0;
-    }
-    this.addToFatPVS(org, SV.server.worldmodel.nodes[0]);
-    return this.fatpvs;
   }
 
   *traversePVS(pvs, ignoreEdictIds = [], alwaysIncludeEdictIds = [], includeFree = false) {
@@ -525,7 +485,7 @@ export class ServerMessages {
 
   writeEntitiesToClient(clientEdict, msg) {
     const origin = clientEdict.entity.origin.copy().add(clientEdict.entity.view_ofs);
-    const pvs = this.fatPVS(origin);
+    const pvs = SV.server.worldmodel.getFatPvsByPoint(origin);
 
     let changes = this.writePlayersToClient(clientEdict, pvs, msg) ? 1 : 0;
 
