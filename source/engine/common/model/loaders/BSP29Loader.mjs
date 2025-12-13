@@ -8,6 +8,7 @@ import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { BrushModel, Node } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
+import { materialFlags, noTextureMaterial, QuakeMaterial } from '../../../client/renderer/Materials.mjs';
 
 // Get registry references (will be set by eventBus)
 let { COM, Con, Mod, R } = registry;
@@ -39,14 +40,6 @@ export class BSP29Loader extends ModelLoader {
     surfedges: 13,
     models: 14,
   });
-
-  /** Shared notexture placeholder */
-  static #notexture_mip = {
-    name: 'notexture', width: 16, height: 16, texturenum: null,
-    glt: null, sky: false, turbulent: false, transparent: false,
-    anims: [], anim_base: null, alternate_anims: [],
-    luminance: null, specular: null, normal: null,
-  };
 
   constructor() {
     super();
@@ -165,30 +158,33 @@ export class BSP29Loader extends ModelLoader {
     const nummiptex = view.getUint32(fileofs, true);
     let dataofs = fileofs + 4;
 
+    // const textures = /** @type {Record<string,GLTexture>} */ ({}); // list of textures
+    const materials = /** @type {Record<string,QuakeMaterial>} */ ({}); // list of materials
+
     for (let i = 0; i < nummiptex; i++) {
       const miptexofs = view.getInt32(dataofs, true);
       dataofs += 4;
       if (miptexofs === -1) {
-        loadmodel.textures[i] = BSP29Loader.#notexture_mip;
+        loadmodel.textures[i] = noTextureMaterial;
         continue;
       }
       const absofs = miptexofs + fileofs;
-      const tx = {
-        name: Q.memstr(new Uint8Array(buf, absofs, 16)),
-        width: view.getUint32(absofs + 16, true),
-        height: view.getUint32(absofs + 20, true),
-        glt: null, sky: false, turbulent: false, transparent: false,
-        anims: [], anim_base: null, alternate_anims: [],
-        luminance: null, specular: null, normal: null,
-      };
+
+      const name = Q.memstr(new Uint8Array(buf, absofs, 16));
+      const cleanName = name.replace(/^\+[0-9a-j]/, ''); // no anim prefix
+
+      const tx = materials[cleanName] || new QuakeMaterial(name, view.getUint32(absofs + 16, true), view.getUint32(absofs + 20, true));
+
+      materials[cleanName] = tx;
+
+      let glt = null;
 
       // Load texture data (skip for dedicated server)
       if (!registry.isDedicatedServer) {
         if (tx.name.substring(0, 3).toLowerCase() === 'sky') {
           R.InitSky(new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), 32768));
-          tx.texturenum = R.solidskytexture;
           R.skytexturenum = i;
-          tx.sky = true;
+          tx.flags |= materialFlags.MF_SKY;
         } else {
           // Try loading WAD3 texture
           const len = 40 + tx.width * tx.height * (1 + 0.25 + 0.0625 + 0.015625) + 2 + 768;
@@ -198,70 +194,45 @@ export class BSP29Loader extends ModelLoader {
               const data = new ArrayBuffer(len);
               new Uint8Array(data).set(new Uint8Array(buf, absofs, len));
               const wtex = readWad3Texture(data, tx.name, 0);
-              tx.glt = GLTexture.FromLumpTexture(wtex);
+              glt = GLTexture.FromLumpTexture(wtex);
             }
           }
         }
 
-        if (!tx.glt) {
+        if (!glt) {
           const pixelData = new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), tx.width * tx.height);
           const rgba = translateIndexToRGBA(pixelData, tx.width, tx.height, W.d_8to24table_u8, tx.name[0] === '{' ? 255 : null, 240);
           const textureId = `${tx.name}/${CRC16CCITT.Block(pixelData)}`; // CR: unique texture ID to avoid conflicts across maps
-          tx.glt = GLTexture.Allocate(textureId, tx.width, tx.height, rgba);
+          glt = GLTexture.Allocate(textureId, tx.width, tx.height, rgba);
         }
 
         if (tx.name[0] === '*' || tx.name[0] === '!') {
-          tx.turbulent = true;
+          tx.flags |= materialFlags.MF_TURBULENT;
         }
 
         // Mark textures with '{' prefix as transparent (for alpha blending)
         if (tx.name[0] === '{' || tx.name.toLowerCase() === 'dev_glass') {
-          tx.transparent = true;
+          tx.flags |= materialFlags.MF_TRANSPARENT;
         }
       }
+
+      if (name[0] === '+') { // animation prefix
+        const frame = name.toUpperCase().charCodeAt(1);
+
+        if (frame >= 48 && frame <= 57) { // '0'-'9'
+          const frameIndex = frame - 48;
+          tx.addAnimationFrame(frameIndex, glt);
+        } else if (frame >= 65 && frame <= 74) { // 'A'-'J'
+          const frameIndex = frame - 65;
+          tx.addAlternateFrame(frameIndex, glt);
+        }
+      } else {
+        tx.glt = glt;
+      }
+
       loadmodel.textures[i] = tx;
     }
 
-    // Handle animated textures
-    for (let i = 0; i < nummiptex; i++) {
-      const tx = loadmodel.textures[i];
-      if (tx.name[0] !== '+' || tx.name[1] !== '0') { continue; }
-
-      const name = tx.name.substring(2);
-      tx.anims = [i];
-      tx.alternate_anims = [];
-
-      for (let j = 0; j < nummiptex; j++) {
-        const tx2 = loadmodel.textures[j];
-        if (tx2.name[0] !== '+' || tx2.name.substring(2) !== name) { continue; }
-
-        let num = tx2.name.charCodeAt(1);
-        if (num === 48) { continue; }
-        if (num >= 49 && num <= 57) {
-          tx.anims[num - 48] = j;
-          tx2.anim_base = i;
-          tx2.anim_frame = num - 48;
-          continue;
-        }
-        if (num >= 97) { num -= 32; }
-        if (num >= 65 && num <= 74) {
-          tx.alternate_anims[num - 65] = j;
-          tx2.anim_base = i;
-          tx2.anim_frame = num - 65;
-          continue;
-        }
-        throw new Error('Bad animating texture ' + tx.name);
-      }
-
-      for (let j = 0; j < tx.anims.length; j++) {
-        if (tx.anims[j] === undefined) { throw new Error('Missing frame ' + j + ' of ' + tx.name); }
-      }
-      for (let j = 0; j < tx.alternate_anims.length; j++) {
-        if (tx.alternate_anims[j] === undefined) { throw new Error('Missing frame ' + j + ' of ' + tx.name); }
-      }
-    }
-
-    loadmodel.textures[loadmodel.textures.length] = BSP29Loader.#notexture_mip;
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
   }
 
@@ -283,6 +254,7 @@ export class BSP29Loader extends ModelLoader {
 
     for (const [txName, textures] of Object.entries(materialData.materials)) {
       const texture = loadmodel.textures.find((t) => t.name === txName);
+
       if (!texture) {
         Con.PrintWarning(`BSP29Loader: referenced material (${txName}) is not used\n`);
         continue;
@@ -290,12 +262,14 @@ export class BSP29Loader extends ModelLoader {
 
       for (const category of ['luminance', 'diffuse', 'specular', 'normal']) {
         if (textures[category]) {
-          GLTexture.FromImageFile(textures[category]).then((glt) => {
+          try {
+            const glt = await GLTexture.FromImageFile(textures[category]);
+
             texture[category === 'diffuse' ? 'glt' : category] = glt;
             Con.DPrint(`BSP29Loader: loaded ${category} texture for ${texture.name} from ${textures[category]}\n`);
-          }).catch((e) => {
+          } catch (e) {
             Con.PrintError(`BSP29Loader: failed to load ${textures[category]}: ${e.message}\n`);
-          });
+          }
         }
       }
     }

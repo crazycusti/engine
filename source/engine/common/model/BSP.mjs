@@ -1,3 +1,4 @@
+import { BaseMaterial } from '../../client/renderer/Materials.mjs';
 import { content } from '../../../shared/Defs.mjs';
 import { BaseModel } from './BaseModel.mjs';
 
@@ -307,7 +308,7 @@ export class BrushModel extends BaseModel {
   /** @type {Node[]} BSP leaf nodes */
   leafs = [];
 
-  /** @type {import('../../client/R.mjs').BrushModelTexture[]} Texture information */
+  /** @type {BaseMaterial[]} Texture information */
   textures = [];
 
   /** @type {any[]} Texture coordinate info per face */

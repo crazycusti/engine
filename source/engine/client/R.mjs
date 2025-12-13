@@ -18,23 +18,9 @@ import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
 import { Node, revealedVisibility } from '../common/model/BSP.mjs';
 import { ClientDlight } from './ClientEntities.mjs';
+import { BaseMaterial } from './renderer/Materials.mjs';
 
 let { CL, COM, Host, Mod, SCR, SV, Sys, V  } = registry;
-
-/**
- * @typedef {{
-    name: string;
-    width: number;
-    height: number;
-    glt: GLTexture;
-    sky: boolean;
-    turbulent: boolean;
-    transparent: boolean;
-    luminance: GLTexture;
-    specular: GLTexture;
-    normal: GLTexture;
-}} BrushModelTexture
- */
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -1376,6 +1362,8 @@ R.InitTextures = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  eventBus.publish('renderer.textures.initialized');
 };
 
 R.InitShaders = async function() {
@@ -1471,6 +1459,8 @@ R.InitShaders = async function() {
       [['aPosition', gl.FLOAT, 3]],
       []),
   ]);
+
+  eventBus.publish('renderer.shaders.initialized');
 };
 
 R.Init = async function() {
@@ -2194,26 +2184,12 @@ R.BuildLightMapEx = function(currentmodel, surf) {
 };
 
 /**
- * @param base
- * @returns {[BrushModelTexture, BrushModelTexture]}
+ * @param {BaseMaterial} base
+ * @returns {[BaseMaterial, BaseMaterial]}
  */
 R.TextureAnimation = function(base) {
-  let frame = 0;
-  if (base.anim_base !== null) {
-    frame = base.anim_frame;
-    base = R.currententity.model.textures[base.anim_base];
-  }
-  let anims = base.anims;
-  if (anims.length === 0) {
-    return [base, base];
-  }
-  if ((R.currententity.frame !== 0) && (base.alternate_anims.length !== 0)) {
-    anims = base.alternate_anims;
-  }
-  return [
-    R.currententity.model.textures[anims[(Math.floor(CL.state.time * 5.0) + frame) % anims.length]],
-    R.currententity.model.textures[anims[(Math.floor(CL.state.time * 5.0) + frame + 1) % anims.length]],
-  ];
+  base.emit(R.currententity);
+  return [base, base];
 };
 
 R.RecursiveWorldNode = function(node) {

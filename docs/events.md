@@ -52,6 +52,8 @@ The engine has an event bus.
 | gl.shutdown |  | WebGL rendering context is no longer available now. |
 | gl.texturemode | 1. name, 2. min, 3. max | Texture mode has changed. |
 | gl.texture.ready | 1. identifier | Texture has been uploaded and is ready to be used. |
+| renderer.shaders.initialized | | Default shaders have been initialized and can be referenced. |
+| renderer.texture.initialized | | Default textures have been initialized and can be referenced. |
 | vid.resize | 1. width, 2. height, 3. pixelRatio | Dimensions of the rendering canvas have changed. |
 | vid.ready | | Viewport is ready. |
 | vid.shutdown | | Viewport is gone. |

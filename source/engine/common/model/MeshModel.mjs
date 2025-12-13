@@ -1,3 +1,4 @@
+import { BaseMaterial } from '../../client/renderer/Materials.mjs';
 import Vector from '../../../shared/Vector.mjs';
 import { BaseModel } from './BaseModel.mjs';
 
@@ -26,7 +27,7 @@ export class MeshModel extends BaseModel {
   // Materials & textures
   /** @type {string} */ materialName = '';     // Material library reference
   /** @type {string} */ textureName = '';      // Diffuse texture path
-  /** @type {object|null} */ texture = null;   // Loaded texture object
+  /** @type {BaseMaterial|null} */ texture = null;   // Loaded texture object
 
   // GPU buffers (created by renderer)
   /** @type {WebGLBuffer|null} */ vbo = null;  // Vertex buffer object

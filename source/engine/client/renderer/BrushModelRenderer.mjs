@@ -2,6 +2,7 @@ import Vector from '../../../shared/Vector.mjs';
 import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
+import { BaseMaterial, materialFlags } from './Materials.mjs';
 
 let { CL, Host, R } = registry;
 
@@ -183,7 +184,7 @@ export class BrushModelRenderer extends ModelRenderer {
         const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
 
         // Skip transparent surfaces in opaque pass
-        if (textureA.transparent === true) {
+        if (textureA.flags & materialFlags.MF_TRANSPARENT) {
           continue;
         }
 
@@ -294,7 +295,7 @@ export class BrushModelRenderer extends ModelRenderer {
         const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
 
         // Only render transparent surfaces in this pass
-        if (textureA.transparent !== true) {
+        if (!(textureA.flags & materialFlags.MF_TRANSPARENT)) {
           continue;
         }
 
@@ -434,15 +435,15 @@ export class BrushModelRenderer extends ModelRenderer {
    * Bind PBR texture maps (luminance, normal, specular) for a brush texture.
    * @private
    * @param {WebGLProgram} program The shader program
-   * @param {import('../R.mjs').BrushModelTexture} texture The brush texture with optional PBR maps
+   * @param {BaseMaterial} material The brush texture with optional PBR maps
    */
-  _bindPBRTextures(program, texture) {
+  _bindPBRTextures(program, material) {
     for (const [slot, samplerId] of Object.entries({
       luminance: 'tLuminance',
       normal: 'tNormal',
       specular: 'tSpecular',
     })) {
-      const t = texture[slot];
+      const t = material[slot];
       if (t !== null) {
         t.bind(program[samplerId]);
       } else {
@@ -501,7 +502,7 @@ export class BrushModelRenderer extends ModelRenderer {
       const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
 
       // Skip turbulent and transparent surfaces in opaque pass
-      if (textureA.turbulent === true || textureA.transparent === true) {
+      if ((textureA.flags & materialFlags.MF_TURBULENT) || (textureA.flags & materialFlags.MF_TRANSPARENT)) {
         continue;
       }
 
@@ -516,8 +517,7 @@ export class BrushModelRenderer extends ModelRenderer {
       // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
       const threshold = R.pbr_lod_threshold.value;
       const screenCoverageEstimate = chain[2] / 3; // Rough proxy for screen coverage
-      const usePBR = threshold === 0 ? false :
-                     (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+      const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
 
       gl.uniform1i(program.uPerformDotLighting,
         (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
@@ -608,7 +608,7 @@ export class BrushModelRenderer extends ModelRenderer {
       const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
 
       // Only render transparent surfaces in this pass
-      if (textureA.turbulent === true || textureA.transparent !== true) {
+      if ((textureA.flags & materialFlags.MF_TURBULENT) || !(textureA.flags & materialFlags.MF_TRANSPARENT)) {
         continue;
       }
 
@@ -621,8 +621,7 @@ export class BrushModelRenderer extends ModelRenderer {
       // LOD: Disable expensive normal mapping for large triangles
       const threshold = R.pbr_lod_threshold.value;
       const screenCoverageEstimate = chain[2] / 3;
-      const usePBR = threshold === 0 ? false :
-                     (threshold < 0 ? true : screenCoverageEstimate <= threshold);
+      const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
 
       gl.uniform1i(program.uPerformDotLighting,
         (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
@@ -692,13 +691,14 @@ export class BrushModelRenderer extends ModelRenderer {
       const chain = clmodel.chains[i];
       const texture = clmodel.textures[chain[0]];
 
-      if (!texture.turbulent) {
+      if (!(texture.flags & materialFlags.MF_TURBULENT)) {
         continue; // Skip non-turbulent surfaces in this pass
       }
 
       R.c_brush_verts += chain[2];
       R.c_brush_tris += chain[2] / 3;
-      GL.Bind(program.tTexture, texture.texturenum);
+      // GL.Bind(program.tTexture, texture.texturenum);
+      R.notexture.bind(program.tTexture); // TODO: fix turbulent texture binding
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
       R.c_brush_draws++;
     }
@@ -760,7 +760,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build opaque surfaces (non-sky, non-turbulent)
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if (texture.sky || texture.turbulent) {
+      if (texture.flags & materialFlags.MF_SKY || texture.flags & materialFlags.MF_TURBULENT) {
         continue;
       }
       const chain = [i, verts, 0];
@@ -801,7 +801,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build turbulent surfaces (water, lava, slime)
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if (texture.turbulent !== true) {
+      if (!(texture.flags & materialFlags.MF_TURBULENT)) {
         continue;
       }
       const chain = [i, verts, 0];
@@ -864,7 +864,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build opaque surfaces (non-sky, non-turbulent) organized by leaf
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if ((texture.sky === true) || (texture.turbulent === true)) {
+      if ((texture.flags & materialFlags.MF_SKY) || (texture.flags & materialFlags.MF_TURBULENT)) {
         continue;
       }
       for (let j = 0; j < m.leafs.length; j++) {
@@ -908,7 +908,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build sky surfaces
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if (!texture.sky) {
+      if (!(texture.flags & materialFlags.MF_SKY)) {
         continue;
       }
       for (let j = 0; j < m.leafs.length; j++) {
@@ -938,7 +938,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build turbulent surfaces (water, lava, slime)
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if (texture.turbulent !== true) {
+      if (!(texture.flags & materialFlags.MF_TURBULENT)) {
         continue;
       }
       for (let j = 0; j < m.leafs.length; j++) {

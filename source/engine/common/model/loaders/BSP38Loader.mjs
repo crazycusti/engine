@@ -293,6 +293,20 @@ export class BSP38Loader extends ModelLoader {
     }
   }
 
+  _loadSubmodels(modelsLump, loadmodel) {
+    // float		mins[3], maxs[3];
+    // float		origin[3];		// for sounds or lights
+    // int32		headnode;
+    // int32		firstface, numfaces;	// submodels just draw faces
+    //                   // without walking the bsp tree
+
+    const stride = 48;
+    const length = modelsLump.byteLength / stride;
+    loadmodel.submodels.length = 0;
+
+
+  }
+
   async load(buffer, name) {
     const loadmodel = new BrushModel(name);
 
@@ -306,6 +320,7 @@ export class BSP38Loader extends ModelLoader {
     this._loadPlanes(lviews[lumps.LUMP_PLANES], loadmodel);
     this._loadBrushes(lviews[lumps.LUMP_BRUSHES], loadmodel);
     this._loadBrushSides(lviews[lumps.LUMP_BRUSHSIDES], loadmodel);
+    this._loadSubmodels(lviews[lumps.LUMP_MODELS], loadmodel);
 
     loadmodel.needload = false;
     loadmodel.checksum = CRC16CCITT.Block(new Uint8Array(buffer));

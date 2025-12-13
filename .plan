@@ -138,6 +138,10 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2025-12-13
+
+- introduced materials to organize that clusterfun with textures better
+
 ### 2025-12-11
 
 - need to restructure the BSP brush model stuff to get BSP38 working

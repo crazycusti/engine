@@ -51,7 +51,10 @@ export default defineConfig(({ mode }) => ({
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
-      input: resolve(__dirname, 'public/index.html'),
+      input: {
+        main: resolve(__dirname, 'public/index.html'),
+        shared: resolve(__dirname, 'source/shared/index.mjs'),
+      },
       output: {
         entryFileNames: 'libs/[name]-[hash].js',
         chunkFileNames: 'libs/[name]-[hash].js',
@@ -89,7 +92,7 @@ export default defineConfig(({ mode }) => ({
       drop: ['console', 'debugger'],
     } : undefined,
     reportCompressedSize: true,
-    target: 'es2019',
+    target: 'es2022',
   },
   plugins: [
     gameModulePreloadPlugin(),

@@ -2,6 +2,7 @@ import Vector from '../../../../shared/Vector.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
 import { BSP29Loader } from './BSP29Loader.mjs';
 import { Face } from '../BaseModel.mjs';
+import { Node } from '../BSP.mjs';
 
 /**
  * Loader for BSP2 format (.bsp)
@@ -70,7 +71,6 @@ export class BSP2Loader extends BSP29Loader {
         firstedge: view.getUint32(fileofs + 8, true), // int firstedge (offset 8)
         numedges: view.getUint32(fileofs + 12, true), // int numedges (offset 12)
         texinfo: view.getUint32(fileofs + 16, true), // int texinfo (offset 16)
-        styles: [],
         lightofs: view.getInt32(fileofs + 24, true), // int lightofs (offset 24)
         lmshift,
       });
@@ -155,24 +155,14 @@ export class BSP2Loader extends BSP29Loader {
     loadmodel.nodes.length = count;
 
     for (let i = 0; i < count; i++) {
-      loadmodel.nodes[i] = /** @type {import('../BSP.mjs').Node} */ ({
+      loadmodel.nodes[i] = Object.assign(new Node(loadmodel), {
         num: i,
-        contents: 0,
         planenum: view.getUint32(fileofs, true),
-        plane: null,
-        parent: null,
         children: [view.getInt32(fileofs + 4, true), view.getInt32(fileofs + 8, true)], // int32 instead of int16
-        visofs: 0,
         mins: new Vector(view.getFloat32(fileofs + 12, true), view.getFloat32(fileofs + 16, true), view.getFloat32(fileofs + 20, true)), // float instead of int16
         maxs: new Vector(view.getFloat32(fileofs + 24, true), view.getFloat32(fileofs + 28, true), view.getFloat32(fileofs + 32, true)), // float instead of int16
-        firstmarksurface: 0,
-        nummarksurfaces: 0,
         firstface: view.getUint32(fileofs + 36, true), // uint32 instead of uint16
         numfaces: view.getUint32(fileofs + 40, true), // uint32 instead of uint16
-        cmds: [],
-        ambient_level: [0, 0, 0, 0],
-        skychain: 0,
-        waterchain: 0,
       });
       fileofs += 44;
     }
@@ -195,9 +185,11 @@ export class BSP2Loader extends BSP29Loader {
     const setParent = (node, parent) => {
       node.parent = parent;
       // Stop recursion at leaf nodes (contents < 0 or null children)
-      if (node.contents < 0 || !node.children[0] || !node.children[1]) { return; }
-      setParent(/** @type {import('../BSP.mjs').Node} */(node.children[0]), node);
-      setParent(/** @type {import('../BSP.mjs').Node} */(node.children[1]), node);
+      if (node.contents < 0 || !node.children[0] || !node.children[1]) {
+        return;
+      }
+      setParent(/** @type {Node} */(node.children[0]), node);
+      setParent(/** @type {Node} */(node.children[1]), node);
     };
     setParent(loadmodel.nodes[0], null);
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs);
@@ -226,24 +218,20 @@ export class BSP2Loader extends BSP29Loader {
     loadmodel.leafs.length = count;
 
     for (let i = 0; i < count; i++) {
-      loadmodel.leafs[i] = /** @type {import('../BSP.mjs').Node} */ ({
+      loadmodel.leafs[i] = Object.assign(new Node(loadmodel), {
         num: i,
         contents: view.getInt32(fileofs, true),
-        planenum: 0,
-        plane: null,
-        parent: null,
-        children: [null, null],
         visofs: view.getInt32(fileofs + 4, true),
         mins: new Vector(view.getFloat32(fileofs + 8, true), view.getFloat32(fileofs + 12, true), view.getFloat32(fileofs + 16, true)), // float instead of int16
         maxs: new Vector(view.getFloat32(fileofs + 20, true), view.getFloat32(fileofs + 24, true), view.getFloat32(fileofs + 28, true)), // float instead of int16
         firstmarksurface: view.getUint32(fileofs + 32, true), // uint32 instead of uint16
         nummarksurfaces: view.getUint32(fileofs + 36, true), // uint32 instead of uint16
-        firstface: 0,
-        numfaces: 0,
-        ambient_level: [view.getUint8(fileofs + 40), view.getUint8(fileofs + 41), view.getUint8(fileofs + 42), view.getUint8(fileofs + 43)],
-        cmds: [],
-        skychain: 0,
-        waterchain: 0,
+        ambient_level: [
+          view.getUint8(fileofs + 40),
+          view.getUint8(fileofs + 41),
+          view.getUint8(fileofs + 42),
+          view.getUint8(fileofs + 43),
+        ],
       });
       fileofs += 44;
     }
