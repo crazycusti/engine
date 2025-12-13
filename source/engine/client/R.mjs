@@ -1315,6 +1315,8 @@ R.InitTextures = function() {
   }
 
   R.notexture = GLTexture.Allocate('r_notexture', 16, 16, data);
+  R.blacktexture = GLTexture.Allocate('r_blacktexture', 1, 1, new Uint8Array([0, 0, 0, 255]));
+  R.flatnormalmap = GLTexture.Allocate('r_flatnormalmap', 1, 1, new Uint8Array([128, 128, 255, 255]));
 
   // CR: this combination of texture modes make the sky look more crisp
   alphaskytexture.lockTextureMode('GL_NEAREST');
@@ -1480,7 +1482,6 @@ R.Init = async function() {
   R.flashblend = new Cvar('gl_flashblend', '0');
   R.nocolors = new Cvar('gl_nocolors', '0');
   R.interpolation = new Cvar('r_interpolation', '1', Cvar.FLAG.ARCHIVE, 'Interpolation of textures and animation groups, 0 - off, 1 - on');
-  R.pbr_lod_threshold = new Cvar('r_pbr_lod_threshold', '-1', Cvar.FLAG.ARCHIVE, 'Triangle count threshold to disable PBR (normal mapping) for fillrate optimization. -1 = no limit (always PBR), 0 = PBR off, >0 = disable PBR when triangle count exceeds threshold');
   // fog controls (TODO: make that a cheat, but resetting cvar to default is done after R.NewMapFog, so need to rethink the order of operations)
   R.fog_color = new Cvar('r_fog_color', '128 128 128', Cvar.FLAG.NONE, 'Fog color: R G B (0-255)');
   R.fog_start = new Cvar('r_fog_start', '128', Cvar.FLAG.NONE, 'Fog start distance (linear)');

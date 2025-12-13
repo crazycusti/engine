@@ -1,12 +1,22 @@
 import { eventBus, registry } from '../../registry.mjs';
 import { ClientEdict } from '../ClientEntities.mjs';
-import { GLTexture } from '../GL.mjs';
+import GL, { GLTexture } from '../GL.mjs';
 
 let { CL, R } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   R = registry.R;
+});
+
+let gl = /** @type {WebGL2RenderingContext} */ (null);
+
+eventBus.subscribe('gl.ready', () => {
+  gl = GL.gl;
+});
+
+eventBus.subscribe('gl.shutdown', () => {
+  gl = null;
 });
 
 export const materialFlags = Object.freeze({
@@ -27,15 +37,6 @@ export class BaseMaterial {
   width = /** @type {number} */ (0);
   height = /** @type {number} */ (0);
 
-  diffuseTextures = /** @type {GLTexture[]} */ ([]);
-  specularTextures = /** @type {GLTexture[]} */ ([]);
-  normalTextures = /** @type {GLTexture[]} */ ([]);
-  luminanceTextures = /** @type {GLTexture[]} */ ([]);
-
-  /** @deprecated */ get glt() {
-    return this.diffuse;
-  }
-
   /**
    * @param {string} name name
    * @param {number} width width
@@ -47,57 +48,18 @@ export class BaseMaterial {
     this.height = height;
   }
 
-  get diffuse() {
-    return this.diffuseTextures[0] || null;
+  // eslint-disable-next-line no-unused-vars
+  bindTo(program) {
+    // to be implemented by subclasses
   }
 
-  get specular() {
-    return this.specularTextures[0] || null;
-  }
-
-  get normal() {
-    return this.normalTextures[0] || null;
-  }
-
-  get luminance() {
-    return this.luminanceTextures[0] || null;
-  }
-
+  // eslint-disable-next-line no-unused-vars
   emit(/** @type {ClientEdict?} */ clientEdict = null) {
+    // to be implemented by subclasses
   }
 
   free() {
-    for (const t of this.diffuseTextures) {
-      if (t) {
-        t.free();
-      }
-    }
-
-    this.diffuseTextures.length = 0;
-
-    for (const t of this.specularTextures) {
-      if (t) {
-        t.free();
-      }
-    }
-
-    this.specularTextures.length = 0;
-
-    for (const t of this.normalTextures) {
-      if (t) {
-        t.free();
-      }
-    }
-
-    this.normalTextures.length = 0;
-
-    for (const t of this.luminanceTextures) {
-      if (t) {
-        t.free();
-      }
-    }
-
-    this.luminanceTextures.length = 0;
+    // to be implemented by subclasses
   }
 
   [Symbol.dispose]() { // make sure we always free resources
@@ -105,28 +67,59 @@ export class BaseMaterial {
   }
 };
 
+/**
+ * A class representing a Quake-style material with animation frames.
+ * It supports multiple frames and alternate frames for different states.
+ * No support for PBR or advanced features.
+ */
 export class QuakeMaterial extends BaseMaterial {
+  #textures = /** @type {GLTexture[]} */ ([]);
+
   #frames = /** @type {number} */ (1);
   #alternateFrames = /** @type {number} */ (0);
 
   #frame = 0;
+  #nextFrame = 0;
 
-  /** @deprecated */ get glt() {
-    return this.diffuseTextures[this.#frame] || null;
+  bindTo(program) {
+    gl.uniform1i(program.uPerformDotLighting, 0);
+    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+
+    if (program.tTextureA !== undefined && program.tTextureB !== undefined) {
+      this.#textures[this.#frame].bind(program.tTextureA);
+      this.#textures[this.#nextFrame].bind(program.tTextureB);
+      R.c_brush_texture_binds += 2;
+    }
+
+    if (program.tTexture !== undefined) {
+      this.#textures[this.#frame].bind(program.tTexture);
+      R.c_brush_texture_binds++;
+    }
+
+    // TODO: this could be the full bright map
+    if (program.tLuminance !== undefined) {
+      R.blacktexture.bind(program.tLuminance);
+      R.c_brush_texture_binds++;
+    }
   }
 
-  set glt (value) {
-    this.diffuseTextures = [value];
+  set texture(texture) {
+    this.#textures[0] = texture;
+    this.#textures.length = 1;
+  }
+
+  get texture() {
+    return this.#textures[0] || null;
   }
 
   addAnimationFrame(num, frameTexture) {
     this.#frames = Math.max(this.#frames, num + 1);
-    this.diffuseTextures[num] = frameTexture;
+    this.#textures[num] = frameTexture;
   }
 
   addAlternateFrame(num, frameTexture) {
     this.#alternateFrames = Math.max(this.#alternateFrames, num + 1);
-    this.diffuseTextures[num + 10] = frameTexture;
+    this.#textures[num + 10] = frameTexture;
   }
 
   emit(/** @type {ClientEdict} */ clientEdict = null) {
@@ -135,24 +128,102 @@ export class QuakeMaterial extends BaseMaterial {
 
     if (useAlternate) {
       this.#frame = 10 + (frame % this.#alternateFrames);
+      this.#nextFrame = 10 + ((frame + 1) % this.#alternateFrames);
     } else {
       this.#frame = frame % this.#frames;
+      this.#nextFrame = (frame + 1) % this.#frames;
+    }
+  }
+
+  free() {
+    for (const tex of this.#textures) {
+      tex.free();
+    }
+
+    this.#textures.length = 0;
+  }
+};
+
+/**
+ * A class representing a PBR material.
+ */
+export class PBRMaterial extends BaseMaterial {
+  luminance = /** @type {GLTexture} */ (null);
+  diffuse = /** @type {GLTexture} */ (null);
+  specular = /** @type {GLTexture} */ (null);
+  normal = /** @type {GLTexture} */ (null);
+
+  constructor(name, width, height) {
+    super(name, width, height);
+
+    this.diffuse = R.notexture;
+    this.luminance = R.blacktexture;
+    this.specular = R.blacktexture;
+    this.normal = R.flatnormalmap;
+  }
+
+  bindTo(program) {
+    gl.uniform1i(program.uPerformDotLighting, 1);
+    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+
+    if (program.tTexture !== undefined) {
+      this.diffuse.bind(program.tTexture);
+      R.c_brush_texture_binds++;
+    }
+
+    if (program.tTextureA !== undefined) {
+      this.diffuse.bind(program.tTextureA);
+      R.c_brush_texture_binds++;
+    }
+
+    if (program.tTextureB !== undefined) {
+      this.diffuse.bind(program.tTextureB);
+      R.c_brush_texture_binds++;
+    }
+
+    if (program.tSpecular !== undefined) {
+      this.specular.bind(program.tSpecular);
+      R.c_brush_texture_binds++;
+    }
+
+    if (program.tNormal !== undefined) {
+      this.normal.bind(program.tNormal);
+      R.c_brush_texture_binds++;
+    }
+
+    if (program.tLuminance !== undefined) {
+      this.luminance.bind(program.tLuminance);
+      R.c_brush_texture_binds++;
+    }
+  }
+
+  free() {
+    if (this.diffuse !== R.notexture) {
+      this.diffuse.free();
+    }
+
+    if (this.luminance !== R.blacktexture) {
+      this.luminance.free();
+    }
+
+    if (this.specular !== R.blacktexture) {
+      this.specular.free();
+    }
+
+    if (this.normal !== R.flatnormalmap) {
+      this.normal.free();
     }
   }
 };
 
 class NoTextureMaterial extends BaseMaterial {
-  constructor(name, width, height) {
-    super(name, width, height);
-
-    eventBus.subscribe('renderer.textures.initialized', () => {
-      this.diffuseTextures = [R.notexture];
-    });
+  constructor() {
+    super('notexture', 16, 16);
   }
 
-  free() {
-    // do nothing, shared texture
+  bind() {
+    R.notexture.bind(0);
   }
-};
+}
 
-export const noTextureMaterial = new NoTextureMaterial('notexture', 16, 16);
+export const noTextureMaterial = new NoTextureMaterial();

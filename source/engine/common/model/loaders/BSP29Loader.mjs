@@ -8,7 +8,7 @@ import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { BrushModel, Node } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
-import { materialFlags, noTextureMaterial, QuakeMaterial } from '../../../client/renderer/Materials.mjs';
+import { materialFlags, noTextureMaterial, PBRMaterial, QuakeMaterial } from '../../../client/renderer/Materials.mjs';
 
 // Get registry references (will be set by eventBus)
 let { COM, Con, Mod, R } = registry;
@@ -227,7 +227,7 @@ export class BSP29Loader extends ModelLoader {
           tx.addAlternateFrame(frameIndex, glt);
         }
       } else {
-        tx.glt = glt;
+        tx.texture = glt;
       }
 
       loadmodel.textures[i] = tx;
@@ -253,25 +253,32 @@ export class BSP29Loader extends ModelLoader {
     console.assert(materialData.version === 1);
 
     for (const [txName, textures] of Object.entries(materialData.materials)) {
-      const texture = loadmodel.textures.find((t) => t.name === txName);
+      const textureEntry = Array.from(loadmodel.textures.entries()).find(([, t]) => t.name === txName);
 
-      if (!texture) {
+      if (!textureEntry) {
         Con.PrintWarning(`BSP29Loader: referenced material (${txName}) is not used\n`);
         continue;
       }
 
+      const [txIndex, texture] = textureEntry;
+      const pbr = new PBRMaterial(texture.name, texture.width, texture.height);
+
       for (const category of ['luminance', 'diffuse', 'specular', 'normal']) {
         if (textures[category]) {
           try {
-            const glt = await GLTexture.FromImageFile(textures[category]);
-
-            texture[category === 'diffuse' ? 'glt' : category] = glt;
+            pbr[category] = await GLTexture.FromImageFile(textures[category]);
             Con.DPrint(`BSP29Loader: loaded ${category} texture for ${texture.name} from ${textures[category]}\n`);
           } catch (e) {
             Con.PrintError(`BSP29Loader: failed to load ${textures[category]}: ${e.message}\n`);
           }
         }
       }
+
+      if (!textures.diffuse && (texture instanceof QuakeMaterial)) {
+        pbr.diffuse = texture.texture; // keep original diffuse as base
+      }
+
+      loadmodel.textures[txIndex] = pbr; // replace with PBR material
     }
   }
 

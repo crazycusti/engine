@@ -181,48 +181,18 @@ export class BrushModelRenderer extends ModelRenderer {
 
       for (let j = 0; j < leaf.skychain; j++) {
         const cmds = leaf.cmds[j];
-        const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
+        const material = clmodel.textures[cmds[0]];
 
         // Skip transparent surfaces in opaque pass
-        if (textureA.flags & materialFlags.MF_TRANSPARENT) {
+        if (material.flags & materialFlags.MF_TRANSPARENT) {
           continue;
         }
 
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
-        gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
 
-        if (textureA.glt) {
-          textureA.glt.bind(program.tTextureA);
-        } else {
-          R.notexture.bind(program.tTextureA);
-        }
-
-        if (textureB.glt) {
-          textureB.glt.bind(program.tTextureB);
-        } else {
-          R.notexture.bind(program.tTextureB);
-        }
-        R.c_brush_texture_binds += 2;  // TextureA + TextureB
-
-        // LOD: Disable expensive normal mapping for large triangles (fillrate optimization)
-        // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
-        const threshold = R.pbr_lod_threshold.value;
-        const screenCoverageEstimate = cmds[2] / 3; // Rough proxy
-        const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
-
-        gl.uniform1i(program.uPerformDotLighting,
-          (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);
-
-        // Bind PBR textures
-        this._bindPBRTextures(program, clmodel.textures[cmds[0]]);
-        R.c_brush_texture_binds += 3;  // Luminance + Normal + Specular
-
-        // Track if this is a PBR material
-        const texture = clmodel.textures[cmds[0]];
-        if (texture.normal || texture.specular || texture.luminance) {
-          R.c_brush_draws_pbr++;
-        }
+        material.emit(R.currententity);
+        material.bindTo(program);
 
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
         R.c_brush_draws++;
@@ -292,46 +262,18 @@ export class BrushModelRenderer extends ModelRenderer {
 
       for (let j = 0; j < leaf.skychain; j++) {
         const cmds = leaf.cmds[j];
-        const [textureA, textureB] = R.TextureAnimation(clmodel.textures[cmds[0]]);
+        const material = clmodel.textures[cmds[0]];
 
         // Only render transparent surfaces in this pass
-        if (!(textureA.flags & materialFlags.MF_TRANSPARENT)) {
+        if (!(material.flags & materialFlags.MF_TRANSPARENT)) {
           continue;
         }
 
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
-        gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
 
-        if (textureA.glt) {
-          textureA.glt.bind(program.tTextureA);
-        } else {
-          R.notexture.bind(program.tTextureA);
-        }
-
-        if (textureB.glt) {
-          textureB.glt.bind(program.tTextureB);
-        } else {
-          R.notexture.bind(program.tTextureB);
-        }
-        R.c_brush_texture_binds += 2;
-
-        const threshold = R.pbr_lod_threshold.value;
-        const screenCoverageEstimate = cmds[2] / 3;
-        const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
-
-        gl.uniform1i(program.uPerformDotLighting,
-          (clmodel.textures[cmds[0]].normal && usePBR) ? 1 : 0);
-
-        // Bind PBR textures
-        this._bindPBRTextures(program, clmodel.textures[cmds[0]]);
-        R.c_brush_texture_binds += 3;
-
-        // Track if this is a PBR material
-        const texture = clmodel.textures[cmds[0]];
-        if (texture.normal || texture.specular || texture.luminance) {
-          R.c_brush_draws_pbr++;
-        }
+        material.emit(R.currententity);
+        material.bindTo(program);
 
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
         R.c_brush_draws++;
@@ -378,7 +320,8 @@ export class BrushModelRenderer extends ModelRenderer {
         const cmds = leaf.cmds[j];
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
-        clmodel.textures[cmds[0]].glt.bind(program.tTexture);
+        clmodel.textures[cmds[0]].emit(R.currententity);
+        clmodel.textures[cmds[0]].bindTo(program);
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
         R.c_brush_draws++;
       }
@@ -499,28 +442,18 @@ export class BrushModelRenderer extends ModelRenderer {
 
     for (let i = 0; i < clmodel.chains.length; i++) {
       const chain = clmodel.chains[i];
-      const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
+      const material = clmodel.textures[chain[0]];
 
       // Skip turbulent and transparent surfaces in opaque pass
-      if ((textureA.flags & materialFlags.MF_TURBULENT) || (textureA.flags & materialFlags.MF_TRANSPARENT)) {
+      if ((material.flags & materialFlags.MF_TURBULENT) || (material.flags & materialFlags.MF_TRANSPARENT)) {
         continue;
       }
 
       R.c_brush_verts += chain[2];
       R.c_brush_tris += chain[2] / 3;
-      textureA.glt.bind(program.tTextureA);
-      textureB.glt.bind(program.tTextureB);
-      R.c_brush_texture_binds += 2;  // TextureA + TextureB
 
-      // LOD: Disable expensive normal mapping for large triangles (fillrate optimization)
-      // On weak GPUs, large screen-space triangles with normal maps kill fillrate
-      // -1 = no limit (always use PBR), 0 = PBR off, >0 = disable when tris > threshold
-      const threshold = R.pbr_lod_threshold.value;
-      const screenCoverageEstimate = chain[2] / 3; // Rough proxy for screen coverage
-      const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
-
-      gl.uniform1i(program.uPerformDotLighting,
-        (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
+      material.emit(e);
+      material.bindTo(program);
 
       // Setup dynamic lighting
       const lightVector = new Vector(0, 0, 0);
@@ -535,16 +468,6 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
-
-      // Bind PBR textures
-      this._bindPBRTextures(program, clmodel.textures[chain[0]]);
-      R.c_brush_texture_binds += 3;  // Luminance + Normal + Specular
-
-      // Track if this is a PBR material (has normal/specular/luminance maps)
-      const texture = clmodel.textures[chain[0]];
-      if (texture.normal || texture.specular || texture.luminance) {
-        R.c_brush_draws_pbr++;
-      }
 
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
       R.c_brush_draws++;
@@ -605,26 +528,18 @@ export class BrushModelRenderer extends ModelRenderer {
 
     for (let i = 0; i < clmodel.chains.length; i++) {
       const chain = clmodel.chains[i];
-      const [textureA, textureB] = R.TextureAnimation(clmodel.textures[chain[0]]);
+      const material = clmodel.textures[chain[0]];
 
       // Only render transparent surfaces in this pass
-      if ((textureA.flags & materialFlags.MF_TURBULENT) || !(textureA.flags & materialFlags.MF_TRANSPARENT)) {
+      if ((material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)) {
         continue;
       }
 
       R.c_brush_verts += chain[2];
       R.c_brush_tris += chain[2] / 3;
-      textureA.glt.bind(program.tTextureA);
-      textureB.glt.bind(program.tTextureB);
-      R.c_brush_texture_binds += 2;
 
-      // LOD: Disable expensive normal mapping for large triangles
-      const threshold = R.pbr_lod_threshold.value;
-      const screenCoverageEstimate = chain[2] / 3;
-      const usePBR = threshold === 0 ? false : (threshold < 0 ? true : screenCoverageEstimate <= threshold);
-
-      gl.uniform1i(program.uPerformDotLighting,
-        (clmodel.textures[chain[0]].normal && usePBR) ? 1 : 0);
+      material.emit(e);
+      material.bindTo(program);
 
       // Setup dynamic lighting
       const lightVector = new Vector(0, 0, 0);
@@ -639,16 +554,6 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
-
-      // Bind PBR textures
-      this._bindPBRTextures(program, clmodel.textures[chain[0]]);
-      R.c_brush_texture_binds += 3;
-
-      // Track if this is a PBR material
-      const texture = clmodel.textures[chain[0]];
-      if (texture.normal || texture.specular || texture.luminance) {
-        R.c_brush_draws_pbr++;
-      }
 
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
       R.c_brush_draws++;
