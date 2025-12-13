@@ -218,8 +218,11 @@ export class Node {
   skychain = 0;
   /** @type {number} index into waterchain list */
   waterchain = 0;
+
   /** @type {number} used by the renderer to determine what to draw */
   markvisframe = 0;
+  /** @type {number} used by the renderer to determine what to draw */
+  visframe = 0;
 }
 
 /**
@@ -313,6 +316,9 @@ export class BrushModel extends BaseModel {
 
   /** @type {number} Offset into vertex buffer for turbulent surfaces (water, slime, lava) */
   waterchain = 0;
+
+  /** @type {number} Offset into vertex buffer for sky surfaces */
+  skychain = 0;
 
   /** @type {boolean} Whether RGB lighting is used */
   coloredlights = false;

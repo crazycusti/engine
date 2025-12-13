@@ -196,14 +196,16 @@ export const content = Object.freeze({
   CONTENT_NONE: 0,
 
   // for game play:
+  /** inside the world */
   CONTENT_EMPTY: -1,
+  /** outside the world */
   CONTENT_SOLID: -2,
   CONTENT_WATER: -3,
   CONTENT_SLIME: -4,
   CONTENT_LAVA: -5,
   CONTENT_SKY: -6,
 
-  // for engine shenanigans:
+  // for build tools shenanigans:
   CONTENT_ORIGIN: -7,
   CONTENT_CLIP: -8,
 

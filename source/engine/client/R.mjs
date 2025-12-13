@@ -2262,7 +2262,7 @@ R.MarkLeaves = function() {
   }
   R.visframecount++;
   R.oldviewleaf = R.viewleaf;
-  const vis = (R.novis.value !== 0 || R.viewleaf === null) ? revealedVisibility : CL.state.worldmodel.getPvsByLeaf(R.viewleaf);
+  const vis = (R.novis.value !== 0 || R.viewleaf === null || R.viewleaf.num === 0) ? revealedVisibility : CL.state.worldmodel.getPvsByLeaf(R.viewleaf);
   for (let i = 0; i < CL.state.worldmodel.leafs.length; i++) {
     if (!vis.isRevealed(i)) {
       continue;

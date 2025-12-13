@@ -65,6 +65,7 @@ export class ServerCollision {
   pointContents(p) {
     const cont = this.hullPointContents(SV.server.worldmodel.hulls[0], 0, p);
     if ((cont <= Defs.content.CONTENT_CURRENT_0) && (cont >= Defs.content.CONTENT_CURRENT_DOWN)) {
+      // all currents are considered water
       return Defs.content.CONTENT_WATER;
     }
     return cont;
