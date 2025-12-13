@@ -11,7 +11,7 @@ import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
 import { content, effect, EPSILON, gameCapabilities } from '../../shared/Defs.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
-import { BrushModelRenderer } from './renderer/BrushModelRenderer.mjs';
+import { BrushModelRenderer, LIGHTMAP_BLOCK_HEIGHT, LIGHTMAP_BLOCK_SIZE } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
@@ -57,34 +57,6 @@ eventBus.subscribe('gl.shutdown', () => {
 const R = {};
 
 export default R;
-
-// Lightmap atlas configuration
-// This defines the width of the dynamic lightmap texture atlas.
-// The height is LIGHTMAP_BLOCK_SIZE * 4 because we pack 4 lightstyles in RGBA channels.
-// The 3 RGB color channels are stacked vertically (see shader for details).
-// Increase this value for larger maps (e.g., 2048 or 4096).
-// NOTE: Memory usage scales quadratically (2048 = 4x memory, 4096 = 16x memory).
-const LIGHTMAP_BLOCK_SIZE = 2048;
-const LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4; // 4 lightstyles in RGBA
-
-// efrag
-
-R.SplitEntityOnNode = function(node) {
-  if (node.contents === content.CONTENT_SOLID) {
-    return;
-  }
-  if (node.contents < 0) {
-    R.currententity.leafs[R.currententity.leafs.length] = node.num - 1;
-    return;
-  }
-  const sides = Vector.boxOnPlaneSide(R.emins, R.emaxs, node.plane);
-  if ((sides & 1) !== 0) {
-    R.SplitEntityOnNode(node.children[0]);
-  }
-  if ((sides & 2) !== 0) {
-    R.SplitEntityOnNode(node.children[1]);
-  }
-};
 
 // light
 
@@ -2146,7 +2118,7 @@ R.RemoveDynamicLights = function(surf) {
   }
 };
 
-R.BuildLightMap = function(surf) {
+R.BuildLightMap = function(currentmodel, surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
@@ -2159,7 +2131,7 @@ R.BuildLightMap = function(surf) {
       let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
-          R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata[lightmap + j];
+          R.lightmaps_rgb[dest + (j << 2) + offset] = currentmodel.lightdata[lightmap + j];
         }
         lightmap += smax;
         dest += LIGHTMAP_BLOCK_HEIGHT;
@@ -2178,7 +2150,7 @@ R.BuildLightMap = function(surf) {
   }
 };
 
-R.BuildLightMapEx = function(surf) {
+R.BuildLightMapEx = function(currentmodel, surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
@@ -2191,10 +2163,10 @@ R.BuildLightMapEx = function(surf) {
       let dest = (surf.light_t * LIGHTMAP_BLOCK_HEIGHT) + (surf.light_s << 2) + maps;
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
-          R.lightmaps_rgb[dest + (j << 2) + offset] = R.currentmodel.lightdata_rgb[(lightmap + j * 3) + k];
+          R.lightmaps_rgb[dest + (j << 2) + offset] = currentmodel.lightdata_rgb[(lightmap + j * 3) + k];
 
-          if (R.currentmodel.deluxemap) {
-            R.deluxemap[dest + (j << 2) + offset] = R.currentmodel.deluxemap[(lightmap + j * 3) + k];
+          if (currentmodel.deluxemap) {
+            R.deluxemap[dest + (j << 2) + offset] = currentmodel.deluxemap[(lightmap + j * 3) + k];
           }
         }
         lightmap += smax * 3;
@@ -2342,75 +2314,38 @@ R.AllocBlock = function(surf) {
   surf.light_t = y;
 };
 
-// Based on Quake 2 polygon generation algorithm by Toji - http://blog.tojicode.com/2010/06/quake-2-bsp-quite-possibly-worst-format.html
-R.BuildSurfaceDisplayList = function(fa) {
-  fa.verts = [];
-  if (fa.numedges < 3) {
-    return;
-  }
-  const texinfo = R.currentmodel.texinfo[fa.texinfo];
-  const texture = R.currentmodel.textures[texinfo.texture];
-  for (let i = 0; i < fa.numedges; i++) {
-    const index = R.currentmodel.surfedges[fa.firstedge + i];
-    let vec;
-    if (index > 0) {
-      vec = R.currentmodel.vertexes[R.currentmodel.edges[index][0]];
-    } else {
-      vec = R.currentmodel.vertexes[R.currentmodel.edges[-index][1]];
-    }
-    const vert = [vec[0], vec[1], vec[2]];
-    if (fa.sky !== true) {
-      const s = vec.dot(new Vector(...texinfo.vecs[0])) + texinfo.vecs[0][3];
-      const t = vec.dot(new Vector(...texinfo.vecs[1])) + texinfo.vecs[1][3];
-      vert[3] = s / texture.width;
-      vert[4] = t / texture.height;
-      vert[5] = (s - fa.texturemins[0] + (fa.light_s << fa.lmshift) + (1 << (fa.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << fa.lmshift));
-      vert[6] = (t - fa.texturemins[1] + (fa.light_t << fa.lmshift) + (1 << (fa.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << fa.lmshift));
-    }
-    if (i >= 3) {
-      fa.verts[fa.verts.length] = fa.verts[0];
-      fa.verts[fa.verts.length] = fa.verts[fa.verts.length - 2];
-    }
-    fa.verts[fa.verts.length] = vert;
-  }
-};
-
 R.BuildLightmaps = function() {
   R.allocated = (new Array(LIGHTMAP_BLOCK_SIZE)).fill(0);
 
+  const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+  const meshRenderer = modelRendererRegistry.getRenderer(Mod.type.mesh);
+
   for (let i = 1; i < CL.state.model_precache.length; i++) {
-    R.currentmodel = CL.state.model_precache[i];
+    const currentmodel = CL.state.model_precache[i];
 
     // Handle brush models (BSP maps)
-    if (R.currentmodel.type === Mod.type.brush) {
-      if (R.currentmodel.name[0] !== '*') {
-        for (let j = 0; j < R.currentmodel.faces.length; j++) {
-          const surf = R.currentmodel.faces[j];
+    if (currentmodel.type === Mod.type.brush) {
+      if (currentmodel.name[0] !== '*') { // skip submodels
+        for (let j = 0; j < currentmodel.faces.length; j++) {
+          const surf = currentmodel.faces[j];
           if (!surf.sky) {
             R.AllocBlock(surf);
-            if (R.currentmodel.lightdata_rgb !== null) {
-              R.BuildLightMapEx(surf);
-            } else if (R.currentmodel.lightdata !== null) {
-              R.BuildLightMap(surf);
+            if (currentmodel.lightdata_rgb !== null) {
+              R.BuildLightMapEx(currentmodel, surf);
+            } else if (currentmodel.lightdata !== null) {
+              R.BuildLightMap(currentmodel, surf);
             }
           }
-          R.BuildSurfaceDisplayList(surf);
         }
       }
       // Use the brush renderer to prepare the model
       // Only model index 1 is the world model, all others are entity models
-      const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-      if (brushRenderer) {
-        brushRenderer.prepareModel(R.currentmodel, i === 1);
-      }
+      brushRenderer.prepareModel(currentmodel, i === 1);
     }
 
     // Handle mesh models (OBJ, IQM, etc.)
-    if (R.currentmodel.type === Mod.type.mesh) {
-      const meshRenderer = modelRendererRegistry.getRenderer(Mod.type.mesh);
-      if (meshRenderer) {
-        meshRenderer.prepareModel(R.currentmodel);
-      }
+    if (currentmodel.type === Mod.type.mesh) {
+      meshRenderer.prepareModel(currentmodel);
     }
   }
 

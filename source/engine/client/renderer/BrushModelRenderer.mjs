@@ -19,6 +19,15 @@ eventBus.subscribe('gl.shutdown', () => {
   gl = null;
 });
 
+// Lightmap atlas configuration
+// This defines the width of the dynamic lightmap texture atlas.
+// The height is LIGHTMAP_BLOCK_SIZE * 4 because we pack 4 lightstyles in RGBA channels.
+// The 3 RGB color channels are stacked vertically (see shader for details).
+// Increase this value for larger maps (e.g., 2048 or 4096).
+// NOTE: Memory usage scales quadratically (2048 = 4x memory, 4096 = 16x memory).
+export const LIGHTMAP_BLOCK_SIZE = 2048;
+export const LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4; // 4 lightstyles in RGBA
+
 /**
  * Renderer for BSP brush models (maps and inline models like doors, platforms).
  * Handles both static world geometry and dynamic brush entities.
@@ -722,6 +731,12 @@ export class BrushModelRenderer extends ModelRenderer {
       m.cmds = null;
     }
 
+    if (model.name[0] !== '*') {
+      for (const face of model.faces) {
+        this._buildSurfaceDisplayList(model, face);
+      }
+    }
+
     if (isWorldModel) {
       this._buildWorldModelDisplayLists(m);
     } else {
@@ -968,6 +983,38 @@ export class BrushModelRenderer extends ModelRenderer {
     m.cmds = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
+  }
+
+  _buildSurfaceDisplayList(model, face) {
+    face.verts = [];
+    if (face.numedges < 3) {
+      return;
+    }
+    const texinfo = model.texinfo[face.texinfo];
+    const texture = model.textures[texinfo.texture];
+    for (let i = 0; i < face.numedges; i++) {
+      const index = model.surfedges[face.firstedge + i];
+      let vec;
+      if (index > 0) {
+        vec = model.vertexes[model.edges[index][0]];
+      } else {
+        vec = model.vertexes[model.edges[-index][1]];
+      }
+      const vert = [vec[0], vec[1], vec[2]];
+      if (face.sky !== true) {
+        const s = vec.dot(new Vector(...texinfo.vecs[0])) + texinfo.vecs[0][3];
+        const t = vec.dot(new Vector(...texinfo.vecs[1])) + texinfo.vecs[1][3];
+        vert[3] = s / texture.width;
+        vert[4] = t / texture.height;
+        vert[5] = (s - face.texturemins[0] + (face.light_s << face.lmshift) + (1 << (face.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << face.lmshift));
+        vert[6] = (t - face.texturemins[1] + (face.light_t << face.lmshift) + (1 << (face.lmshift - 1))) / (LIGHTMAP_BLOCK_SIZE * (1 << face.lmshift));
+      }
+      if (i >= 3) {
+        face.verts[face.verts.length] = face.verts[0];
+        face.verts[face.verts.length] = face.verts[face.verts.length - 2];
+      }
+      face.verts[face.verts.length] = vert;
+    }
   }
 
   /**

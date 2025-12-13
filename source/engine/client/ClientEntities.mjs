@@ -1,13 +1,13 @@
 import Vector from '../../shared/Vector.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import * as Def from '../common/Def.mjs';
-import { effect, solid } from '../../shared/Defs.mjs';
+import { content, effect, solid } from '../../shared/Defs.mjs';
 import Chase from './Chase.mjs';
 import { DefaultClientEdictHandler } from './ClientLegacy.mjs';
 import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { SFX } from './Sound.mjs';
-import { hiddenVisibility, revealedVisibility } from '../common/model/BSP.mjs';
+import { hiddenVisibility, Node, revealedVisibility } from '../common/model/BSP.mjs';
 
 let { CL, Con, Mod, PR, R, S } = registry;
 
@@ -237,10 +237,35 @@ export class ClientEdict {
   linkEdict() {
     console.assert(CL.state.worldmodel !== null, 'worldmodel must be set before linking an entity');
     console.assert(this.isStatic(), 'linkEdict is only valid for client-side entities');
-    R.currententity = this;
-    R.emins = this.origin.copy().add(this.model.mins);
-    R.emaxs = this.origin.copy().add(this.model.maxs);
-    R.SplitEntityOnNode(CL.state.worldmodel.nodes[0]);
+    const emins = this.origin.copy().add(this.model.mins);
+    const emaxs = this.origin.copy().add(this.model.maxs);
+    this.#splitEntityOnNode(CL.state.worldmodel.nodes[0], emins, emaxs);
+  }
+
+  /**
+   * @param {Node} node BSP node to split the entity on
+   * @param {Vector} emins entity mins
+   * @param {Vector} emaxs entity maxs
+   */
+  #splitEntityOnNode(node, emins, emaxs) {
+    if (node.contents === content.CONTENT_SOLID) {
+      return;
+    }
+
+    if (node.contents < 0) {
+      this.leafs[this.leafs.length] = node.num - 1;
+      return;
+    }
+
+    const sides = Vector.boxOnPlaneSide(emins, emaxs, node.plane);
+
+    if ((sides & 1) !== 0) {
+      this.#splitEntityOnNode(/** @type {Node} */(node.children[0]), emins, emaxs);
+    }
+
+    if ((sides & 2) !== 0) {
+      this.#splitEntityOnNode(/** @type {Node} */(node.children[1]), emins, emaxs);
+    }
   }
 
   /**
