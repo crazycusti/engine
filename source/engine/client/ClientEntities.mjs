@@ -260,11 +260,11 @@ export class ClientEdict {
     const sides = Vector.boxOnPlaneSide(emins, emaxs, node.plane);
 
     if ((sides & 1) !== 0) {
-      this.#splitEntityOnNode(/** @type {Node} */(node.children[0]), emins, emaxs);
+      this.#splitEntityOnNode(node.children[0], emins, emaxs);
     }
 
     if ((sides & 2) !== 0) {
-      this.#splitEntityOnNode(/** @type {Node} */(node.children[1]), emins, emaxs);
+      this.#splitEntityOnNode(node.children[1], emins, emaxs);
     }
   }
 

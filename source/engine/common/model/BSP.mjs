@@ -124,17 +124,17 @@ export class Visibility {
       const d = p.dot(normal) - node.plane.dist;
 
       if (d > 8.0) {
-        node = /** @type {Node} */ (node.children[0]);
+        node = node.children[0];
         continue;
       }
 
       if (d < -8.0) {
-        node = /** @type {Node} */ (node.children[1]);
+        node = node.children[1];
         continue;
       }
 
-      this.#addToFatPoint(p, /** @type {Node} */ (node.children[0]));
-      node = /** @type {Node} */ (node.children[1]);
+      this.#addToFatPoint(p, node.children[0]);
+      node = node.children[1];
     }
   }
 
@@ -180,21 +180,32 @@ export const revealedVisibility = (new Visibility()).revealAll();
 /** @type {Visibility} @readonly */
 export const hiddenVisibility = (new Visibility()).hideAll();
 
+export class BrushModelComponent {
+  /**
+   * @param {BrushModel} brushmodel parent brush model
+   */
+  constructor(brushmodel) {
+    /** @type {BrushModel} owning brush model @protected */
+    this._brushmodel = brushmodel;
+  }
+};
+
 /**
  * BSP tree node
  */
-export class Node {
+export class Node extends BrushModelComponent {
   /** @type {number} node index in the nodes array */
   num = 0;
+
   /** @type {number} */
   contents = 0;
   /** @type {number} index into planes array */
   planenum = 0;
-  /** @type {Plane|null} dividing plane */
+  /** @type {Plane} splitting plane */
   plane = null;
   /** @type {Node|null} parent node */
   parent = null;
-  /** @type {(Node|number)[]} frontside, backside - numbers during loading, Node refs after */
+  /** @type {Node[]} frontside, backside - numbers during loading, Node refs after */
   children = [null, null];
   /** @type {number} visibility offset for PVS */
   visofs = 0;
@@ -202,28 +213,67 @@ export class Node {
   mins = null;
   /** @type {Vector|null} maximum bounding box */
   maxs = null;
-  /** @type {number} first marksurface index (for leafs) */
+  /** @type {number} first marksurface index (for leafs), aka firstleafface */
   firstmarksurface = 0;
-  /** @type {number} number of marksurfaces (for leafs) */
+  /** @type {number} number of marksurfaces (for leafs), aka numleaffaces */
   nummarksurfaces = 0;
   /** @type {number} first face index (for nodes) */
   firstface = 0;
   /** @type {number} number of faces (for nodes) */
   numfaces = 0;
-  /** @type {number[]} render command list */
-  cmds = [];
   /** @type {number[]} ambient sound levels [water, sky, slime, lava] */
   ambient_level = [0, 0, 0, 0];
-  /** @type {number} index into skychain list */
-  skychain = 0;
-  /** @type {number} index into waterchain list */
-  waterchain = 0;
 
+  // === Renderer related ===
   /** @type {number} used by the renderer to determine what to draw */
   markvisframe = 0;
   /** @type {number} used by the renderer to determine what to draw */
   visframe = 0;
-}
+  /** @type {number} index into skychain list */
+  skychain = 0;
+  /** @type {number} index into waterchain list */
+  waterchain = 0;
+  /** @type {number[]} render command list */
+  cmds = [];
+
+  // === Quake 2 based features ===
+  /** @type {number} cluster for PVS */
+  cluster = 0;
+  /** @type {number} area for area portals */
+  area = 0;
+  /** @type {number} first leaf brush index */
+  firstleafbrush = 0;
+  /** @type {number} number of leaf brushes */
+  numleafbrushes = 0;
+
+  *facesIter() {
+    for (let i = 0; i < this.numfaces; i++) {
+      yield this._brushmodel.faces[this.firstface + i];
+    }
+  }
+};
+
+export class BrushSide extends BrushModelComponent {
+  /** @type {number} plane index, facing leaf outwards */
+  planenum = 0;
+  /** @type {number} texture info index */
+  texinfo = 0;
+};
+
+export class Brush extends BrushModelComponent {
+  /** @type {number} first brush side index */
+  firstside = 0;
+  /** @type {number} number of brush sides */
+  numsides = 0;
+  /** @type {number} contents flags, see Def.contents */
+  contents = 0;
+
+  *sidesIter() {
+    for (let i = 0; i < this.numsides; i++) {
+      yield this._brushmodel.brushsides[this.firstside + i];
+    }
+  }
+};
 
 /**
  * Base class for brush-based models (BSP maps)
@@ -257,7 +307,7 @@ export class BrushModel extends BaseModel {
   /** @type {Node[]} BSP leaf nodes */
   leafs = [];
 
-  /** @type {any[]} Texture information */
+  /** @type {import('../../client/R.mjs').BrushModelTexture[]} Texture information */
   textures = [];
 
   /** @type {any[]} Texture coordinate info per face */
@@ -323,7 +373,22 @@ export class BrushModel extends BaseModel {
   /** @type {boolean} Whether RGB lighting is used */
   coloredlights = false;
 
+  /** @type {number[]|null} Leaf brushes, useful for PHS/PVS (optional) */
+  leafbrushes = null;
+
+  /** @type {BrushSide[]|null} Brush sides (optional) */
+  brushsides = null;
+
+  /** @type {Brush[]|null} Brushes (optional) */
+  brushes = null;
+
   type = 0; // Mod.type.brush;
+
+  *facesIter() {
+    for (let i = 0; i < this.numfaces; i++) {
+      yield this.faces[this.firstface + i];
+    }
+  }
 
   /**
    * Find the leaf node for a given point in 3D space
@@ -343,9 +408,9 @@ export class BrushModel extends BaseModel {
       const normal = node.plane.normal;
 
       if (p.dot(normal) - node.plane.dist > 0) {
-        node = /** @type {Node} */ (node.children[0]);
+        node = node.children[0];
       } else {
-        node = /** @type {Node} */ (node.children[1]);
+        node = node.children[1];
       }
     }
   }

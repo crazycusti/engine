@@ -1,6 +1,9 @@
+import { content } from '../../../../shared/Defs.mjs';
 import Q from '../../../../shared/Q.mjs';
+import Vector from '../../../../shared/Vector.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
-import { BrushModel } from '../BSP.mjs';
+import { Plane } from '../BaseModel.mjs';
+import { Brush, BrushModel, BrushSide, Node } from '../BSP.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 
 /** @typedef {Record<number, DataView>} LumpViews */
@@ -31,6 +34,31 @@ const lumps = Object.freeze({
 });
 
 export class BSP38Loader extends ModelLoader {
+  static #contentsMap = Object.freeze({
+    0: content.CONTENT_EMPTY,
+    1: content.CONTENT_SOLID,
+    2: content.CONTENT_SOLID, // window
+    4: content.CONTENT_EMPTY, // aux
+    8: content.CONTENT_LAVA,
+    16: content.CONTENT_SLIME,
+    32: content.CONTENT_WATER,
+    64: content.CONTENT_EMPTY, // fog
+
+    0x08000: content.CONTENT_EMPTY, // area portal
+    0x10000: content.CONTENT_EMPTY, // player clip
+    0x20000: content.CONTENT_EMPTY, // monster clip
+
+    0x040000: content.CONTENT_CURRENT_0,
+    0x080000: content.CONTENT_CURRENT_90,
+    0x100000: content.CONTENT_CURRENT_180,
+    0x200000: content.CONTENT_CURRENT_270,
+    0x400000: content.CONTENT_CURRENT_UP,
+    0x800000: content.CONTENT_CURRENT_DOWN,
+
+    0x10000000: content.CONTENT_EMPTY, // translucent
+    0x20000000: content.CONTENT_EMPTY, // ladder
+  });
+
   getMagicNumbers() {
     return [BSP_MAGIC];
   }
@@ -102,6 +130,7 @@ export class BSP38Loader extends ModelLoader {
     for (let i = 0; i < length; i++) {
       const offset = i * stride;
 
+      // TODO: class
       loadmodel.texinfo.push({
         vecs: [
           [
@@ -126,6 +155,15 @@ export class BSP38Loader extends ModelLoader {
   }
 
   /**
+   * @param {number} contents Quake2 contents
+   * @returns {number} translated contents
+   */
+  _translateQ2Contents(contents) {
+    console.assert(contents in BSP38Loader.#contentsMap);
+    return BSP38Loader.#contentsMap[contents];
+  }
+
+  /**
    * @param {DataView} leafsLump data view of leafs lump
    * @param {BrushModel} loadmodel brush model
    */
@@ -147,10 +185,111 @@ export class BSP38Loader extends ModelLoader {
     for (let i = 0; i < length; i++) {
       const offset = i * stride;
 
-      loadmodel.leafs.push({
-        contents: leafsLump.getInt32(offset + 0, true),
+      loadmodel.leafs.push(/** @type {Node} */(Object.assign(new Node(loadmodel), {
+        num: i,
+        contents: this._translateQ2Contents(leafsLump.getInt32(offset + 0, true)),
+        cluster: leafsLump.getInt16(offset + 4, true),
+        area: leafsLump.getInt16(offset + 6, true),
+        mins: new Vector(
+          leafsLump.getInt16(offset + 8, true),
+          leafsLump.getInt16(offset + 10, true),
+          leafsLump.getInt16(offset + 12, true),
+        ),
+        maxs: new Vector(
+          leafsLump.getInt16(offset + 14, true),
+          leafsLump.getInt16(offset + 16, true),
+          leafsLump.getInt16(offset + 18, true),
+        ),
+        firstmarksurface: leafsLump.getUint16(offset + 20, true),
+        nummarksurfaces: leafsLump.getUint16(offset + 22, true),
+        firstleafbrush: leafsLump.getUint16(offset + 24, true),
+        numleafbrushes: leafsLump.getUint16(offset + 26, true),
+      })));
+    }
+  }
 
+  /**
+   * @param {DataView} leafbrushesLump data view of leafbrushes lump
+   * @param {BrushModel} loadmodel brush model
+   */
+  _loadLeafBrushes(leafbrushesLump, loadmodel) {
+    const count = leafbrushesLump.byteLength / 2; // all uint16
+    loadmodel.leafbrushes = new Array(count);
+
+    for (let i = 0; i < count; i++) {
+      loadmodel.leafbrushes[i] = leafbrushesLump.getUint16(i * 2, true);
+    }
+  }
+
+  /**
+   * @param {DataView} planesLump data view of planes lump
+   * @param {BrushModel} loadmodel brush model
+   */
+  _loadPlanes(planesLump, loadmodel) {
+    loadmodel.planes.length = 0;
+
+    // float	normal[3];
+    // float	dist;
+    // int32	type;		// PLANE_X - PLANE_ANYZ ?remove? trivial to regenerate
+
+    const stride = 20;
+    const length = planesLump.byteLength / stride;
+    for (let i = 0; i < length; i++) {
+      const offset = i * stride;
+
+      loadmodel.planes.push(new Plane(
+        new Vector(
+          planesLump.getFloat32(offset + 0, true),
+          planesLump.getFloat32(offset + 4, true),
+          planesLump.getFloat32(offset + 8, true),
+        ),
+        planesLump.getFloat32(offset + 12, true),
+      ));
+
+      // CR: not reading in type
+    }
+  }
+
+  /**
+   * @param {DataView} brushesLump data view of brushes lump
+   * @param {BrushModel} loadmodel brush model
+   */
+  _loadBrushes(brushesLump, loadmodel) {
+    // int32			firstside;
+    // int32			numsides;
+    // int32			contents;
+
+    const stride = 12;
+    const length = brushesLump.byteLength / stride;
+
+    loadmodel.brushes = new Array(length);
+
+    for (let i = 0; i < length; i++) {
+      const offset = i * stride;
+
+      loadmodel.brushes[i] = Object.assign(new Brush(loadmodel), {
+        firstside: brushesLump.getInt32(offset + 0, true),
+        numsides: brushesLump.getInt32(offset + 4, true),
+        contents: this._translateQ2Contents(brushesLump.getInt32(offset + 8, true)),
       });
+    }
+  }
+
+  _loadBrushSides(brushsidesLump, loadmodel) {
+    // uint16	planenum;		// facing out of the leaf
+    // int16	texinfo;
+
+    const stride = 4;
+    const length = brushsidesLump.byteLength / stride;
+    loadmodel.brushsides = new Array(length);
+
+    for (let i = 0; i < length; i++) {
+      const offset = i * stride;
+
+      loadmodel.brushsides[i] = /** @type {BrushSide} */ (Object.assign(new BrushSide(loadmodel), {
+        planenum: brushsidesLump.getUint16(offset + 0, true),
+        texinfo: brushsidesLump.getInt16(offset + 2, true),
+      }));
     }
   }
 
@@ -163,6 +302,10 @@ export class BSP38Loader extends ModelLoader {
     this._loadEntities(lviews[lumps.LUMP_ENTITIES], loadmodel);
     this._loadSurfaces(lviews[lumps.LUMP_TEXINFO], loadmodel);
     this._loadLeafs(lviews[lumps.LUMP_LEAFS], loadmodel);
+    this._loadLeafBrushes(lviews[lumps.LUMP_LEAFBRUSHES], loadmodel);
+    this._loadPlanes(lviews[lumps.LUMP_PLANES], loadmodel);
+    this._loadBrushes(lviews[lumps.LUMP_BRUSHES], loadmodel);
+    this._loadBrushSides(lviews[lumps.LUMP_BRUSHSIDES], loadmodel);
 
     loadmodel.needload = false;
     loadmodel.checksum = CRC16CCITT.Block(new Uint8Array(buffer));

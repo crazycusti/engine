@@ -21,13 +21,11 @@ export class Plane { // TODO: move to shared
 
 export class Face {
   submodel = false;
-  /** @type {Plane} */
-  plane = null;
+  plane = /** @type {Plane} */(null); // will be linked during loading
   firstedge = 0;
   numedges = 0;
   texinfo = 0;
-  /** @type {number[]} */
-  styles = [];
+  styles = /** @type {number[]} */([]);
   lightofs = 0;
   texture = 0;
   texturemins = [0, 0];
@@ -42,6 +40,9 @@ export class Face {
 
   /** calculated normal with correct direction */
   normal = new Vector();
+
+  dlightbits = 0;
+  dlightframe = -1;
 };
 
 export class BaseModel {

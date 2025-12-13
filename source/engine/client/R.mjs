@@ -16,9 +16,10 @@ import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
-import { revealedVisibility } from '../common/model/BSP.mjs';
+import { Node, revealedVisibility } from '../common/model/BSP.mjs';
+import { ClientDlight } from './ClientEntities.mjs';
 
-let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
+let { CL, COM, Host, Mod, SCR, SV, Sys, V  } = registry;
 
 /**
  * @typedef {{
@@ -28,13 +29,16 @@ let { CL, COM, Con, Host, Mod, SCR, SV, Sys, V  } = registry;
     glt: GLTexture;
     sky: boolean;
     turbulent: boolean;
+    transparent: boolean;
+    luminance: GLTexture;
+    specular: GLTexture;
+    normal: GLTexture;
 }} BrushModelTexture
  */
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   COM = registry.COM;
-  Con = registry.Con;
   Host = registry.Host;
   Mod = registry.Mod;
   SCR = registry.SCR;
@@ -120,6 +124,11 @@ R.RenderDlights = function() {
   gl.disable(gl.BLEND);
 };
 
+/**
+ * @param {ClientDlight} light
+ * @param {number} bit
+ * @param {Node} node
+ */
 R.MarkLights = function(light, bit, node) {
   if (node.contents < 0) {
     return;
@@ -134,12 +143,11 @@ R.MarkLights = function(light, bit, node) {
     R.MarkLights(light, bit, node.children[1]);
     return;
   }
-  for (let i = 0; i < node.numfaces; i++) {
-    const surf = CL.state.worldmodel.faces[node.firstface + i];
-    // if ((surf.sky === true) || (surf.turbulent === true)) {
+  for (const surf of node.facesIter()) {
     if (surf.sky) {
       continue;
     }
+
     if (surf.dlightframe !== (R.dlightframecount + 1)) {
       surf.dlightbits = 0;
       surf.dlightframe = R.dlightframecount + 1;
@@ -237,9 +245,7 @@ R.RecursiveLightPoint = function(node, start, end) {
     return null;
   }
 
-  for (let i = 0; i < node.numfaces; i++) {
-    const surf = CL.state.worldmodel.faces[node.firstface + i];
-
+  for (const surf of node.facesIter()) {
     if (surf.sky) {
       continue;
     }
@@ -298,15 +304,10 @@ R.RecursiveLightPoint = function(node, start, end) {
     r3[1] = r3[1] >> 8;
     r3[2] = r3[2] >> 8;
 
-    // console.log('light at', mid, 'is', r3);
-
     return [
       r3,
       mid.add(surf.plane.normal.copy().multiply(16.0)),
     ];
-
-
-    // return [r3, mid];
   }
 
   return R.RecursiveLightPoint(node.children[!side ? 1 : 0], mid, end);
@@ -1826,7 +1827,7 @@ R.RocketTrail = function(start, end, type) {
 
   const len = vec.len();
 
-  if (len === 0.0) {
+  if (len === 0.0 || !isFinite(len)) {
     return;
   }
 
@@ -2006,16 +2007,17 @@ R.DrawParticles = function() {
 };
 
 R.AllocParticles = function(count) {
-  const allocated = [];
-  for (let i = 0; i < R.numparticles; i++) {
+  const allocated = new Array(count);
+  for (let i = 0, j = 0; i < R.numparticles; i++) {
     if (count === 0) {
       return allocated;
     }
     if (R.particles[i].die < CL.state.time) {
-      allocated[allocated.length] = i;
+      allocated[j++] = i;
       count--;
     }
   }
+  allocated.length = allocated.length - count;
   return allocated;
 };
 
@@ -2025,7 +2027,7 @@ R.lightmap_modified = [];
 R.lightmaps = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT));
 R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
 R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
-R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+R.deluxemap = /** @type {Uint8Array} */ (null); // allocated on demand
 
 R.AddDynamicLights = function(surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
@@ -2153,6 +2155,10 @@ R.BuildLightMap = function(currentmodel, surf) {
 R.BuildLightMapEx = function(currentmodel, surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
+
+  if (currentmodel.deluxemap && !R.deluxemap) {
+    R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+  }
 
   for (let k = 0; k < 3; k++) {
     const offset = LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * k;

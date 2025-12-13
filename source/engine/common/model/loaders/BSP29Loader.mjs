@@ -6,7 +6,7 @@ import { CRC16CCITT } from '../../CRC.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
 import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
-import { BrushModel } from '../BSP.mjs';
+import { BrushModel, Node } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
 
 // Get registry references (will be set by eventBus)
@@ -683,24 +683,14 @@ export class BSP29Loader extends ModelLoader {
     loadmodel.nodes.length = 0;
 
     for (let i = 0; i < count; i++) {
-      loadmodel.nodes[i] = /** @type {import('../BSP.mjs').Node} */ ({
+      loadmodel.nodes[i] = Object.assign(new Node(loadmodel), {
         num: i,
-        contents: 0,
         planenum: view.getUint32(fileofs, true),
-        plane: null,
-        parent: null,
         children: [view.getInt16(fileofs + 4, true), view.getInt16(fileofs + 6, true)],
-        visofs: 0,
         mins: new Vector(view.getInt16(fileofs + 8, true), view.getInt16(fileofs + 10, true), view.getInt16(fileofs + 12, true)),
         maxs: new Vector(view.getInt16(fileofs + 14, true), view.getInt16(fileofs + 16, true), view.getInt16(fileofs + 18, true)),
-        firstmarksurface: 0,
-        nummarksurfaces: 0,
         firstface: view.getUint16(fileofs + 20, true),
         numfaces: view.getUint16(fileofs + 22, true),
-        cmds: [],
-        ambient_level: [0, 0, 0, 0],
-        skychain: 0,
-        waterchain: 0,
       });
       fileofs += 24;
     }
@@ -739,28 +729,24 @@ export class BSP29Loader extends ModelLoader {
       throw new Error('BSP29Loader: leafs lump size is not a multiple of 28 in ' + loadmodel.name);
     }
     const count = filelen / 28;
-    loadmodel.leafs.length = 0;
+    loadmodel.leafs.length = count;
 
     for (let i = 0; i < count; i++) {
-      loadmodel.leafs[i] = /** @type {import('../BSP.mjs').Node} */ ({
+      loadmodel.leafs[i] = /** @type {Node} */ (Object.assign(new Node(loadmodel), {
         num: i,
         contents: view.getInt32(fileofs, true),
-        planenum: 0,
-        plane: null,
-        parent: null,
-        children: [null, null],
         visofs: view.getInt32(fileofs + 4, true),
         mins: new Vector(view.getInt16(fileofs + 8, true), view.getInt16(fileofs + 10, true), view.getInt16(fileofs + 12, true)),
         maxs: new Vector(view.getInt16(fileofs + 14, true), view.getInt16(fileofs + 16, true), view.getInt16(fileofs + 18, true)),
         firstmarksurface: view.getUint16(fileofs + 20, true),
         nummarksurfaces: view.getUint16(fileofs + 22, true),
-        firstface: 0,
-        numfaces: 0,
-        ambient_level: [view.getUint8(fileofs + 24), view.getUint8(fileofs + 25), view.getUint8(fileofs + 26), view.getUint8(fileofs + 27)],
-        cmds: [],
-        skychain: 0,
-        waterchain: 0,
-      });
+        ambient_level: [
+          view.getUint8(fileofs + 24),
+          view.getUint8(fileofs + 25),
+          view.getUint8(fileofs + 26),
+          view.getUint8(fileofs + 27),
+        ],
+      }));
       fileofs += 28;
     }
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs);

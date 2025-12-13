@@ -760,12 +760,11 @@ export class BrushModelRenderer extends ModelRenderer {
     // Build opaque surfaces (non-sky, non-turbulent)
     for (let i = 0; i < m.textures.length; i++) {
       const texture = m.textures[i];
-      if ((texture.sky === true) || (texture.turbulent === true)) {
+      if (texture.sky || texture.turbulent) {
         continue;
       }
       const chain = [i, verts, 0];
-      for (let j = 0; j < m.numfaces; j++) {
-        const surf = m.faces[m.firstface + j];
+      for (const surf of m.facesIter()) {
         if (surf.texture !== i) {
           continue;
         }
@@ -806,8 +805,7 @@ export class BrushModelRenderer extends ModelRenderer {
         continue;
       }
       const chain = [i, verts, 0];
-      for (let j = 0; j < m.numfaces; j++) {
-        const surf = m.faces[m.firstface + j];
+      for (const surf of m.facesIter()) {
         if (surf.texture !== i) {
           continue;
         }
