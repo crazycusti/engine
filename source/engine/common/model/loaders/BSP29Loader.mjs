@@ -211,7 +211,7 @@ export class BSP29Loader extends ModelLoader {
         }
 
         // Mark textures with '{' prefix as transparent (for alpha blending)
-        if (tx.name[0] === '{' || tx.name.toLowerCase() === 'dev_glass') {
+        if (tx.name[0] === '{') {
           tx.flags |= materialFlags.MF_TRANSPARENT;
         }
       }
@@ -271,6 +271,14 @@ export class BSP29Loader extends ModelLoader {
           } catch (e) {
             Con.PrintError(`BSP29Loader: failed to load ${textures[category]}: ${e.message}\n`);
           }
+        }
+      }
+
+      if (textures.flags) {
+        for (const flagName of textures.flags) {
+          const flagValue = materialFlags[flagName];
+          console.assert(typeof flagValue === 'number', `BSP29Loader: unknown material flag ${flagName} in ${loadmodel.name}`);
+          pbr.flags |= flagValue;
         }
       }
 
