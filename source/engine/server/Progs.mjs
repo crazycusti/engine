@@ -287,9 +287,8 @@ class ProgsEntity {
     if (ed) {
       this._edictNum = ed.num;
       this._v = new ArrayBuffer(PR.entityfields * 4);
-      // CR: we need to expose these fields to the edict, because QuakeC loves writing to memory belonging to freed entities
-      ed._v_float = new Float32Array(this._v);
-      ed._v_int = new Int32Array(this._v);
+      this._v_float = new Float32Array(this._v);
+      this._v_int = new Int32Array(this._v);
     }
 
     this._serializableFields = [];
@@ -1359,14 +1358,14 @@ PR.ExecuteProgram = function(fnum) {
       case PR.op.storep_s:
       case PR.op.storep_fnc:
         ptr = PR.globals_int[st.b];
-        SV.server.edicts[Math.floor(ptr / PR.edict_size)]._v_int[((ptr % PR.edict_size) - 96) >> 2] = PR.globals_int[st.a];
+        SV.server.edicts[Math.floor(ptr / PR.edict_size)].entity._v_int[((ptr % PR.edict_size) - 96) >> 2] = PR.globals_int[st.a];
         continue;
       case PR.op.storep_v:
         ed = SV.server.edicts[Math.floor(PR.globals_int[st.b] / PR.edict_size)];
         ptr = ((PR.globals_int[st.b] % PR.edict_size) - 96) >> 2;
-        ed._v_int[ptr] = PR.globals_int[st.a];
-        ed._v_int[ptr + 1] = PR.globals_int[st.a + 1];
-        ed._v_int[ptr + 2] = PR.globals_int[st.a + 2];
+        ed.entity._v_int[ptr] = PR.globals_int[st.a];
+        ed.entity._v_int[ptr + 1] = PR.globals_int[st.a + 1];
+        ed.entity._v_int[ptr + 2] = PR.globals_int[st.a + 2];
         continue;
       case PR.op.address:
         ed = PR.globals_int[st.a];
@@ -1380,14 +1379,14 @@ PR.ExecuteProgram = function(fnum) {
       case PR.op.load_ent:
       case PR.op.load_s:
       case PR.op.load_fnc:
-        PR.globals_int[st.c] = SV.server.edicts[PR.globals_int[st.a]]._v_int[PR.globals_int[st.b]];
+        PR.globals_int[st.c] = SV.server.edicts[PR.globals_int[st.a]].entity._v_int[PR.globals_int[st.b]];
         continue;
       case PR.op.load_v:
         ed = SV.server.edicts[PR.globals_int[st.a]];
         ptr = PR.globals_int[st.b];
-        PR.globals_int[st.c] = ed._v_int[ptr];
-        PR.globals_int[st.c + 1] = ed._v_int[ptr + 1];
-        PR.globals_int[st.c + 2] = ed._v_int[ptr + 2];
+        PR.globals_int[st.c] = ed.entity._v_int[ptr];
+        PR.globals_int[st.c + 1] = ed.entity._v_int[ptr + 1];
+        PR.globals_int[st.c + 2] = ed.entity._v_int[ptr + 2];
         continue;
       case PR.op.jz:
         if (PR.globals_int[st.a] === 0) {
@@ -1448,9 +1447,9 @@ PR.ExecuteProgram = function(fnum) {
         continue;
       case PR.op.state:
         ed = SV.server.edicts[PR.globals_int[PR.globalvars.self]];
-        ed._v_float[PR.entvars.nextthink] = PR.globals_float[PR.globalvars.time] + 0.1;
-        ed._v_float[PR.entvars.frame] = PR.globals_float[st.a];
-        ed._v_int[PR.entvars.think] = PR.globals_int[st.b];
+        ed.entity._v_float[PR.entvars.nextthink] = PR.globals_float[PR.globalvars.time] + 0.1;
+        ed.entity._v_float[PR.entvars.frame] = PR.globals_float[st.a];
+        ed.entity._v_int[PR.entvars.think] = PR.globals_int[st.b];
         continue;
     }
     PR.RunError('Bad opcode ' + st.op);

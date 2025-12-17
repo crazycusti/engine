@@ -262,7 +262,7 @@ export class ServerPhysics {
    * @param {import('../Edict.mjs').ServerEdict} ent entity to influence
    */
   addGravity(ent) {
-    const entGravity = ent.entity.gravity !== null ? ent.entity.gravity : 1.0;
+    const entGravity = typeof(ent.entity.gravity) === 'number' ? ent.entity.gravity : 1.0;
     const velocity = ent.entity.velocity;
     velocity[2] += entGravity * SV.gravity.value * Host.frametime * -1.0;
     ent.entity.velocity = velocity;

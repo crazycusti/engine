@@ -407,6 +407,14 @@ export class ServerEdict {
 
     const mod = SV.server.models[i];
 
+    if (mod instanceof Promise) {
+      // model is not yet loaded, this happens when spawning an entity and it’s calling precache AND setmodel right after (QuakeC jank)
+      mod.then((loadedModel) => {
+        this.setMinMaxSize(loadedModel.mins, loadedModel.maxs);
+      });
+      return;
+    }
+
     if (mod) {
       this.setMinMaxSize(mod.mins, mod.maxs);
     } else {

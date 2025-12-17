@@ -40,18 +40,24 @@ export class ServerCollision {
    * @returns {number} content type for the point
    */
   hullPointContents(hull, num, p) {
-    for (; num >= 0; ) {
+    while (num >= 0) {
       console.assert(num >= hull.firstclipnode && num <= hull.lastclipnode, 'valid node number', num);
       const node = hull.clipnodes[num];
       const plane = hull.planes[node.planenum];
+
       let d;
-      if (plane.type <= 2) {
+
+      if (plane.type < 3) {
         d = p[plane.type] - plane.dist;
       } else {
-        d = plane.normal[0] * p[0] + plane.normal[1] * p[1] + plane.normal[2] * p[2] - plane.dist;
+        d = plane.normal.dot(p) - plane.dist;
       }
 
-      num = d >= 0.0 ? node.children[0] : node.children[1];
+      if (d < 0) {
+        num = node.children[1];
+      } else {
+        num = node.children[0];
+      }
     }
 
     return num;
