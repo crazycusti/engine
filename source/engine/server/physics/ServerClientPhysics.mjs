@@ -69,7 +69,7 @@ export class ServerClientPhysics {
     }
     const downtrace = SV.physics.pushEntity(ent, new Vector(0.0, 0.0, oldvel[2] * Host.frametime - STEP_HEIGHT));
     if (downtrace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
-      if (ent.entity.solid === Defs.solid.SOLID_BSP) {
+      if (downtrace.ent.entity.solid === Defs.solid.SOLID_BSP || downtrace.ent.entity.solid === Defs.solid.SOLID_BBOX) {
         ent.entity.flags |= Defs.flags.FL_ONGROUND;
         ent.entity.groundentity = downtrace.ent.entity;
       }
@@ -346,48 +346,49 @@ export class ServerClientPhysics {
 
   /**
    * Executes per-frame thinking for a client.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
+   * @param {import('../Edict.mjs').ServerEdict} edict client edict
    * @param {import('../Client.mjs').ServerClient} client client connection
    */
-  clientThink(ent, client) {
-    if (!ent || ent.entity.movetype === Defs.moveType.MOVETYPE_NONE) {
+  clientThink(edict, client) {
+    const entity = edict.entity;
+
+    if (!edict || entity.movetype === Defs.moveType.MOVETYPE_NONE) {
       return;
     }
 
-    const punchangle = ent.entity.punchangle.copy();
+    const punchangle = entity.punchangle.copy();
     let len = punchangle.normalize() - 10.0 * Host.frametime;
 
     if (len < 0.0) {
       len = 0.0;
     }
 
-    ent.entity.punchangle = punchangle.multiply(len);
+    entity.punchangle = punchangle.multiply(len);
 
-    if (ent.entity.health <= 0) {
+    if (entity.deadflag > 0) {
       return;
     }
 
-    const angles = ent.entity.angles;
-    const viewAngles = ent.entity.v_angle ?? ent.entity.angles;
+    const angles = entity.angles;
+    const viewAngles = entity.v_angle ?? entity.angles;
     const v_angle = viewAngles.copy().add(punchangle);
 
-    angles[2] = V.CalcRoll(angles, ent.entity.velocity) * 4.0;
-
-    if (!ent.entity.fixangle) {
+    angles[2] = V.CalcRoll(angles, entity.velocity) * 4.0;
+    if (!entity.fixangle) {
       angles[0] = v_angle[0] / -3.0;
       angles[1] = v_angle[1];
     }
 
-    ent.entity.angles = angles;
+    entity.angles = angles;
 
-    if (ent.entity.flags & Defs.flags.FL_WATERJUMP) {
-      this.waterJump(ent);
-    } else if (ent.entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST && ent.entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
-      this.waterMove(ent, client);
-    } else if (ent.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
-      this.noclipMove(ent, client);
+    if (entity.flags & Defs.flags.FL_WATERJUMP) {
+      this.waterJump(edict);
+    } else if (entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST && entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
+      this.waterMove(edict, client);
+    } else if (entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
+      this.noclipMove(edict, client);
     } else {
-      this.airMove(ent, client);
+      this.airMove(edict, client);
     }
   }
 

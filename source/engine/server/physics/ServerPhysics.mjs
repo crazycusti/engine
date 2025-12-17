@@ -113,18 +113,19 @@ export class ServerPhysics {
    * Invokes touch callbacks between two entities.
    * @param {import('../Edict.mjs').ServerEdict} e1 first entity
    * @param {import('../Edict.mjs').ServerEdict} e2 second entity
+   * @param {Vector} pushVector vector representing the push force
    */
-  impact(e1, e2) {
+  impact(e1, e2, pushVector) {
     SV.server.gameAPI.time = SV.server.time;
 
     const ent1 = /** @type {import('../Edict.mjs').BaseEntity} */ (e1.entity);
     const ent2 = /** @type {import('../Edict.mjs').BaseEntity} */ (e2.entity);
 
     if (ent1.touch && ent1.solid !== Defs.solid.SOLID_NOT) {
-      ent1.touch(ent2);
+      ent1.touch(ent2, pushVector);
     }
     if (ent2.touch && ent2.solid !== Defs.solid.SOLID_NOT) {
-      ent2.touch(ent1);
+      ent2.touch(ent1, pushVector);
     }
   }
 
@@ -195,7 +196,7 @@ export class ServerPhysics {
 
       if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
         blocked |= BlockedFlags.FLOOR;
-        if (trace.ent.entity.solid === Defs.solid.SOLID_BSP) {
+        if (trace.ent.entity.solid === Defs.solid.SOLID_BSP || trace.ent.entity.solid === Defs.solid.SOLID_BBOX) {
           ent.entity.flags |= Defs.flags.FL_ONGROUND;
           ent.entity.groundentity = trace.ent.entity;
         }
@@ -204,7 +205,7 @@ export class ServerPhysics {
         steptrace = trace;
       }
 
-      this.impact(ent, trace.ent);
+      this.impact(ent, trace.ent, ent.entity.velocity.copy());
 
       if (ent.isFree()) {
         break;
@@ -261,7 +262,7 @@ export class ServerPhysics {
    * @param {import('../Edict.mjs').ServerEdict} ent entity to influence
    */
   addGravity(ent) {
-    const entGravity = ent.entity.gravity ?? 1.0;
+    const entGravity = ent.entity.gravity !== null ? ent.entity.gravity : 1.0;
     const velocity = ent.entity.velocity;
     velocity[2] += entGravity * SV.gravity.value * Host.frametime * -1.0;
     ent.entity.velocity = velocity;
@@ -302,7 +303,7 @@ export class ServerPhysics {
     SV.area.linkEdict(ent, true);
 
     if (trace.ent) {
-      this.impact(ent, trace.ent);
+      this.impact(ent, trace.ent, pushVector);
     }
 
     return trace;
@@ -404,7 +405,7 @@ export class ServerPhysics {
         if (pusher.entity.blocked) {
           pusher.entity.blocked(check.entity);
         }
-        for (let i = 0; i < moved.length; i++) {
+        for (let i = 0; i < moved.length; i++) { // FIXME: rewrite
           const movedEdict = moved[i];
           movedEdict[2].entity.origin = movedEdict[0];
           movedEdict[2].entity.angles = movedEdict[1];
@@ -498,13 +499,10 @@ export class ServerPhysics {
     cont = SV.collision.pointContents(point);
     if (cont <= Defs.content.CONTENT_WATER) {
       entity.waterlevel = Defs.waterlevel.WATERLEVEL_WAIST;
-      if ('view_ofs' in entity) {
-        point[2] = origin[2] + entity.view_ofs[2];
-        cont = SV.collision.pointContents(point);
-        if (cont <= Defs.content.CONTENT_WATER) {
-          entity.waterlevel = Defs.waterlevel.WATERLEVEL_HEAD;
-        }
-      } else {
+
+      point[2] = origin[2] + entity.view_ofs[2];
+      cont = SV.collision.pointContents(point);
+      if (cont <= Defs.content.CONTENT_WATER) {
         entity.waterlevel = Defs.waterlevel.WATERLEVEL_HEAD;
       }
     }

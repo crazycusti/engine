@@ -165,13 +165,13 @@ export class ServerEngineAPI extends CommonEngineAPI {
   static SpawnAmbientSound(origin, sfxName, volume, attenuation) {
     let i = 0;
 
-    for (; i < SV.server.sound_precache.length; i++) {
-      if (SV.server.sound_precache[i] === sfxName) {
+    for (; i < SV.server.soundPrecache.length; i++) {
+      if (SV.server.soundPrecache[i] === sfxName) {
         break;
       }
     }
 
-    if (i === SV.server.sound_precache.length) {
+    if (i === SV.server.soundPrecache.length) {
       Con.Print('no precache: ' + sfxName + '\n');
       return false;
     }
@@ -265,7 +265,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   static ChangeLevel(mapname) {
-    if (SV.svs.changelevel_issued) {
+    if (SV.svs.changelevelIssued) {
       return;
     }
 
@@ -387,21 +387,21 @@ export class ServerEngineAPI extends CommonEngineAPI {
   static PrecacheSound(sfxName) {
     console.assert(typeof(sfxName) === 'string', 'sfxName must be a string');
 
-    if (SV.server.sound_precache.includes(sfxName)) {
+    if (SV.server.soundPrecache.includes(sfxName)) {
       return;
     }
 
-    SV.server.sound_precache.push(sfxName);
+    SV.server.soundPrecache.push(sfxName);
   }
 
   static PrecacheModel(modelName) {
     console.assert(typeof(modelName) === 'string', 'modelName must be a string');
 
-    if (SV.server.model_precache.includes(modelName)) {
+    if (SV.server.modelPrecache.includes(modelName)) {
       return;
     }
 
-    SV.server.model_precache.push(modelName);
+    SV.server.modelPrecache.push(modelName);
     SV.server.models.push(Mod.ForNameAsync(modelName, true));
   }
 

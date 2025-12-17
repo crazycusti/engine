@@ -58,14 +58,14 @@ export class ServerMessages {
     }
 
     let i;
-    for (i = 1; i < SV.server.sound_precache.length; i++) {
-      if (sample === SV.server.sound_precache[i]) {
+    for (i = 1; i < SV.server.soundPrecache.length; i++) {
+      if (sample === SV.server.soundPrecache[i]) {
         break;
       }
     }
-    if (i >= SV.server.sound_precache.length) {
+    if (i >= SV.server.soundPrecache.length) {
       Con.Print('SV.StartSound: ' + sample + ' was not precached\n');
-      SV.server.sound_precache.push(sample);
+      SV.server.soundPrecache.push(sample);
       MSG.WriteByte(datagram, Protocol.svc.loadsound);
       MSG.WriteByte(datagram, i);
       MSG.WriteString(datagram, sample);
@@ -123,12 +123,12 @@ export class ServerMessages {
     MSG.WriteByte(message, SV.svs.maxclients);
     MSG.WriteString(message, SV.server.edicts[0].entity.message || SV.server.mapname);
     // SV.pmove.movevars.sendToClient(message);
-    for (let i = 1; i < SV.server.model_precache.length; i++) {
-      MSG.WriteString(message, SV.server.model_precache[i]);
+    for (let i = 1; i < SV.server.modelPrecache.length; i++) {
+      MSG.WriteString(message, SV.server.modelPrecache[i]);
     }
     MSG.WriteByte(message, 0);
-    for (let i = 1; i < SV.server.sound_precache.length; i++) {
-      MSG.WriteString(message, SV.server.sound_precache[i]);
+    for (let i = 1; i < SV.server.soundPrecache.length; i++) {
+      MSG.WriteString(message, SV.server.soundPrecache[i]);
     }
     MSG.WriteByte(message, 0);
 

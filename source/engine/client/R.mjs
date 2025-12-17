@@ -17,7 +17,7 @@ import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
 import { Node, revealedVisibility } from '../common/model/BSP.mjs';
-import { ClientDlight } from './ClientEntities.mjs';
+import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { BaseMaterial } from './renderer/Materials.mjs';
 
 let { CL, COM, Host, Mod, SCR, SV, Sys, V  } = registry;
@@ -699,6 +699,10 @@ R.avertexnormals = [
   new Vector(-0.688191, -0.587785, -0.425325),
 ];
 
+/**
+ * @param {ClientEdict} e edict to calculate light for
+ * @returns {[Vector, Vector, Vector]} ambient light, shade light, nearest light origin
+ */
 R._CalculateLightValues = function (e) {
   const [ambientlight, lightOrigin] = R.LightPoint(e.lerp.origin);
   const shadelight = ambientlight.copy();
@@ -745,8 +749,11 @@ R._CalculateLightValues = function (e) {
     shadelight.multiply(128.0 / slavg);
   }
 
-  // never let players go totally dark either
-  if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (shadelight.greatest() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
+  if (e.effects & (effect.EF_FULLBRIGHT | effect.EF_MUZZLEFLASH)) {
+    ambientlight.setTo(255.0, 255.0, 255.0);
+    shadelight.set(ambientlight);
+  } else if (((e.num >= 1) && (e.num <= CL.state.maxclients) && (shadelight.greatest() < 8.0)) || (e.effects & effect.EF_MINLIGHT)) {
+    // never let players go totally dark either
     if (ambientlight.average() === 0) {
       ambientlight.setTo(1.0, 1.0, 1.0); // no color, set to white
     }
@@ -755,11 +762,6 @@ R._CalculateLightValues = function (e) {
     shadelight[0] = Math.max(shadelight[0], ambientlight[0]);
     shadelight[1] = Math.max(shadelight[1], ambientlight[1]);
     shadelight[2] = Math.max(shadelight[2], ambientlight[2]);
-  }
-
-  if (e.effects & (effect.EF_FULLBRIGHT | effect.EF_MUZZLEFLASH)) { // TODO: move this up before we do all the math
-    ambientlight.setTo(255.0, 255.0, 255.0);
-    shadelight.set(ambientlight);
   }
 
   ambientlight.multiply(0.0078125); // / 128.0

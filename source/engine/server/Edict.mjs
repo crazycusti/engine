@@ -392,13 +392,13 @@ export class ServerEdict {
   setModel(model) {
     let i;
 
-    for (i = 0; i < SV.server.model_precache.length; i++) {
-      if (SV.server.model_precache[i] === model) {
+    for (i = 0; i < SV.server.modelPrecache.length; i++) {
+      if (SV.server.modelPrecache[i] === model) {
         break;
       }
     }
 
-    if (i === SV.server.model_precache.length) {
+    if (i === SV.server.modelPrecache.length) {
       throw new Error('Edict.setModel: ' + model + ' not precached');
     }
 

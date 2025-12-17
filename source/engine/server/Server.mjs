@@ -49,6 +49,28 @@ eventBus.subscribe('registry.frozen', () => {
 
 /** @typedef {import('../../shared/GameInterfaces').SerializableType} SerializableType */
 
+const ALLOWED_CLIENT_COMMANDS = [
+  'status',
+  'god',
+  'notarget',
+  'fly',
+  'name',
+  'noclip',
+  'say',
+  'say_team',
+  'tell',
+  'color',
+  'kill',
+  'pause',
+  'spawn',
+  'begin',
+  'prespawn',
+  'kick',
+  'ping',
+  'give',
+  'ban',
+];
+
 export class ServerEntityState {
   constructor(num = null) {
     this.num = num;
@@ -118,7 +140,7 @@ export class ServerEntityState {
  * All properties and methods are static.
  */
 export default class SV {
-  /** Core server state */
+  /** current server state */
   static server = {
     time: 0,
     num_edicts: 0,
@@ -127,9 +149,8 @@ export default class SV {
     reliable_datagram: new SzBuffer(16384, 'SV.server.reliable_datagram'),
     /** sent during client prespawn */
     signon: new SzBuffer(16384, 'SV.server.signon'),
-    /** @type {ServerEdict[]} */
-    edicts: [],
-    mapname: null,
+    edicts: /** @type {ServerEdict[]} */ ([]),
+    mapname: /** @type {string} */ (null),
     worldmodel: /** @type {BrushModel} */ (null),
     /** server game event bus, will be reset on every map load */
     eventBus: new EventBus('server-game'),
@@ -149,11 +170,17 @@ export default class SV {
     clientdataFieldsBitsWriter: null,
     /** @type {Record<string, { fields: string[], bitsWriter: MSG.WriteByte|MSG.WriteShort|MSG.WriteLong}>} maps classname to its fields and the apropriate bits writer  */
     clientEntityFields: {},
+    /** @type {import('../common/Mod.mjs').BaseModel[]} */
+    models: [],
+    /** @type {string[]} */
+    soundPrecache: [],
+    /** @type {string[]} */
+    modelPrecache: [],
   };
 
-  /** state across maps */
+  /** server static, state across maps */
   static svs = {
-    changelevel_issued: false,
+    changelevelIssued: false,
     /** @type {ServerClient[]} */
     clients: [],
     maxclients: 0,
@@ -343,8 +370,8 @@ export default class SV {
     if (!name) {
       return 0;
     }
-    for (let i = 0; i < SV.server.model_precache.length; i++) {
-      if (SV.server.model_precache[i] === name) {
+    for (let i = 0; i < SV.server.modelPrecache.length; i++) {
+      if (SV.server.modelPrecache[i] === name) {
         return i;
       }
     }
@@ -442,7 +469,7 @@ export default class SV {
     // Finalize and notify clients
     SV.#finalizeServerSpawn(mapname);
 
-    SV.svs.changelevel_issued = false;
+    SV.svs.changelevelIssued = false;
 
     return true;
   }
@@ -485,7 +512,7 @@ export default class SV {
     }
 
     // reset all static server state
-    SV.svs.changelevel_issued = false;
+    SV.svs.changelevelIssued = false;
 
     Con.Print('Server shut down.\n');
   }
@@ -731,7 +758,7 @@ export default class SV {
    */
   static async #loadWorldModel(mapname) {
     SV.server.mapname = mapname;
-    SV.server.worldmodel = await Mod.ForNameAsync('maps/' + mapname + '.bsp');
+    SV.server.worldmodel = /** @type {BrushModel} */ (await Mod.ForNameAsync('maps/' + mapname + '.bsp'));
 
     if (SV.server.worldmodel === null) {
       Con.PrintWarning('SV.SpawnServer: Cannot start server, unable to load map ' + mapname + '\n');
@@ -748,15 +775,20 @@ export default class SV {
    * Sets up model precache array including world model and submodels.
    */
   static #setupModelPrecache() {
-    SV.server.models = [];
+    SV.server.models.length = 2;
+    SV.server.models[0] = null; // null model
     SV.server.models[1] = SV.server.worldmodel;
 
-    SV.server.sound_precache = [''];
-    SV.server.model_precache = ['', SV.server.worldmodel.name];
+    SV.server.soundPrecache.length = 1;
+    SV.server.soundPrecache[0] = ''; // null sound
+
+    SV.server.modelPrecache.length = 2 + SV.server.worldmodel.submodels.length;
+    SV.server.modelPrecache[0] = ''; // null model
+    SV.server.modelPrecache[1] = SV.server.worldmodel.name;
 
     // Precache all submodels (brushes connected to entities like doors)
     for (let i = 1; i <= SV.server.worldmodel.submodels.length; i++) {
-      SV.server.model_precache[i + 1] = '*' + i;
+      SV.server.modelPrecache[i + 1] = '*' + i;
       SV.server.models[i + 1] = Mod.ForName('*' + i);
     }
 
@@ -931,28 +963,6 @@ export default class SV {
    * @param {string} input command string
    */
   static #handleClientStringCommand(client, input) {
-    const ALLOWED_CLIENT_COMMANDS = [
-      'status',
-      'god',
-      'notarget',
-      'fly',
-      'name',
-      'noclip',
-      'say',
-      'say_team',
-      'tell',
-      'color',
-      'kill',
-      'pause',
-      'spawn',
-      'begin',
-      'prespawn',
-      'kick',
-      'ping',
-      'give',
-      'ban',
-    ];
-
     const matchedCommand = ALLOWED_CLIENT_COMMANDS.find((command) =>
       input.toLowerCase().startsWith(command),
     );

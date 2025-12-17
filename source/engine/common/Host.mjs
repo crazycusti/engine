@@ -374,7 +374,7 @@ Host._Frame = async function() {
 
   CL.SendCmd();
 
-  if (SV.server.active && !SV.svs.changelevel_issued) {
+  if (SV.server.active && !SV.svs.changelevelIssued) {
     if (Host.speeds.value !== 0) {
       console.profile('Host.ServerFrame');
     }
@@ -786,7 +786,7 @@ Host.Changelevel_f = function(mapname) {
   //   throw new HostError(`No such map: ${mapname}`);
   // }
 
-  SV.svs.changelevel_issued = true;
+  SV.svs.changelevelIssued = true;
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
