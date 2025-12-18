@@ -4,14 +4,13 @@ import Cvar from '../common/Cvar.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-let { CL, COM, Con, Host, Mod } = registry;
+let { CL, COM, Con, Host } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   COM = registry.COM;
   Con = registry.Con;
   Host = registry.Host;
-  Mod = registry.Mod;
 });
 
 export class SFX {

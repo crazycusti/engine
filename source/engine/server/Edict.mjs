@@ -13,14 +13,13 @@ import { Visibility } from '../common/model/BSP.mjs';
 /** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
 /** @typedef {import('../../game/id1/entity/Worldspawn.mjs').WorldspawnEntity} WorldspawnEntity */
 
-let { CL, COM, Con, Host, Mod, PR, SV } = registry;
+let { CL, COM, Con, Host, PR, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   COM = registry.COM;
   Con = registry.Con;
   Host = registry.Host;
-  Mod = registry.Mod;
   PR = registry.PR;
   SV = registry.SV;
 });

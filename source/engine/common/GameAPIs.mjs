@@ -1,4 +1,3 @@
-import { solid } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
 import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';

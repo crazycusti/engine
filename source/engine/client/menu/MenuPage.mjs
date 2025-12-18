@@ -2,11 +2,11 @@ import { K } from '../../../shared/Keys.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
 // Destructure registry modules
-let { S, M, Key, Host } = registry;
+let { S, M, Host } = registry;
 
 // Update when registry is frozen
 eventBus.subscribe('registry.frozen', () => {
-  ({ S, M, Key, Host } = registry);
+  ({ S, M, Host } = registry);
 });
 
 /**

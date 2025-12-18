@@ -5,13 +5,12 @@ import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerClient } from './Client.mjs';
 
-let { COM, Con, Host, Mod, NET, PR, SV } = registry;
+let { COM, Con, Host, NET, PR, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
   Con = registry.Con;
   Host = registry.Host;
-  Mod = registry.Mod;
   NET = registry.NET;
   PR = registry.PR;
   SV = registry.SV;

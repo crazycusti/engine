@@ -29,9 +29,6 @@ eventBus.subscribe('registry.frozen', () => {
  * Manages hull-based collision tests and world traces.
  */
 export class ServerCollision {
-  constructor() {
-  }
-
   /**
    * Determines the contents inside a hull by descending the clipnode tree.
    * @param {*} hull hull data to test against

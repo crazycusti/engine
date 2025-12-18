@@ -7,7 +7,7 @@ import { DefaultClientEdictHandler } from './ClientLegacy.mjs';
 import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { SFX } from './Sound.mjs';
-import { hiddenVisibility, Node, revealedVisibility } from '../common/model/BSP.mjs';
+import { Node, revealedVisibility } from '../common/model/BSP.mjs';
 
 let { CL, Con, Mod, PR, R, S } = registry;
 

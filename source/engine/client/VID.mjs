@@ -2,8 +2,8 @@ import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import { eventBus } from '../registry.mjs';
 
 class FullscreenCommand extends ConsoleCommand {
-  run() {
-    VID.mainwindow.requestFullscreen();
+  async run() {
+    await VID.mainwindow.requestFullscreen();
   }
 }
 
