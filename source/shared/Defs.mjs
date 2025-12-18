@@ -20,6 +20,8 @@ export const solid = Object.freeze({
   SOLID_SLIDEBOX: 3,
   /** bsp clip, touch on edge, block */
   SOLID_BSP: 4,
+  /** mesh clip, touch on edge, block */
+  SOLID_MESH: 5,
 });
 
 /**

@@ -2177,7 +2177,10 @@ R.BuildLightMapEx = function(currentmodel, surf) {
       for (let i = 0; i < tmax; i++) {
         for (let j = 0; j < smax; j++) {
           R.lightmaps_rgb[dest + (j << 2) + offset] = 0;
-          R.deluxemap[dest + (j << 2) + offset] = 0;
+
+          if (currentmodel.deluxemap) {
+            R.deluxemap[dest + (j << 2) + offset] = 0;
+          }
         }
         dest += LIGHTMAP_BLOCK_HEIGHT;
       }

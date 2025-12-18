@@ -112,8 +112,8 @@ export class MeshModelRenderer extends ModelRenderer {
     gl.uniform3fv(program.uLightVec, lightPosition);
 
     // Bind texture
-    if (clmodel.texture && clmodel.texture.glt) {
-      clmodel.texture.glt.bind(program.tTexture);
+    if (clmodel.texture) {
+      clmodel.texture.bindTo(program);
     } else {
       R.notexture.bind(program.tTexture);
     }
@@ -171,7 +171,7 @@ export class MeshModelRenderer extends ModelRenderer {
       // TexCoord
       if (m.texcoords) {
         vertexData[offset + 3] = m.texcoords[i * 2];
-        vertexData[offset + 4] = m.texcoords[i * 2 + 1];
+        vertexData[offset + 4] = 1.0 - m.texcoords[i * 2 + 1];
       } else {
         vertexData[offset + 3] = 0;
         vertexData[offset + 4] = 0;
@@ -219,7 +219,16 @@ export class MeshModelRenderer extends ModelRenderer {
     // Create and upload IBO
     m.ibo = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.indices, gl.STATIC_DRAW);
+
+    // Flip winding order (CW -> CCW) to fix inside-out rendering
+    const indices = new (m.indices instanceof Uint16Array ? Uint16Array : Uint32Array)(m.indices.length);
+    for (let i = 0; i < m.indices.length; i += 3) {
+      indices[i] = m.indices[i];
+      indices[i + 1] = m.indices[i + 2];
+      indices[i + 2] = m.indices[i + 1];
+    }
+
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
     Con.DPrint(`MeshModelRenderer.prepareModel: ${m.name} uploaded ${m.numVertices} vertices, ${m.numTriangles} triangles\n`);
 

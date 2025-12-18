@@ -163,8 +163,13 @@ export class PBRMaterial extends BaseMaterial {
   }
 
   bindTo(program) {
-    gl.uniform1i(program.uPerformDotLighting, 1);
-    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    if (program.uPerformDotLighting !== undefined) {
+      gl.uniform1i(program.uPerformDotLighting, 1);
+    }
+
+    if (program.uAlpha !== undefined) {
+      gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    }
 
     if (program.tTexture !== undefined) {
       this.diffuse.bind(program.tTexture);

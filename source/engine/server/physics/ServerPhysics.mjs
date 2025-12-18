@@ -196,7 +196,9 @@ export class ServerPhysics {
 
       if (trace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
         blocked |= BlockedFlags.FLOOR;
-        if (trace.ent.entity.solid === Defs.solid.SOLID_BSP || trace.ent.entity.solid === Defs.solid.SOLID_BBOX) {
+        if (trace.ent.entity.solid === Defs.solid.SOLID_BSP ||
+            trace.ent.entity.solid === Defs.solid.SOLID_BBOX ||
+            trace.ent.entity.solid === Defs.solid.SOLID_MESH) {
           ent.entity.flags |= Defs.flags.FL_ONGROUND;
           ent.entity.groundentity = trace.ent.entity;
         }
