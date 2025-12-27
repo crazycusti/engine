@@ -375,27 +375,6 @@ export class BrushModelRenderer extends ModelRenderer {
   }
 
   /**
-   * Bind PBR texture maps (luminance, normal, specular) for a brush texture.
-   * @private
-   * @param {WebGLProgram} program The shader program
-   * @param {BaseMaterial} material The brush texture with optional PBR maps
-   */
-  _bindPBRTextures(program, material) {
-    for (const [slot, samplerId] of Object.entries({
-      luminance: 'tLuminance',
-      normal: 'tNormal',
-      specular: 'tSpecular',
-    })) {
-      const t = material[slot];
-      if (t !== null) {
-        t.bind(program[samplerId]);
-      } else {
-        GL.Bind(program[samplerId], R.null_texture);
-      }
-    }
-  }
-
-  /**
    * Render opaque (non-turbulent) brush surfaces
    * @private
    * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
@@ -411,10 +390,14 @@ export class BrushModelRenderer extends ModelRenderer {
       gl.uniform3fv(program.uAmbientLight, ambientlight);
       gl.uniform3fv(program.uShadeLight, shadelight);
       gl.uniform4fv(program.uLightVec, [...lightPosition, 64.0]);
+      gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicLightVec, 0.0, 0.0, 0.0);
     } else {
       gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
       gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
       gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicLightVec, 0.0, 0.0, 0.0);
     }
 
     // Setup transforms
@@ -490,10 +473,14 @@ export class BrushModelRenderer extends ModelRenderer {
       gl.uniform3fv(program.uAmbientLight, ambientlight);
       gl.uniform3fv(program.uShadeLight, shadelight);
       gl.uniform4fv(program.uLightVec, [...lightPosition, 64.0]);
+      gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicLightVec, 0.0, 0.0, 0.0);
     } else {
       gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
       gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
       gl.uniform4f(program.uLightVec, 0.0, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
+      gl.uniform3f(program.uDynamicLightVec, 0.0, 0.0, 0.0);
     }
 
     // Setup transforms

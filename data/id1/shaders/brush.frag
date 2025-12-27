@@ -19,10 +19,12 @@ uniform bool uHaveDeluxemap;
 
 uniform vec3 uAmbientLight;
 uniform vec3 uShadeLight;
+uniform vec3 uDynamicShadeLight;
 
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;
 varying float vLightDot;
+varying float vDynamicLightDot;
 varying float vFog;
 varying vec3 vNormal;
 varying vec3 vLightVec;
@@ -149,7 +151,7 @@ void main(void) {
   float bumpFactor = minAmbient + (1.0 - minAmbient) * pow(lightFactor, 0.7);
 
   // Pre-calculate common factors to avoid redundant calculations
-  vec3 shadeAmbient = vLightDot * uShadeLight + uAmbientLight;
+  vec3 shadeAmbient = vLightDot * uShadeLight + uAmbientLight + vDynamicLightDot * uDynamicShadeLight;
   vec3 lightingFactor = staticLight * bumpFactor * shadeAmbient;
   vec3 luminanceMask = texture.a * (vec3(1.0) - luminance.rgb);
 

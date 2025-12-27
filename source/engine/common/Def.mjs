@@ -37,8 +37,9 @@ export const limits = Object.freeze({
  * CL.state.state keys
  * @enum {number}
  * @readonly
+ * @deprecated TODO: move to CL or PR, it’s legacy code
  */
-export const stat = Object.freeze({ // TODO: move to CL or PR, it’s legacy code
+export const stat = Object.freeze({
   health: 0,
   frags: 1,
   weapon: 2,
@@ -59,6 +60,7 @@ export const stat = Object.freeze({ // TODO: move to CL or PR, it’s legacy cod
 /**
  * @enum {number}
  * @readonly
+ * @deprecated TODO: move to CL or PR, it’s legacy code
  */
 export const it = Object.freeze({
   shotgun: 1,
@@ -89,6 +91,7 @@ export const it = Object.freeze({
 /**
  * @enum {number}
  * @readonly
+ * @deprecated TODO: move to CL or PR, it’s legacy code
  */
 export const rit = Object.freeze({
   shells: 128,
@@ -115,6 +118,7 @@ export const rit = Object.freeze({
 /**
  * @enum {number}
  * @readonly
+ * @deprecated TODO: move to CL or PR, it’s legacy code
  */
 export const hit = Object.freeze({
   proximity_gun_bit: 16,

@@ -8,6 +8,9 @@ export interface BuildConfig {
   timestamp: string;
   /** Git commit hash during build */
   commitHash: string | null;
+
+  /** Default game directory */
+  gameDir: string; // allows building with a different default game
 };
 
 /**

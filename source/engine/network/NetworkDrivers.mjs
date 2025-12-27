@@ -36,6 +36,9 @@ export class QSocket {
 
     this.sendMessage = new Uint8Array(new ArrayBuffer(8192));
     this.sendMessageLength = 0;
+
+    /** @type {any} driver might store some data here */
+    this.driverdata = null;
   }
 
   toString() {
@@ -55,6 +58,10 @@ export class QSocket {
   }
 
   CanSendMessage() {
+    if (this.state !== QSocket.STATE_CONNECTED) {
+      return false;
+    }
+
     return this.driver.CanSendMessage(this);
   }
 
@@ -503,7 +510,7 @@ export class WebSocketDriver extends BaseDriver {
       return;
     }
 
-    Con.Print('WebSocketDriver._OnCloseClient: connection closed.\n');
+    Con.DPrint('WebSocketDriver._OnCloseClient: connection closed.\n');
     this.qsocket.state = QSocket.STATE_DISCONNECTING; // mark it as disconnecting, so that we can peacefully process any buffered messages
   }
 
@@ -618,9 +625,11 @@ export class WebRTCDriver extends BaseDriver {
     this.signalingWs = null;
     this.sessionId = null;
     this.peerId = null;
+    this.hostToken = null; // Token to prove ownership of session for reconnect
     this.isHost = false;
     this.creatingSession = false; // Track if we're in the process of creating a session
     this.pingInterval = null; // Timer for sending pings to signaling server
+    this.reconnectTimer = null; // Timer for reconnecting to signaling server
     /** @type {Function[]} */
     this.serverEventSubscriptions = [];
     this.newConnections = [];
@@ -745,31 +754,104 @@ export class WebRTCDriver extends BaseDriver {
       }
     }
 
+    // Clear any pending reconnect timer since we are connecting now
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     try {
       this.signalingWs = new WebSocket(this.signalingUrl);
 
       this.signalingWs.onopen = () => {
-        Con.DPrint('WebRTCDriver: Connected to signaling server\n');
+        Con.DPrint(`WebRTCDriver: Connected to signaling server at ${this.signalingUrl}\n`);
+
+        // Capture session state before processing pending requests
+        const previousSessionId = this.sessionId;
+
         this._ProcessPendingSignaling();
+
+        // If we were in a session AND the session ID hasn't changed (meaning no new session was started)
+        if (previousSessionId && previousSessionId === this.sessionId) {
+          this._RestoreSession();
+        }
       };
 
       this.signalingWs.onmessage = async (event) => {
         await this._OnSignalingMessage(JSON.parse(event.data));
       };
 
-      this.signalingWs.onerror = (error) => {
-        Con.PrintError(`WebRTCDriver: Signaling error: ${error}\n`);
+      this.signalingWs.onerror = (errorEvent) => {
+        // CR: errorEvent is not very useful here, log it anyway
+        console.debug('WebRTCDriver: Signaling WebSocket error', errorEvent);
+        Con.DPrint(`WebRTCDriver: Signaling error: ${errorEvent}\n`);
+
+        this._OnSignalingError({ error: 'Signaling connection error' });
       };
 
-      this.signalingWs.onclose = () => {
+      this.signalingWs.onclose = (closeEvent) => {
         Con.DPrint('WebRTCDriver: Signaling connection closed\n');
         this.signalingWs = null;
+
+        if (closeEvent.code !== 1000) {
+          Con.PrintError(`Signaling connection closed unexpectedly, ${closeEvent.reason || 'unknown reason'} (code: ${closeEvent.code})\n`);
+          Con.PrintWarning(`Signaling server at ${this.signalingUrl} might be unavailable.\n`);
+        }
+
+        this._OnSignalingError({ error: 'Signaling connection closed' });
+
+        // Attempt to reconnect
+        this._ScheduleReconnect();
       };
 
       return true;
     } catch (error) {
-      Con.PrintError(`WebRTCDriver: Failed to connect to signaling: ${error.message}\n`);
+      Con.PrintError(`WebRTCDriver: Failed to connect to signaling at ${this.signalingUrl}:\n${error.message}\n`);
+      this._ScheduleReconnect();
       return false;
+    }
+  }
+
+  /**
+   * Schedule a reconnection attempt
+   */
+  _ScheduleReconnect() {
+    if (this.reconnectTimer) {
+      return;
+    }
+
+    const delay = 5000; // 5 seconds
+    Con.DPrint(`WebRTCDriver: Scheduling reconnect in ${delay}ms...\n`);
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      Con.DPrint('WebRTCDriver: Attempting to reconnect...\n');
+      this._ConnectSignaling();
+    }, delay);
+  }
+
+  /**
+   * Restore session after reconnection
+   */
+  _RestoreSession() {
+    if (this.isHost) {
+      Con.DPrint('WebRTCDriver: Restoring host session...\n');
+
+      // Send create-session with existing sessionId and hostToken to attempt reconnect
+      this._SendSignaling({
+        type: 'create-session',
+        sessionId: this.sessionId,
+        hostToken: this.hostToken,
+        serverInfo: this._GatherServerInfo(),
+        isPublic: this._IsSessionPublic(),
+      });
+    } else {
+      Con.DPrint(`WebRTCDriver: Restoring client session ${this.sessionId}...\n`);
+      // Try to join the same session
+      this._SendSignaling({
+        type: 'join-session',
+        sessionId: this.sessionId,
+      });
     }
   }
 
@@ -983,7 +1065,7 @@ export class WebRTCDriver extends BaseDriver {
         break;
 
       case 'error':
-        Con.Print(`WebRTCDriver: Signaling error: ${message.error}\n`);
+        Con.DPrint(`WebRTCDriver: Signaling error: ${message.error}\n`);
         this._OnSignalingError(message);
         break;
 
@@ -1029,6 +1111,7 @@ export class WebRTCDriver extends BaseDriver {
       if (failedSocket.driverdata?.sessionId === this.sessionId) {
         this.sessionId = null;
         this.peerId = null;
+        this.hostToken = null;
         this.isHost = false;
       }
     } else {
@@ -1045,18 +1128,18 @@ export class WebRTCDriver extends BaseDriver {
     this.sessionId = message.sessionId;
     this.peerId = message.peerId;
     this.isHost = message.isHost;
+    this.hostToken = message.hostToken; // Store host token
     this.creatingSession = false; // Session creation complete
 
     Con.Print(`WebRTCDriver: Session created: ${this.sessionId}\n`);
     Con.Print(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
-    Con.Print(`WebRTCDriver: Share this session ID with others to join: ${this.sessionId}\n`);
 
     // Find the socket for this session and update it
-    // For host sessions created via Listen(), we need to find any socket with isHost=true and null sessionId
+    // For host sessions created via Listen(), we need to find any socket with isHost=true
     let sock = null;
     for (let i = 0; i < NET.activeSockets.length; i++) {
       const s = NET.activeSockets[i];
-      if (s && s.driver === this && s.driverdata?.isHost && !s.driverdata?.sessionId) {
+      if (s && s.driver === this && s.driverdata?.isHost) {
         sock = s;
         break;
       }
@@ -1073,13 +1156,21 @@ export class WebRTCDriver extends BaseDriver {
       sock.address = `WebRTC Host (${this.sessionId})`;
       // Don't add host socket to newConnections - it's not an incoming client connection
       // Only peer connections should be added to newConnections when they join
-      Con.Print('WebRTCDriver: Host socket ready for accepting peers\n');
+      Con.DPrint('WebRTCDriver: Host socket ready for accepting peers\n');
 
       // Start sending periodic pings to keep session alive
       this._StartPingInterval();
 
       // Start sending periodic server info updates
       this._StartServerInfoSubscriptions();
+
+      // Handle existing peers (reconnect scenario)
+      if (message.existingPeers && message.existingPeers.length > 0) {
+        Con.DPrint(`WebRTCDriver: Reconnecting to ${message.existingPeers.length} existing peers...\n`);
+        for (const peerId of message.existingPeers) {
+          this._OnPeerJoined({ peerId });
+        }
+      }
     } else {
       Con.PrintWarning(`WebRTCDriver: No socket found for session ${this.sessionId}\n`);
     }
@@ -1096,7 +1187,7 @@ export class WebRTCDriver extends BaseDriver {
 
     Con.Print(`WebRTCDriver: Joined session: ${this.sessionId}\n`);
     Con.Print(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
-    Con.Print(`WebRTCDriver: Peers in session: ${message.peerCount}\n`);
+    Con.DPrint(`WebRTCDriver: Peers in session: ${message.peerCount}\n`);
 
     // Find the socket for this session and mark it as connected
     const sock = this._FindSocketBySession(this.sessionId);
@@ -1104,7 +1195,7 @@ export class WebRTCDriver extends BaseDriver {
       // Don't mark as fully connected yet - wait for data channels to open
       // But update the address
       sock.address = `WebRTC Peer (${this.sessionId})`;
-      Con.Print('WebRTCDriver: Socket found, waiting for P2P connection\n');
+      Con.DPrint('WebRTCDriver: Socket found, waiting for P2P connection\n');
     } else {
       Con.PrintWarning(`WebRTCDriver: No socket found for joined session ${this.sessionId}\n`);
     }
@@ -1115,7 +1206,7 @@ export class WebRTCDriver extends BaseDriver {
    * @param message
    */
   _OnPeerJoined(message) {
-    Con.Print(`WebRTCDriver: Peer ${message.peerId} joined\n`);
+    Con.DPrint(`WebRTCDriver: Peer ${message.peerId} joined\n`);
 
     // If we're the host, create a new socket for this peer and initiate connection
     if (this.isHost) {
@@ -1142,7 +1233,7 @@ export class WebRTCDriver extends BaseDriver {
 
       // Add to new connections so server accepts it as a client
       this.newConnections.push(peerSock);
-      Con.Print(`WebRTCDriver: Created socket for peer ${message.peerId}, added to new connections\n`);
+      Con.DPrint(`WebRTCDriver: Created socket for peer ${message.peerId}, added to new connections\n`);
     }
   }
 
@@ -1151,7 +1242,7 @@ export class WebRTCDriver extends BaseDriver {
    * @param message
    */
   _OnPeerLeft(message) {
-    Con.Print(`WebRTCDriver: Peer ${message.peerId} left\n`);
+    Con.DPrint(`WebRTCDriver: Peer ${message.peerId} left\n`);
     this._ClosePeerConnection(message.peerId);
   }
 
@@ -1322,13 +1413,12 @@ export class WebRTCDriver extends BaseDriver {
       // Reliable channel for important messages
       const reliableChannel = pc.createDataChannel('reliable', {
         ordered: true,
-        maxRetransmits: 10,
       });
 
       // Unreliable channel for position updates, etc.
       const unreliableChannel = pc.createDataChannel('unreliable', {
         ordered: false,
-        maxRetransmits: 0,
+        maxRetransmits: 10,
       });
 
       this._SetupDataChannel(sock, peerId, reliableChannel, unreliableChannel);
@@ -1401,14 +1491,20 @@ export class WebRTCDriver extends BaseDriver {
         sock.state = QSocket.STATE_CONNECTED;
         Con.DPrint('WebRTCDriver: Socket now CONNECTED (can send/receive data)\n');
       }
+
+      this._FlushSendBuffer(sock);
     };
 
     channel.onclose = () => {
       Con.DPrint(`WebRTCDriver: Data channel ${channel.label} closed with ${peerId}\n`);
+
+      sock.state = QSocket.STATE_DISCONNECTED;
     };
 
     channel.onerror = (error) => {
       Con.PrintError(`WebRTCDriver: Data channel error with ${peerId}: ${error}\n`);
+
+      sock.state = QSocket.STATE_DISCONNECTED;
     };
 
     channel.onmessage = (event) => {
@@ -1431,6 +1527,8 @@ export class WebRTCDriver extends BaseDriver {
       return;
     }
 
+    sock.state = QSocket.STATE_DISCONNECTING;
+
     const pc = sock.driverdata.peerConnections.get(peerId);
     if (pc) {
       pc.close();
@@ -1438,6 +1536,8 @@ export class WebRTCDriver extends BaseDriver {
     }
 
     sock.driverdata.dataChannels.delete(peerId);
+
+    sock.state = QSocket.STATE_DISCONNECTED;
   }
 
   /**
@@ -1478,6 +1578,44 @@ export class WebRTCDriver extends BaseDriver {
     return sock;
   }
 
+  _FlushSendBuffer(qsocket) {
+    if (!qsocket.driverdata || !qsocket.driverdata.dataChannels) {
+      return;
+    }
+
+    while (qsocket.sendMessage.length > 0) {
+      const msg = qsocket.sendMessage[0];
+
+      // Check if we can send THIS message type to at least one peer
+      let canSendThis = false;
+      for (const channels of qsocket.driverdata.dataChannels.values()) {
+        const channel = msg.reliable ? channels.reliable : channels.unreliable;
+        if (channel && channel.readyState === 'open') {
+          canSendThis = true;
+          break;
+        }
+      }
+
+      if (!canSendThis) {
+        // Can't send this message yet. Stop flushing.
+        break;
+      }
+
+      const ret = this._SendToAllPeers(qsocket, msg.buffer, msg.reliable);
+
+      if (ret > 0) {
+        qsocket.sendMessage.shift();
+      } else {
+        break;
+      }
+    }
+
+    if (qsocket.sendMessage.length === 0 && qsocket.state === QSocket.STATE_DISCONNECTING) {
+      Con.DPrint(`WebRTCDriver._FlushSendBuffer: buffer drained, closing ${qsocket.address}\n`);
+      this._ForceClose(qsocket);
+    }
+  }
+
   GetMessage(qsocket) {
     // Check if we have collected new data
     if (qsocket.receiveMessage.length === 0) {
@@ -1487,6 +1625,7 @@ export class WebRTCDriver extends BaseDriver {
 
       if (qsocket.state === QSocket.STATE_DISCONNECTING) {
         qsocket.state = QSocket.STATE_DISCONNECTED;
+        return -1;
       }
 
       return 0;
@@ -1499,7 +1638,7 @@ export class WebRTCDriver extends BaseDriver {
     const ret = message[0];
     const length = message[1] + (message[2] << 8);
 
-    Con.DPrint(`WebRTCDriver.GetMessage: type=${ret}, length=${length}\n`);
+    // Con.DPrint(`WebRTCDriver.GetMessage: type=${ret}, length=${length}\n`);
 
     // Copy over the payload to our NET.message buffer
     new Uint8Array(NET.message.data).set(message.subarray(3, length + 3));
@@ -1515,8 +1654,14 @@ export class WebRTCDriver extends BaseDriver {
     buffer[2] = (data.cursize >> 8) & 0xff;
     buffer.set(new Uint8Array(data.data, 0, data.cursize), 3);
 
-    Con.DPrint(`WebRTCDriver.SendMessage: sending ${data.cursize} bytes (reliable)\n`);
-    return this._SendToAllPeers(qsocket, buffer, true);
+    // Con.DPrint(`WebRTCDriver.SendMessage: sending ${data.cursize} bytes (reliable)\n`);
+    qsocket.sendMessage.push({
+      buffer: buffer,
+      reliable: true,
+    });
+
+    this._FlushSendBuffer(qsocket);
+    return 1;
   }
 
   SendUnreliableMessage(qsocket, data) {
@@ -1526,8 +1671,14 @@ export class WebRTCDriver extends BaseDriver {
     buffer[2] = (data.cursize >> 8) & 0xff;
     buffer.set(new Uint8Array(data.data, 0, data.cursize), 3);
 
-    Con.DPrint(`WebRTCDriver.SendUnreliableMessage: sending ${data.cursize} bytes (unreliable)\n`);
-    return this._SendToAllPeers(qsocket, buffer, false);
+    // Con.DPrint(`WebRTCDriver.SendUnreliableMessage: sending ${data.cursize} bytes (unreliable)\n`);
+    qsocket.sendMessage.push({
+      buffer: buffer,
+      reliable: false,
+    });
+
+    this._FlushSendBuffer(qsocket);
+    return 1;
   }
 
   /**
@@ -1556,7 +1707,7 @@ export class WebRTCDriver extends BaseDriver {
 
       try {
         channel.send(buffer);
-        Con.DPrint(`WebRTCDriver._SendToAllPeers: sent ${buffer.length} bytes to ${peerId} on ${channel.label}\n`);
+        // Con.DPrint(`WebRTCDriver._SendToAllPeers: sent ${buffer.length} bytes to ${peerId} on ${channel.label}\n`);
         sentCount++;
       } catch (error) {
         Con.DPrint(`WebRTCDriver: Error sending to ${peerId}: ${error.message}\n`);
@@ -1591,6 +1742,38 @@ export class WebRTCDriver extends BaseDriver {
       return;
     }
 
+    // Try to flush any pending messages
+    this._FlushSendBuffer(qsocket);
+
+    // If we have pending messages and we are in a state where we might send them,
+    // delay the actual closing.
+    if (qsocket.sendMessage.length > 0 && qsocket.state !== QSocket.STATE_DISCONNECTED) {
+      // Check if we have any channels that might open or are open
+      if (qsocket.driverdata.dataChannels && qsocket.driverdata.dataChannels.size > 0) {
+        Con.DPrint(`WebRTCDriver.Close: delaying close for ${qsocket.address} to flush buffer\n`);
+        qsocket.state = QSocket.STATE_DISCONNECTING;
+
+        // Set a timeout to force close if it takes too long (e.g. 5 seconds)
+        setTimeout(() => {
+          if (qsocket.state === QSocket.STATE_DISCONNECTING) {
+            Con.DPrint(`WebRTCDriver.Close: timeout waiting for flush, forcing close for ${qsocket.address}\n`);
+            this._ForceClose(qsocket);
+          }
+        }, 5000);
+
+        return;
+      }
+    }
+
+    this._ForceClose(qsocket);
+  }
+
+  _ForceClose(qsocket) {
+    if (!qsocket.driverdata) {
+      qsocket.state = QSocket.STATE_DISCONNECTED;
+      return;
+    }
+
     // Close all peer connections
     if (qsocket.driverdata.peerConnections) {
       for (const pc of qsocket.driverdata.peerConnections.values()) {
@@ -1604,15 +1787,36 @@ export class WebRTCDriver extends BaseDriver {
       qsocket.driverdata.dataChannels.clear();
     }
 
+    // If this socket represents our current session (host or client), clear session state
+    const isSessionSocket = qsocket.driverdata.isHost || (!this.isHost && qsocket.driverdata.sessionId === this.sessionId);
+
     // Stop ping interval if this is the host socket
     if (qsocket.driverdata.isHost) {
       this._StopPingInterval();
       this._StopServerInfoSubscriptions();
+    }
 
-      // Only the host leaving should trigger leave-session message
-      // Peer-specific sockets closing should not leave the session
-      if (this.sessionId) {
-        this._SendSignaling({ type: 'leave-session' });
+    // Notify signaling server if we are leaving the session
+    // This applies to both Host (destroying session) and Client (leaving session)
+    if (isSessionSocket && this.sessionId) {
+      this._SendSignaling({ type: 'leave-session' });
+    }
+
+    if (isSessionSocket) {
+      // Only clear if we are actually closing the session socket, not a peer socket on the host
+      // Host has:
+      // 1. Host socket (isHost=true, sessionId=...)
+      // 2. Peer sockets (isHost=false, sessionId=..., peerId=...)
+
+      // If it's a peer socket on the host, we shouldn't clear global session state
+      if (this.isHost && !qsocket.driverdata.isHost) {
+        // This is a peer connection closing on the host side
+        // Do not clear session state
+      } else {
+        this.sessionId = null;
+        this.peerId = null;
+        this.hostToken = null;
+        this.isHost = false;
       }
     }
 
@@ -1729,12 +1933,24 @@ export class WebRTCDriver extends BaseDriver {
 
       // Close signaling connection
       if (this.signalingWs) {
+        // Remove listeners to prevent reconnect logic
+        this.signalingWs.onclose = null;
+        this.signalingWs.onerror = null;
+        this.signalingWs.onmessage = null;
+        this.signalingWs.onopen = null;
+
         this.signalingWs.close();
         this.signalingWs = null;
       }
 
+      // Clear any pending reconnect timer
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
       if (this.sessionId) {
-        Con.Print('WebRTCDriver: Session torn down, no longer accepting connections\n');
+        Con.DPrint('WebRTCDriver: Session torn down, no longer accepting connections\n');
       }
 
       // Reset state

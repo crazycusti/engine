@@ -75,7 +75,7 @@ Host.Error = function(error) {
 Host.FindMaxClients = function() {
   SV.svs.maxclients = 1;
   SV.svs.maxclientslimit = Def.limits.clients;
-  SV.svs.clients = [];
+  SV.svs.clients.length = 0;
   if (!registry.isDedicatedServer) {
     CL.cls.state = Def.clientConnectionState.disconnected;
   }
@@ -129,7 +129,7 @@ Host.ClientPrint = function(string) { // FIXME: Host.client
 Host.BroadcastPrint = function(string) {
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if (!client.active || !client.spawned) {
+    if (client.state !== ServerClient.STATE.SPAWNED) {
       continue;
     }
     MSG.WriteByte(client.message, Protocol.svc.print);
@@ -143,7 +143,7 @@ Host.BroadcastPrint = function(string) {
  * @param {boolean} crash
  * @param {string} reason
  */
-Host.DropClient = function(client, crash, reason) {
+Host.DropClient = function(client, crash, reason) { // TODO: refactor into ServerClient
   if (NET.CanSendMessage(client.netconnection)) {
     MSG.WriteByte(client.message, Protocol.svc.disconnect);
     MSG.WriteString(client.message, reason);
@@ -151,7 +151,7 @@ Host.DropClient = function(client, crash, reason) {
   }
 
   if (!crash) {
-    if (client.edict && client.spawned) {
+    if (client.edict && client.state === ServerClient.STATE.SPAWNED) {
       const saveSelf = SV.server.gameAPI.self;
       SV.server.gameAPI.ClientDisconnect(client.edict);
       if (saveSelf !== undefined) {
@@ -160,7 +160,7 @@ Host.DropClient = function(client, crash, reason) {
     }
     Sys.Print('Client ' + client.name + ' removed\n');
   } else {
-    client.dropasap = true;
+    client.state = ServerClient.STATE.DROPASAP;
     Sys.Print('Client ' + client.name + ' dropped\n');
   }
 
@@ -176,7 +176,7 @@ Host.DropClient = function(client, crash, reason) {
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if (!client.active) {
+    if (client.state <= ServerClient.STATE.CONNECTED) {
       continue;
     }
     // FIXME: consolidate into a single message
@@ -199,6 +199,7 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
   if (SV.server.active !== true) {
     return;
   }
+  eventBus.publish('server.shutting-down');
   SV.server.active = false;
   if (!registry.isDedicatedServer && CL.cls.state === CL.active.connected) {
     CL.Disconnect();
@@ -206,12 +207,12 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
   const start = Sys.FloatTime(); let count; let i;
   do {
     count = 0;
-    for (i = 0; i < SV.svs.maxclients; i++) {
+    for (i = 0; i < SV.svs.maxclients; i++) { // FIXME: this 1is completely broken, it won’t properly close connections
       Host.client = SV.svs.clients[i];
-      if ((Host.client.active !== true) || (Host.client.message.cursize === 0)) {
+      if (Host.client.state < ServerClient.STATE.CONNECTED || Host.client.message.cursize === 0) {
         continue;
       }
-      if (NET.CanSendMessage(Host.client.netconnection) === true) {
+      if (NET.CanSendMessage(Host.client.netconnection)) {
         NET.SendMessage(Host.client.netconnection, Host.client.message);
         Host.client.message.clear();
         continue;
@@ -219,18 +220,18 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
       NET.GetMessage(Host.client.netconnection);
       count++;
     }
-    if ((Sys.FloatTime() - start) > 3.0) {
+    if ((Sys.FloatTime() - start) > 3.0) { // this breaks a loop when the stuff on the top is stuck
       break;
     }
   } while (count !== 0);
   for (i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if (client.active) {
+    if (client.state >= ServerClient.STATE.CONNECTED) {
       Host.DropClient(client, isCrashShutdown, 'Server shutting down');
     }
   }
   SV.ShutdownServer(isCrashShutdown);
-  Cmd.ExecuteString('listen 0'); // TODO: proper method over at NET
+  eventBus.publish('server.shutdown');
 };
 
 Host.ConfigReady_f = function() {
@@ -578,7 +579,8 @@ Host.Status_f = function() {
   for (let i = 0; i < SV.svs.maxclients; i++) {
     /** @type {ServerClient} */
     const client = SV.svs.clients[i];
-    if (!client.active) {
+
+    if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
 
@@ -589,7 +591,7 @@ Host.Status_f = function() {
       Q.secsToTime(NET.time - client.netconnection.connecttime).padEnd(9),
       client.ping.toFixed(0).padStart(4),
       new Number(0).toFixed(0).padStart(4),   // TODO: add loss
-      (client.spawned ? 'ready' : 'pending').padEnd(7),
+      ServerClient.STATE.toKey(client.state).padEnd(10),
       client.netconnection.address,
     ];
 
@@ -600,8 +602,8 @@ Host.Status_f = function() {
     return;
   }
 
-  print('id  | name                | unique id           | play time | ping | loss | state   | adr\n');
-  print('----|---------------------|---------------------|-----------|------|------|---------|-----\n');
+  print('id  | name                | unique id           | play time | ping | loss | state      | adr\n');
+  print('----|---------------------|---------------------|-----------|------|------|------------|-----\n');
 
   for (const line of lines) {
     print(line);
@@ -710,7 +712,7 @@ Host.Ping_f = function() {
     /** @type {ServerClient} */
     const client = SV.svs.clients[i];
 
-    if (client.active !== true) {
+    if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
 
@@ -790,7 +792,7 @@ Host.Changelevel_f = function(mapname) {
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if (!client.active || !client.spawned) {
+    if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
     MSG.WriteByte(client.message, Protocol.svc.changelevel);
@@ -893,7 +895,7 @@ Host.Savegame_f = function(savename) {
     return;
   }
   const client = SV.svs.clients[0];
-  if (client.active === true) {
+  if (client.state >= ServerClient.STATE.CONNECTED) {
     if (client.edict.entity.health <= 0.0) {
       Con.PrintWarning('Can\'t savegame with a dead player\n');
       return;
@@ -1097,7 +1099,7 @@ Host.Say_f = function(teamonly, message) {
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if ((client.active !== true) || (client.spawned !== true)) {
+    if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
     if ((Host.teamplay.value !== 0) && (teamonly === true) && (client.entity.team !== save.entity.team)) { // Legacy cvars
@@ -1142,7 +1144,7 @@ Host.Tell_f = function(recipient, message) {
   const save = Host.client;
   for (let i = 0; i < SV.svs.maxclients; i++) {
     const client = SV.svs.clients[i];
-    if ((client.active !== true) || (client.spawned !== true)) {
+    if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
     if (client.name.toLowerCase() !== recipient.toLowerCase()) {
@@ -1234,7 +1236,7 @@ Host.PreSpawn_f = function() { // signon 1, step 1
   }
   Con.DPrint(`Host.PreSpawn_f: ${this.client}\n`);
   const client = this.client;
-  if (client.spawned) {
+  if (client.state === ServerClient.STATE.SPAWNED) {
     Con.Print('prespawn not valid -- already spawned\n');
     return;
   }
@@ -1242,7 +1244,6 @@ Host.PreSpawn_f = function() { // signon 1, step 1
   client.message.write(new Uint8Array(SV.server.signon.data), SV.server.signon.cursize);
   MSG.WriteByte(client.message, Protocol.svc.signonnum);
   MSG.WriteByte(client.message, 2);
-  client.sendsignon = true;
 };
 
 Host.Spawn_f = function() { // signon 2, step 3
@@ -1252,7 +1253,7 @@ Host.Spawn_f = function() { // signon 2, step 3
     return;
   }
   let client = this.client;
-  if (client.spawned) {
+  if (client.state === ServerClient.STATE.SPAWNED) {
     Con.Print('Spawn not valid -- already spawned\n');
     return;
   }
@@ -1339,7 +1340,6 @@ Host.Spawn_f = function() { // signon 2, step 3
 
   MSG.WriteByte(message, Protocol.svc.signonnum);
   MSG.WriteByte(message, 3);
-  Host.client.sendsignon = true;
 };
 
 Host.Begin_f = function() {  // signon 3, step 1
@@ -1348,7 +1348,7 @@ Host.Begin_f = function() {  // signon 3, step 1
     Con.Print('begin is not valid from the console\n');
     return;
   }
-  this.client.spawned = true;
+  this.client.state = ServerClient.STATE.SPAWNED;
 
   if (SV.server.gameAPI.ClientBegin) {
     SV.server.gameAPI.time = SV.server.time;
@@ -1364,7 +1364,7 @@ Host.Kick_f = function() { // FIXME: Host.client
       return;
     }
   }
-  if (argv.length <= 1) {
+  if (argv.length < 2) {
     return;
   }
   const save = Host.client;
@@ -1375,7 +1375,7 @@ Host.Kick_f = function() { // FIXME: Host.client
     if ((i < 0) || (i >= SV.svs.maxclients)) {
       return;
     }
-    if (!SV.svs.clients[i].active) {
+    if (SV.svs.clients[i].state !== ServerClient.STATE.SPAWNED) {
       return;
     }
     Host.client = SV.svs.clients[i];
@@ -1383,7 +1383,7 @@ Host.Kick_f = function() { // FIXME: Host.client
   } else {
     for (i = 0; i < SV.svs.maxclients; i++) {
       Host.client = SV.svs.clients[i];
-      if (!Host.client.active) {
+      if (Host.client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
       if (Host.client.name.toLowerCase() === s) {

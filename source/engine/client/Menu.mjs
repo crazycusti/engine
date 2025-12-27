@@ -127,6 +127,10 @@ M.main_items = 5;
 M.save_demonum = 0; // THIS IS THE REASON WHY I HATE UNINITIALIZED PROPERTIES, this line was missing and it quietly caused some NaNs deep in the demo code…
 
 M.Menu_Main_f = function () {
+  if (CL.cls.connecting !== null) {
+    return;
+  }
+
   if (Key.dest.value !== Key.dest.menu) {
     M.save_demonum = CL.cls.demonum;
     CL.cls.demonum = -1;
@@ -1105,6 +1109,11 @@ M.Init = async function () {
     Draw.LoadPicFromLumpDeferred('help4'),
     Draw.LoadPicFromLumpDeferred('help5'),
   ];
+
+  // always close the menu when a connection progresses
+  eventBus.subscribe('client.signon', (signon) => {
+    M.CloseMenu();
+  });
 };
 
 M.Draw = function () {

@@ -715,7 +715,9 @@ R._CalculateLightValues = function (e) {
     shadelight.set(ambientlight);
   }
 
-  const nearestLightOrigin = lightOrigin.copy();
+  const dynamicShadeLight = new Vector(0.0, 0.0, 0.0);
+  const dynamicLightOrigin = new Vector(0.0, 0.0, 0.0);
+  let maxAdd = 0.0;
 
   // add dynamic lights
   for (let i = 0; i < Def.limits.dlights; i++) {
@@ -730,10 +732,12 @@ R._CalculateLightValues = function (e) {
     if (add > 0.0) {
       const color = dl.color.copy();
       const vadd = color.multiply(add);
-      // ambientlight.add(vadd);
-      shadelight.add(vadd);
+      dynamicShadeLight.add(vadd);
 
-      nearestLightOrigin.set(dl.origin);
+      if (add > maxAdd) {
+        maxAdd = add;
+        dynamicLightOrigin.set(dl.origin);
+      }
     }
   }
 
@@ -746,6 +750,11 @@ R._CalculateLightValues = function (e) {
   const slavg = shadelight.greatest();
   if (slavg > 128.0) {
     shadelight.multiply(128.0 / slavg);
+  }
+
+  const dlavg = dynamicShadeLight.greatest();
+  if (dlavg > 128.0) {
+    dynamicShadeLight.multiply(128.0 / dlavg);
   }
 
   if (e.effects & (effect.EF_FULLBRIGHT | effect.EF_MUZZLEFLASH)) {
@@ -765,8 +774,9 @@ R._CalculateLightValues = function (e) {
 
   ambientlight.multiply(0.0078125); // / 128.0
   shadelight.multiply(0.0078125); // / 128.0
+  dynamicShadeLight.multiply(0.0078125);
 
-  return [ ambientlight, shadelight, nearestLightOrigin ];
+  return [ ambientlight, shadelight, lightOrigin, dynamicShadeLight, dynamicLightOrigin ];
 };
 
 R.DrawEntitiesOnList = function() {
@@ -1373,7 +1383,7 @@ R.InitShaders = async function() {
   // rendering alias models
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
@@ -1384,7 +1394,7 @@ R.InitShaders = async function() {
 
     // rendering mesh models (OBJ, IQM, GLTF)
     GL.CreateProgram('mesh',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
@@ -1394,7 +1404,7 @@ R.InitShaders = async function() {
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -1412,7 +1422,7 @@ R.InitShaders = async function() {
 
     // rendering the player model (similar to alias model but with custom colors)
     GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
         [
           ['aPositionA', gl.FLOAT, 3],
           ['aPositionB', gl.FLOAT, 3],

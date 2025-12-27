@@ -76,12 +76,12 @@ export default class COM {
     }
 
     let skipwhite = true;
-    for (; ;) {
+    while (true) {
       if (skipwhite !== true) {
         break;
       }
       skipwhite = false;
-      for (; ;) {
+      while (true) {
         if (i >= data.length) {
           return { token, data: null };
         }
@@ -92,7 +92,7 @@ export default class COM {
         i++;
       }
       if ((c === 47) && (data.charCodeAt(i + 1) === 47)) {
-        for (; ;) {
+        while (true) {
           if ((i >= data.length) || (data.charCodeAt(i) === 10)) {
             break;
           }
@@ -104,7 +104,7 @@ export default class COM {
 
     if (c === 34) {
       i++;
-      for (; ;) {
+      while (true) {
         c = data.charCodeAt(i);
         i++;
         if ((i >= data.length) || (c === 34)) {
@@ -114,7 +114,7 @@ export default class COM {
       }
     }
 
-    for (; ;) {
+    while (true) {
       if ((i >= data.length) || (c <= 32)) {
         break;
       }
@@ -354,8 +354,9 @@ export default class COM {
   /**
    * Add a game directory to the search path.
    * Note: PAK files are pre-extracted at build time, so we only track the directory.
-   * @param {string} dir - directory name (e.g., 'id1', 'hellwave')
+   * @param {string} dir - directory name (e.g., 'id1')
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   static async AddGameDirectory(dir) {
     /** @type {SearchPath} */
     const search = { filename: dir, pack: [] };
@@ -364,6 +365,13 @@ export default class COM {
   };
 
   static async InitFilesystem() {
+    // Shortcut for specifying game directory at build time
+    if (registry.buildConfig?.gameDir) {
+      await this.AddGameDirectory(registry.buildConfig.gameDir);
+      this.gamedir = [this.searchpaths[this.searchpaths.length - 1]];
+      return;
+    }
+
     let search;
 
     let i = this.CheckParm('-basedir');

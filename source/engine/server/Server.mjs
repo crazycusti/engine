@@ -17,6 +17,7 @@ import { ServerMovement } from './physics/ServerMovement.mjs';
 import { ServerArea } from './physics/ServerArea.mjs';
 import { ServerCollision } from './physics/ServerCollision.mjs';
 import { BrushModel } from '../common/Mod.mjs';
+import { ServerClient } from './Client.mjs';
 
 let { COM, Con, Host, Mod, NET, PR } = registry;
 
@@ -309,7 +310,7 @@ export default class SV {
     client.clear();
     client.name = 'unconnected';
     client.netconnection = netconnection;
-    client.active = true;
+    client.state = ServerClient.STATE.CONNECTING;
 
     client.old_frags = Infinity; // trigger a update frags
 
@@ -334,14 +335,14 @@ export default class SV {
   }
 
   static CheckForNewClients() {
-    for (; ;) {
+    while (true) {
       const ret = NET.CheckNewConnections();
       if (!ret) {
         return;
       }
       let i;
       for (i = 0; i < SV.svs.maxclients; i++) {
-        if (!SV.svs.clients[i].active) {
+        if (SV.svs.clients[i].state < ServerClient.STATE.CONNECTED) {
           break;
         }
       }
@@ -388,7 +389,7 @@ export default class SV {
       /** @type {ServerClient} */
       const client = SV.svs.clients[i];
 
-      if (!client.active) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
 
@@ -515,6 +516,8 @@ export default class SV {
     SV.svs.changelevelIssued = false;
 
     Con.Print('Server shut down.\n');
+
+    // TODO: send event
   }
 
   /**
@@ -539,7 +542,7 @@ export default class SV {
   static CvarChanged(cvar) {
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (!client.active || !client.spawned) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
 
@@ -631,7 +634,7 @@ export default class SV {
 
       // Process all commands in this message
       while (true) {
-        if (!client.active) {
+        if (client.state < ServerClient.STATE.CONNECTED) {
           return false;
         }
 
@@ -659,14 +662,14 @@ export default class SV {
   static RunClients() {
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (!client.active) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
       if (!SV.ReadClientMessage(client)) {
         Host.DropClient(client, false, 'Connectivity issues, failed to read message');
         continue;
       }
-      if (!client.spawned) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         client.cmd.reset();
         continue;
       }
@@ -682,7 +685,7 @@ export default class SV {
    */
   static FindClientByName(name) {
     return SV.svs.clients
-      .filter((client) => client.active)
+      .filter((client) => client.state >= ServerClient.STATE.CONNECTED)
       .find((client) => client.name === name) || null;
   }
 
@@ -693,7 +696,7 @@ export default class SV {
   static #notifyClientsOfMapChange(mapname) {
     // Make sure that all client states are partially reset and ready for a new map
     for (const client of SV.svs.clients) {
-      if (!client.active) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
 
@@ -944,7 +947,7 @@ export default class SV {
     // Notify all active clients about the new map
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (client.active) {
+      if (client.state >= ServerClient.STATE.CONNECTED) {
         SV.messages.sendServerData(client);
       }
     }
@@ -954,7 +957,6 @@ export default class SV {
 
     eventBus.publish('server.spawned', { mapname });
     Con.PrintSuccess('Server spawned.\n');
-    Cmd.ExecuteString('status\n');
   }
 
   /**

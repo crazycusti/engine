@@ -98,10 +98,12 @@ export class AliasModelRenderer extends ModelRenderer {
     gl.uniformMatrix3fv(program.uAngles, false, e.lerp.angles.toRotationMatrix());
 
     // Setup lighting
-    const [ambientlight, shadelight, lightVector] = R._CalculateLightValues(e);
+    const [ambientlight, shadelight, lightVector, dynamicShadeLight, dynamicLightVector] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
     gl.uniform3fv(program.uLightVec, lightVector);
+    gl.uniform3fv(program.uDynamicShadeLight, dynamicShadeLight);
+    gl.uniform3fv(program.uDynamicLightVec, dynamicLightVector);
 
     // Update performance counter
     R.c_alias_polys += clmodel._num_tris;

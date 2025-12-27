@@ -4,6 +4,7 @@ import VID from '../client/VID.mjs';
 import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { ServerClient } from '../server/Client.mjs';
 import { ED, ServerEdict } from '../server/Edict.mjs';
 import Cmd from './Cmd.mjs';
 import Cvar from './Cvar.mjs';
@@ -244,7 +245,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
 
-      if (!client.active && !client.spawned) {
+      if (client.state !== ServerClient.STATE.SPAWNED) {
         continue;
       }
 
@@ -367,7 +368,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
 
-      if (!client.active || !client.spawned) {
+      if (client.state !== ServerClient.STATE.SPAWNED) {
         continue;
       }
 

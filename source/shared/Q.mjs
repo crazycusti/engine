@@ -137,4 +137,27 @@ export default class Q {
   }
 };
 
+/**
+ * Helper functions for enums.
+ * @readonly
+ */
+export const enumHelpers = Object.freeze({
+  /**
+   * @param {string|number|null} val enum value
+   * @returns {string} enum key
+   */
+  toKey(val) {
+    // @ts-ignore
+    return /** @type {string} */ (Object.entries(this).find(([, v]) => v === val)?.[0] ?? `unknown (${val})`);
+  },
+
+  /**
+   * @param {string} name enum key
+   * @returns {string|number|null} enum value
+   */
+  fromKey(name) {
+    return this[name] ?? null;
+  },
+});
+
 export const AsyncFunction = (async function() {}).constructor;

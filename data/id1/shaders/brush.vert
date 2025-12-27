@@ -6,6 +6,7 @@ uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform vec4 uLightVec;
+uniform vec3 uDynamicLightVec;
 
 uniform bool uPerformDotLighting;
 uniform bool uHaveDeluxemap;
@@ -19,6 +20,7 @@ attribute vec3 aTangent;
 varying vec4 vTexCoord;
 varying vec4 vLightStyle;
 varying float vLightDot;
+varying float vDynamicLightDot;
 varying float vFog;
 varying vec3 vNormal;
 varying vec3 vLightVec;
@@ -63,6 +65,7 @@ void main(void) {
   float lightDist = length(uLightVec.xyz - worldPos);
   float dynamicLightMix = clamp(uLightVec.w / lightDist, 0.0, 1.0);
   float staticLightDot = dot(transformedNormal, vLightVec);
+  vDynamicLightDot = max(0.0, dot(transformedNormal, normalize(worldPos - uDynamicLightVec)));
 
   // Use mix/step to avoid branching (branchless selection)
   float useDotLighting = float(uPerformDotLighting);

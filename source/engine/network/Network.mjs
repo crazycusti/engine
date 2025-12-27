@@ -273,13 +273,21 @@ NET.MaxPlayers_f = function(maxplayers) { // TODO: turn into Cvar with hooks
     Con.Print('"maxplayers" set to "' + n + '"\n');
   }
 
-  if ((n === 1) && NET.listening) {
+  SV.svs.maxclients = n;
+};
+
+eventBus.subscribe('server.spawned', () => {
+  if (SV.svs.maxclients === 1 && NET.listening) {
     Cmd.ExecuteString('listen 0');
   }
 
-  if ((n > 1) && (!NET.listening)) {
+  if (SV.svs.maxclients > 1 && !NET.listening) {
     Cmd.ExecuteString('listen 1');
   }
+});
 
-  SV.svs.maxclients = n;
-};
+eventBus.subscribe('server.shutdown', () => {
+  if (NET.listening) {
+    Cmd.ExecuteString('listen 0');
+  }
+});

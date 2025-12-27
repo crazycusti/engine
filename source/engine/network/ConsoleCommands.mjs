@@ -9,7 +9,7 @@ eventBus.subscribe('registry.frozen', () => {
 });
 
 export class InviteCommand extends ConsoleCommand {
-  run() {
+  async run() {
     const listenAddress = NET.GetListenAddress();
 
     if (!listenAddress) {
@@ -21,7 +21,12 @@ export class InviteCommand extends ConsoleCommand {
     shareLink.searchParams.set('connect', listenAddress);
     shareLink.searchParams.delete('exec');
 
-    // poor man’s share intent
-    prompt('Share this link to invite players:', shareLink.toString());
+    try {
+      await navigator.clipboard.writeText(shareLink.toString());
+      Con.Print(`This link has been copied to your clipboard:\n${shareLink.toString()}\n`);
+    // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      prompt('Share this link to invite players:', shareLink.toString());
+    }
   }
 };

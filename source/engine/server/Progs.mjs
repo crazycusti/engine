@@ -1137,7 +1137,7 @@ PR.Profile_f = function() {
     return;
   }
   let num = 0; let max; let best; let i; let f; let profile;
-  for (;;) {
+  while (true) {
     max = 0;
     best = null;
     for (i = 0; i < PR.functions.length; i++) {
@@ -1218,7 +1218,7 @@ PR.ExecuteProgram = function(fnum) {
   let s = PR.EnterFunction(PR.functions[fnum]);
   let st; let ed; let ptr; let newf;
 
-  for (;;) {
+  while (true) {
     s++;
     st = PR.statements[s];
     if (--runaway === 0) {

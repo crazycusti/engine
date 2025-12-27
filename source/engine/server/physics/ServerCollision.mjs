@@ -1,5 +1,6 @@
 import Vector from '../../../shared/Vector.mjs';
 import * as Defs from '../../../shared/Defs.mjs';
+import Mod from '../../common/Mod.mjs';
 import { DIST_EPSILON } from '../../common/Pmove.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
@@ -172,6 +173,133 @@ export class ServerCollision {
   }
 
   /**
+   * Traces a moving box against a mesh entity.
+   * @param {ServerEdict} ent entity to collide with
+   * @param {Vector} start start position
+   * @param {Vector} mins minimum extents of the moving box
+   * @param {Vector} maxs maximum extents of the moving box
+   * @param {Vector} end end position
+   * @returns {Trace} collision result
+   */
+  clipMoveToMesh(ent, start, mins, maxs, end) {
+    const trace = {
+      fraction: 1.0,
+      allsolid: false,
+      startsolid: false,
+      endpos: end.copy(),
+      plane: { normal: new Vector(), dist: 0.0 },
+      ent: null,
+    };
+
+    const model = SV.server.models[ent.entity.modelindex];
+    if (!model || model.type !== Mod.type.mesh) {
+      return trace;
+    }
+
+    const origin = ent.entity.origin;
+    const angles = ent.entity.angles;
+    const mat = angles.toRotationMatrix();
+    const forward = new Vector(mat[0], mat[1], mat[2]);
+    const right = new Vector(mat[3], mat[4], mat[5]);
+    const up = new Vector(mat[6], mat[7], mat[8]);
+
+    const transformToWorld = (v) => {
+      const out = origin.copy();
+      out.add(forward.copy().multiply(v[0]));
+      out.add(right.copy().multiply(v[1]));
+      out.add(up.copy().multiply(v[2]));
+      return out;
+    };
+
+    const vel = end.copy().subtract(start);
+    const boxExtents = maxs.copy().subtract(mins).multiply(0.5);
+    const boxCenterOffset = mins.copy().add(maxs).multiply(0.5);
+
+    for (let i = 0; i < /** @type {import('../../common/model/MeshModel.mjs').MeshModel} */(model).numTriangles; i++) {
+      const meshModel = /** @type {import('../../common/model/MeshModel.mjs').MeshModel} */(model);
+      const idx0 = meshModel.indices[i * 3];
+      const idx1 = meshModel.indices[i * 3 + 1];
+      const idx2 = meshModel.indices[i * 3 + 2];
+
+      const v0 = transformToWorld(new Vector(meshModel.vertices[idx0 * 3], meshModel.vertices[idx0 * 3 + 1], meshModel.vertices[idx0 * 3 + 2]));
+      const v1 = transformToWorld(new Vector(meshModel.vertices[idx1 * 3], meshModel.vertices[idx1 * 3 + 1], meshModel.vertices[idx1 * 3 + 2]));
+      const v2 = transformToWorld(new Vector(meshModel.vertices[idx2 * 3], meshModel.vertices[idx2 * 3 + 1], meshModel.vertices[idx2 * 3 + 2]));
+
+      const edge1 = v1.copy().subtract(v0);
+      const edge2 = v2.copy().subtract(v0);
+      const normal = edge1.cross(edge2);
+      normal.normalize();
+      const dist = normal.dot(v0);
+
+      // Project box radius onto normal
+      const r = boxExtents[0] * Math.abs(normal[0]) + boxExtents[1] * Math.abs(normal[1]) + boxExtents[2] * Math.abs(normal[2]);
+
+      const startCenter = start.copy().add(boxCenterOffset);
+      const startDist = normal.dot(startCenter) - dist;
+      const endCenter = end.copy().add(boxCenterOffset);
+      const endDist = normal.dot(endCenter) - dist;
+
+      // Check for front-face collision
+      // We allow startDist to be slightly inside (up to r) to catch cases where we are already touching
+      // But we only care if we are moving INTO the plane (endDist < startDist)
+      if (endDist >= startDist || endDist >= r) {
+        continue;
+      }
+
+      const d1 = startDist - r;
+      const d2 = endDist - r;
+      const frac = d1 / (d1 - d2);
+
+      // If frac < 0, it means startDist < r (we started inside the expanded plane)
+      // We need to check if we are actually overlapping the triangle prism
+
+      const checkFrac = Math.max(0, frac);
+
+      // Calculate hit point (center of box at impact)
+      const hitCenter = startCenter.copy().add(vel.copy().multiply(checkFrac));
+      // The actual contact point on the plane is hitCenter - normal * r
+      const contactPoint = hitCenter.copy().subtract(normal.copy().multiply(r));
+
+      // Check if contactPoint is inside triangle
+      const e0 = v1.copy().subtract(v0);
+      const e1 = v2.copy().subtract(v1);
+      const e2 = v0.copy().subtract(v2);
+      const c0 = contactPoint.copy().subtract(v0);
+      const c1 = contactPoint.copy().subtract(v1);
+      const c2 = contactPoint.copy().subtract(v2);
+
+      // CR: Use a small epsilon to prevent slipping through cracks between adjacent polygons
+      const EDGE_EPSILON = -1.0;
+      if (normal.dot(e0.cross(c0)) >= EDGE_EPSILON &&
+          normal.dot(e1.cross(c1)) >= EDGE_EPSILON &&
+          normal.dot(e2.cross(c2)) >= EDGE_EPSILON) {
+
+        if (frac < 0) {
+          // Started inside
+          trace.startsolid = true;
+          trace.allsolid = true;
+          trace.fraction = 0;
+          trace.ent = ent;
+          return trace;
+        }
+
+        if (frac < trace.fraction) {
+          trace.fraction = frac;
+          trace.plane.normal = normal;
+          trace.plane.dist = dist;
+          trace.ent = ent;
+        }
+      }
+    }
+
+    if (trace.fraction < 1.0) {
+      trace.endpos = start.copy().add(vel.multiply(trace.fraction));
+    }
+
+    return trace;
+  }
+
+  /**
    * Traces a moving box against a target entity.
    * @param {ServerEdict} ent entity to collide with
    * @param {Vector} start start position
@@ -181,6 +309,10 @@ export class ServerCollision {
    * @returns {Trace} collision result
    */
   clipMoveToEntity(ent, start, mins, maxs, end) {
+    if (ent.entity.solid === Defs.solid.SOLID_MESH) {
+      return this.clipMoveToMesh(ent, start, mins, maxs, end);
+    }
+
     const trace = {
       fraction: 1.0,
       allsolid: true,

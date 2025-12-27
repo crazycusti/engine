@@ -265,7 +265,7 @@ export default class Cmd {
   static TokenizeString(text) {
     const argv = [];
     let i; let c;
-    for (; ;) {
+    while (true) {
       for (i = 0; i < text.length; i++) {
         c = text.charCodeAt(i);
         if ((c > 32) || (c === 10)) {

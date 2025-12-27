@@ -1,3 +1,4 @@
+import { enumHelpers } from '../../shared/Q.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
 import MSG, { SzBuffer } from '../network/MSG.mjs';
@@ -16,21 +17,26 @@ eventBus.subscribe('registry.frozen', () => {
 /** @typedef {import('../../shared/GameInterfaces').PlayerEntitySpawnParamsDynamic} PlayerEntitySpawnParamsDynamic */
 
 export class ServerClient {
-  static STATE = {
-    /** can be reused for a new connection */
+  static STATE = Object.freeze({
+    /** drop client as soon as possible */
+    DROPASAP: -1,
+    /** free client slot, can be reused for a new connection */
     FREE: 0,
-    /** client has been disconnected, but don’t reuse connection for a couple seconds */
-    ZOMBIE: 1,
-    /** has been assigned to a client, but not in game yet */
+    /** client is connecting, but not yet fully connected (signon = 1) */
+    CONNECTING: 1,
+    /** has been assigned to a client, but not in game yet (signon = 2) */
     CONNECTED: 2,
     /** client is fully in game */
     SPAWNED: 3,
-  };
+
+    ...enumHelpers,
+  });
 
   /**
    * @param {number} num client number
    */
   constructor(num) {
+    /** @type {number} @see {ServerClient.STATE} */
     this.state = ServerClient.STATE.FREE;
     this.num = num;
     /** @type {SzBuffer} messages sent after an entity update run */
@@ -66,11 +72,6 @@ export class ServerClient {
     /** @type {Map<string,ServerEntityState>} olds entity states for this player only @private */
     this._entityStates = new Map();
 
-    this.active = false;
-    this.dropasap = false;
-    this.spawned = false;
-    this.sendsignon = false;
-
     this.wishdir = new Vector();
 
     // Object.seal(this);
@@ -105,10 +106,6 @@ export class ServerClient {
     this.last_update = 0.0;
     this.sync_time = 0;
     this._entityStates = new Map();
-    this.active = false;
-    this.dropasap = false;
-    this.spawned = false;
-    this.sendsignon = false;
 
     if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
       this.spawn_parms = new Array(16);
@@ -117,6 +114,10 @@ export class ServerClient {
     }
   }
 
+  /**
+   * Issues a changelevel to the specified map for this client.
+   * @param {string} mapname map name
+   */
   changelevel(mapname) {
     const reconnect = new SzBuffer(128);
     reconnect.writeByte(Protocol.svc.changelevel);
@@ -142,19 +143,18 @@ export class ServerClient {
     return this._entityStates.get(key);
   }
 
-  /**
-   * @param {string} name name
-   */
-  set name(name) {
+  set name(/** @type {string} */ name) {
     this.edict.entity.netname = name;
   }
 
   get name() {
-    if (!this.active) {
+    if (this.state !== ServerClient.STATE.CONNECTED && this.state !== ServerClient.STATE.SPAWNED) {
       return '';
     }
 
-    return this.edict.entity.netname || '';
+    console.assert('netname' in this.edict.entity, 'entity needs netname');
+
+    return this.edict.entity.netname ?? `client #${this.num}`;
   }
 
   get uniqueId() {
@@ -184,17 +184,17 @@ export class ServerClient {
     }
   }
 
-  consolePrint(message) {
+  consolePrint(/** @type {string} */ message) {
     MSG.WriteByte(this.message, Protocol.svc.print);
     MSG.WriteString(this.message, message);
   }
 
-  centerPrint(message) {
+  centerPrint(/** @type {string} */ message) {
     MSG.WriteByte(this.message, Protocol.svc.centerprint);
     MSG.WriteString(this.message, message);
   }
 
-  sendConsoleCommands(commandline) {
+  sendConsoleCommands(/** @type {string} */ commandline) {
     MSG.WriteByte(this.message, Protocol.svc.stufftext);
     MSG.WriteString(this.message, commandline);
   }

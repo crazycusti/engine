@@ -84,6 +84,8 @@ Those events are only fired by the server code.
 | - | - | - |
 | server.spawning | 1. map name | Emitted when spawning a server. |
 | server.spawned | 1. map name | Emitted when spawning a server succeeded. |
+| server.shutting-down | | Emitted when shutting a server down. All clients are still connected. |
+| server.shutdown | | Emitted when the server is shut down and after cleaning up everything. |
 
 ### WAD files
 

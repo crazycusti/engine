@@ -180,8 +180,7 @@ export class ServerMessages {
     MSG.WriteByte(message, Protocol.svc.signonnum);
     MSG.WriteByte(message, 1);
 
-    client.sendsignon = true;
-    client.spawned = false;
+    client.state = ServerClient.STATE.CONNECTED;
   }
 
   writeCvar(msg, cvar) {
@@ -197,7 +196,7 @@ export class ServerMessages {
   cvarChanged(cvar) {
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (!client.active || !client.spawned) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
 
@@ -239,7 +238,7 @@ export class ServerMessages {
       const cl = SV.svs.clients[i];
       const playerEntity = cl.edict.entity;
 
-      if (!cl.spawned) {
+      if (cl.state !== ServerClient.STATE.SPAWNED) {
         continue;
       }
 
@@ -714,7 +713,7 @@ export class ServerMessages {
       for (let i = 0; i < SV.svs.clients.length; i++) {
         const pingClient = SV.svs.clients[i];
 
-        if (!pingClient.active) {
+        if (pingClient.state < ServerClient.STATE.CONNECTED) {
           continue;
         }
 
@@ -742,7 +741,7 @@ export class ServerMessages {
     changes |= this.writeClientdataToMessage(client.edict, msg) ? 1 : 0;
     changes |= this.writeEntitiesToClient(client.edict, msg) ? 1 : 0;
 
-    if (!client.spawned) {
+    if (client.state !== ServerClient.STATE.SPAWNED) {
       Con.DPrint('SV.SendClientDatagram: not spawned\n');
       return true;
     }
@@ -773,7 +772,7 @@ export class ServerMessages {
       }
       for (let j = 0; j < SV.svs.maxclients; j++) {
         const client = SV.svs.clients[j];
-        if (!client.active) {
+        if (client.state < ServerClient.STATE.CONNECTED) {
           continue;
         }
         MSG.WriteByte(client.message, Protocol.svc.updatefrags);
@@ -785,7 +784,7 @@ export class ServerMessages {
 
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (client.active) {
+      if (client.state >= ServerClient.STATE.CONNECTED) {
         client.message.write(new Uint8Array(SV.server.reliable_datagram.data), SV.server.reliable_datagram.cursize);
       }
     }
@@ -798,10 +797,10 @@ export class ServerMessages {
 
     for (let i = 0; i < SV.svs.maxclients; i++) {
       const client = SV.svs.clients[i];
-      if (!client.active) {
+      if (client.state < ServerClient.STATE.CONNECTED) {
         continue;
       }
-      if (client.spawned) {
+      if (client.state === ServerClient.STATE.SPAWNED) {
         if (!this.sendClientDatagram(client)) {
           continue;
         }
@@ -811,7 +810,7 @@ export class ServerMessages {
         client.message.overflowed = false;
         continue;
       }
-      if (client.dropasap) {
+      if (client.state === ServerClient.STATE.DROPASAP) {
         if (NET.CanSendMessage(client.netconnection)) {
           Host.DropClient(client, false, 'Connectivity issues, ASAP drop requested');
         }
@@ -823,7 +822,6 @@ export class ServerMessages {
           Host.DropClient(client, true, 'Connectivity issues, failed to send message');
         }
         client.message.clear();
-        client.sendsignon = false;
       }
     }
 

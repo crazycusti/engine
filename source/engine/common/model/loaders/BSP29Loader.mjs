@@ -256,7 +256,7 @@ export class BSP29Loader extends ModelLoader {
       const textureEntry = Array.from(loadmodel.textures.entries()).find(([, t]) => t.name === txName);
 
       if (!textureEntry) {
-        Con.PrintWarning(`BSP29Loader: referenced material (${txName}) is not used\n`);
+        Con.DPrint(`BSP29Loader: referenced material (${txName}) is not used\n`);
         continue;
       }
 

@@ -106,10 +106,12 @@ export class MeshModelRenderer extends ModelRenderer {
     gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
 
     // Lighting
-    const [ambientlight, shadelight, lightPosition] = R._CalculateLightValues(e);
+    const [ambientlight, shadelight, lightPosition, dynamicShadeLight, dynamicLightPosition] = R._CalculateLightValues(e);
     gl.uniform3fv(program.uAmbientLight, ambientlight);
     gl.uniform3fv(program.uShadeLight, shadelight);
     gl.uniform3fv(program.uLightVec, lightPosition);
+    gl.uniform3fv(program.uDynamicShadeLight, dynamicShadeLight);
+    gl.uniform3fv(program.uDynamicLightVec, dynamicLightPosition);
 
     // Bind texture
     if (clmodel.texture) {

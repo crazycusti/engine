@@ -7,6 +7,7 @@ import {
   VELOCITY_EPSILON,
   WATER_SPEED_FACTOR,
 } from './Defs.mjs';
+import { ServerClient } from '../Client.mjs';
 
 let { Host, SV, V } = registry;
 
@@ -397,7 +398,8 @@ export class ServerClientPhysics {
    */
   physicsClient(ent) {
     const client = ent.getClient();
-    if (!client.active) {
+
+    if (client.state < ServerClient.STATE.CONNECTED) {
       return;
     }
 

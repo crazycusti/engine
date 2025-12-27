@@ -4,6 +4,7 @@ uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform vec3 uLightVec;
+uniform vec3 uDynamicLightVec;
 uniform float uAlpha;
 
 attribute vec3 aPositionA;
@@ -13,6 +14,7 @@ attribute vec2 aTexCoord;
 
 varying vec2 vTexCoord;
 varying float vLightDot;
+varying float vDynamicLightDot;
 varying float vFog;
 
 uniform vec4 uFogParams; // start, end, density, mode
@@ -25,7 +27,8 @@ void main(void) {
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
 
   vTexCoord = aTexCoord;
-  vLightDot = dot(aNormal, normalize(worldPos - uLightVec));
+  vLightDot = max(0.0, dot(aNormal, normalize(worldPos - uLightVec)));
+  vDynamicLightDot = max(0.0, dot(aNormal, normalize(worldPos - uDynamicLightVec)));
 
   // fog distance (world position)
   float dist = length(worldPos - uViewOrigin);

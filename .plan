@@ -138,6 +138,13 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2025-12-27
+
+- overhauled WebRTC network stuff
+- tweaked lighting of objects a bit
+- overhauled ServerClientState stuff
+- played around with mesh based collision code for objects with a static mesh model (SOLID_MESH)
+
 ### 2025-12-13
 
 - introduced materials to organize that clusterfun with textures better
