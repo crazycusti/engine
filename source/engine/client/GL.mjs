@@ -135,7 +135,7 @@ export class GLTexture {
     if (textureCache.has(identifier)) {
       const texture = textureCache.get(identifier);
 
-      console.assert(texture.width !== null && texture.width === width && texture.height !== null && texture.height === height, 'Texture dimensions must match');
+      console.assert(texture.width !== null && (width === 1 || texture.width === width) && texture.height !== null && (height === 1 || texture.height === height), 'Texture dimensions must match'); // 1x1 textures are allowed to be resized, they are coming from deferred loading
 
       return texture;
     }

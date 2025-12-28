@@ -1,5 +1,6 @@
 import Vector from '../../shared/Vector.mjs';
 import Cvar from '../common/Cvar.mjs';
+import Cmd from '../common/Cmd.mjs';
 import * as Def from '../common/Def.mjs';
 
 import { eventBus, registry } from '../registry.mjs';
@@ -1167,6 +1168,7 @@ R.RenderScene = function() {
 
   gl.disable(gl.CULL_FACE);
   R.RenderDlights();
+  R.DrawDecals();
   R.DrawParticles();
 
   // Pass 2: Transparent brush surfaces (after all opaque geometry)
@@ -1437,6 +1439,12 @@ R.InitShaders = async function() {
         [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2]],
         ['tTexture']),
 
+    // for rendering decals
+    GL.CreateProgram('decal',
+      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
+        [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2], ['aColor', gl.UNSIGNED_BYTE, 3, true]],
+        ['tTexture']),
+
     // for rendering particles (colored round dots)
     GL.CreateProgram('particle',
       ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
@@ -1502,6 +1510,7 @@ R.Init = async function() {
 
   R.InitTextures();
   R.InitParticles();
+  R.InitDecals();
   await R.InitShaders();
 
   // Register model renderers
@@ -1582,6 +1591,7 @@ R.NewMap = function() {
   }
 
   R.ClearParticles();
+  R.ClearDecals();
   R.BuildLightmaps();
 
   for (let i = 0; i <= R.dlightmaps_rgba.length; i++) {
@@ -1913,6 +1923,137 @@ R.RocketTrail = function(start, end, type) {
     }
     start.add(vec);
   }
+};
+
+R.InitDecals = function() {
+  R.decals = [];
+
+  Cmd.AddCommand('test_decal', async () => {
+    const start = R.refdef.vieworg;
+    const vectors = CL.state.viewangles.angleVectors();
+    const forward = vectors.forward;
+    const end = start.copy().add(forward.copy().multiply(8192));
+
+    const trace = { plane: {} };
+
+    SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, start, end, trace);
+
+    if (trace.allsolid || trace.startsolid || trace.fraction === 1.0) {
+      return;
+    }
+
+    // Use a particle texture for testing if no bullet texture exists
+    R.PlaceDecal(trace.endpos, trace.plane.normal, await Draw.LoadPicFromLump('box_tl'));
+  });
+};
+
+R.ClearDecals = function() {
+  R.decals = [];
+};
+
+R.PlaceDecal = function(origin, normal, texture) {
+  if (!texture) {
+    return;
+  }
+
+  // Calculate basis vectors for the decal quad
+  const up = new Vector(0, 0, 1);
+
+  if (Math.abs(normal.dot(up)) > 0.99) {
+    up.setTo(1, 0, 0);
+  }
+
+  const right = normal.cross(up);
+  right.normalize();
+  up.set(right.cross(normal));
+  up.normalize();
+
+  const size = 4.0; // Decal size
+
+  const verts = [
+    origin.copy().add(right.copy().multiply(-size)).add(up.copy().multiply(size)),
+    origin.copy().add(right.copy().multiply(size)).add(up.copy().multiply(size)),
+    origin.copy().add(right.copy().multiply(size)).add(up.copy().multiply(-size)),
+    origin.copy().add(right.copy().multiply(-size)).add(up.copy().multiply(-size)),
+  ];
+
+  // Apply polygon offset
+  const offset = normal.copy().multiply(0.5);
+  for (let i = 0; i < 4; i++) {
+    verts[i].add(offset);
+  }
+
+  // Calculate lighting
+  const lightStart = origin.copy().add(normal.copy().multiply(4.0));
+  const lightEnd = origin.copy().subtract(normal.copy().multiply(4.0));
+  const lightResult = R.RecursiveLightPoint(CL.state.worldmodel.nodes[0], lightStart, lightEnd);
+
+  let color = new Vector(255, 255, 255); // Default to white
+  if (lightResult) {
+    const r = Math.min(255, Math.max(0, Math.floor(lightResult[0][0])));
+    const g = Math.min(255, Math.max(0, Math.floor(lightResult[0][1])));
+    const b = Math.min(255, Math.max(0, Math.floor(lightResult[0][2])));
+    color.setTo(r, g, b);
+  }
+
+  R.decals.push({
+    texture,
+    verts,
+    color,
+    die: CL.state.time + 10.0, // Lasts 10 seconds
+  });
+};
+
+R.DrawDecals = function() {
+  if (!R.decals || R.decals.length === 0) {
+    return;
+  }
+
+  // Remove dead decals
+  R.decals = R.decals.filter((d) => d.die > CL.state.time);
+
+  if (R.decals.length === 0) {
+    return;
+  }
+
+  GL.StreamFlush();
+
+  const program = GL.UseProgram('decal');
+  gl.depthMask(false);
+  gl.enable(gl.BLEND);
+
+  let currentTexture = null;
+
+  for (let i = 0; i < R.decals.length; i++) {
+    const decal = R.decals[i];
+
+    if (decal.texture !== currentTexture) {
+      GL.StreamFlush();
+      decal.texture.bind(program.tTexture);
+      currentTexture = decal.texture;
+    }
+
+    GL.StreamGetSpace(6);
+
+    // Quad vertices: 0, 1, 2, 0, 2, 3
+    const v = decal.verts;
+    const c = decal.color;
+    const r = c[0];
+    const g = c[1];
+    const b = c[2];
+
+    GL.StreamWriteFloat3(v[0][0], v[0][1], v[0][2]); GL.StreamWriteFloat2(0, 0); GL.StreamWriteUByte4(r, g, b, 255);
+    GL.StreamWriteFloat3(v[1][0], v[1][1], v[1][2]); GL.StreamWriteFloat2(1, 0); GL.StreamWriteUByte4(r, g, b, 255);
+    GL.StreamWriteFloat3(v[2][0], v[2][1], v[2][2]); GL.StreamWriteFloat2(1, 1); GL.StreamWriteUByte4(r, g, b, 255);
+
+    GL.StreamWriteFloat3(v[0][0], v[0][1], v[0][2]); GL.StreamWriteFloat2(0, 0); GL.StreamWriteUByte4(r, g, b, 255);
+    GL.StreamWriteFloat3(v[2][0], v[2][1], v[2][2]); GL.StreamWriteFloat2(1, 1); GL.StreamWriteUByte4(r, g, b, 255);
+    GL.StreamWriteFloat3(v[3][0], v[3][1], v[3][2]); GL.StreamWriteFloat2(0, 1); GL.StreamWriteUByte4(r, g, b, 255);
+  }
+
+  GL.StreamFlush();
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
 };
 
 R.DrawParticles = function() {

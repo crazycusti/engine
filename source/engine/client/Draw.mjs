@@ -214,6 +214,10 @@ export default class Draw {
 
     const glt = GLTexture.Allocate(name, 1, 1, new Uint8Array([0, 0, 0, 0])).lockTextureMode('GL_NEAREST');
 
+    if (glt.width > 1 && glt.height > 1) {
+      return glt;
+    }
+
     W.LoadLump('gfx/' + name + '.lmp').then((lump) => {
       if (lump === null) {
         // TODO: handle missing lump gracefully

@@ -18,9 +18,8 @@ import W from './W.mjs';
 /** @typedef {import('../network/MSG.mjs').SzBuffer} SzBuffer */
 /** @typedef {import('../server/Navigation.mjs').Navigation} Navigation */
 /** @typedef {import('./model/parsers/ParsedQC.mjs').default} ParsedQC */
-/** @typedef {import('./Pmove.mjs').Pmove} Pmove */
-/** @typedef {import('./Pmove.mjs').Trace} Trace */
 /** @typedef {import('./model/BaseModel.mjs').BaseModel} BaseModel */
+/** @typedef {import('../server/physics/ServerCollision.mjs').Trace} Trace */
 
 let { CL, Con, Draw, Host, R, S, SCR, SV, V} = registry;
 
@@ -63,6 +62,36 @@ export const GameFlavors = Object.freeze({
   rogue: 'rogue',
   shareware: 'shareware',
 });
+
+// eslint-disable-next-line jsdoc/require-jsdoc
+function internalTraceToGameTrace(trace) {
+  return {
+    solid: {
+      /** @type {boolean} */
+      all: trace.allsolid,
+      /** @type {boolean} */
+      start: trace.startsolid,
+    },
+    /** @type {number} */
+    fraction: trace.fraction,
+    plane: {
+      /** @type {Vector} */
+      normal: trace.plane.normal,
+      /** @type {number} */
+      distance: trace.plane.dist,
+    },
+    contents: {
+      /** @type {boolean} */
+      inOpen: !!trace.inopen,
+      /** @type {boolean} */
+      inWater: !!trace.inwater,
+    },
+    /** @type {Vector} final position of the line */
+    point: trace.endpos,
+    /** @type {?import('../../game/id1/entity/BaseEntity.mjs').default} entity */
+    entity: trace.ent ? trace.ent.entity : null,
+  };
+}
 
 export class CommonEngineAPI {
   /**
@@ -195,33 +224,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
   static Traceline(start, end, noMonsters, passEdict, mins = null, maxs = null) {
     const nullVec = Vector.origin;
     const trace = SV.collision.move(start, mins ? mins : nullVec, maxs ? maxs : nullVec, end, noMonsters, passEdict);
-
-    return {
-      solid: {
-        /** @type {boolean} */
-        all: trace.allsolid,
-        /** @type {boolean} */
-        start: trace.startsolid,
-      },
-      /** @type {number} */
-      fraction: trace.fraction,
-      plane: {
-        /** @type {Vector} */
-        normal: trace.plane.normal,
-        /** @type {number} */
-        distance: trace.plane.dist,
-      },
-      contents: {
-        /** @type {boolean} */
-        inOpen: !!trace.inopen,
-        /** @type {boolean} */
-        inWater: !!trace.inwater,
-      },
-      /** @type {Vector} final position of the line */
-      point: trace.endpos,
-      /** @type {?import('../../game/id1/entity/BaseEntity.mjs').default} entity */
-      entity: trace.ent ? trace.ent.entity : null,
-    };
+    return internalTraceToGameTrace(trace);
   }
 
   static TracelineLegacy(start, end, noMonsters, passEdict, mins = null, maxs = null) {
@@ -257,8 +260,8 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
   /**
    * Finds out what contents the given point is in.
-   * @param {Vector} origin
-   * @returns contents
+   * @param {Vector} origin point in space
+   * @returns {number} contents
    */
   static DeterminePointContents(origin) {
     return SV.collision.pointContents(origin);
@@ -402,7 +405,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
     }
 
     SV.server.modelPrecache.push(modelName);
-    SV.server.models.push(Mod.ForNameAsync(modelName, true));
+    SV.server.models.push(Mod.ForNameAsync(modelName, true)); // will cause promises in the array
   }
 
   /**
@@ -570,14 +573,30 @@ export class ClientEngineAPI extends CommonEngineAPI {
     console.assert(false, 'UnregisterCommand is not implemented yet');
   }
 
+  /**
+   * Loads texture from lump.
+   * @param {string} name lump name
+   * @returns {GLTexture} texture
+   */
   static LoadPicFromLump(name) {
     return Draw.LoadPicFromLumpDeferred(name);
   }
 
+  /**
+   * Loads texture from WAD.
+   * @param {string} name lump name
+   * @returns {GLTexture} texture
+   */
   static LoadPicFromWad(name) {
     return Draw.LoadPicFromWad(name);
   }
 
+  /**
+   * Loads texture from file.
+   * @param {string} filename texture filename
+   * @returns {GLTexture} texture
+   * @deprecated not implemented yet.
+   */
   static LoadPicFromFile(filename) {
     return Draw.LoadPicFromFileDeferred(filename);
   }
@@ -690,16 +709,17 @@ export class ClientEngineAPI extends CommonEngineAPI {
   }
 
   /**
-   * Performs a trace line in the game world.
+   * Performs a trace line in the game world against hull 0.
    * @param {Vector} start start position
    * @param {Vector} end end position
    * @returns {Trace} trace result
    */
   static Traceline(start, end) {
-    /** @type {Pmove} */
-    const pmove = CL.pmove;
+    const trace = /** @type {Trace} */ ({ plane: {} });
 
-    return pmove.clipPlayerMove(start, end);
+    SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, start, end, trace);
+
+    return internalTraceToGameTrace(trace);
   }
 
   /**
@@ -730,6 +750,16 @@ export class ClientEngineAPI extends CommonEngineAPI {
    */
   static RocketTrail(start, end, type) {
     R.RocketTrail(start, end, type);
+  }
+
+  /**
+   * Places a decal in the world.
+   * @param {Vector} origin position to place decal at
+   * @param {Vector} normal normal/orientation
+   * @param {GLTexture} texture texture to place
+   */
+  static PlaceDecal(origin, normal, texture) {
+    R.PlaceDecal(origin, normal, texture);
   }
 
   /**
