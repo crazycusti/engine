@@ -17,6 +17,8 @@ export type ClientdataMap = Record<string, SerializableType>;
 export type EdictValueType = (string | number | boolean | Vector | null);
 export type EdictData = Record<string, EdictValueType>;
 
+export type SFX = Readonly<import("../engine/client/Sound.mjs").SFX>;
+
 export type ViewmodelConfig = {
   visible: boolean;
   model: BaseModel;

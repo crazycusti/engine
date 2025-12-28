@@ -20,6 +20,7 @@ export class InviteCommand extends ConsoleCommand {
     const shareLink = new URL(location.href);
     shareLink.searchParams.set('connect', listenAddress);
     shareLink.searchParams.delete('exec');
+    shareLink.searchParams.delete('map');
 
     try {
       await navigator.clipboard.writeText(shareLink.toString());

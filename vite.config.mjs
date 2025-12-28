@@ -45,15 +45,16 @@ function gameModulePreloadPlugin() {
 }
 
 export default defineConfig(({ mode }) => ({
-  root: 'public',
-  publicDir: resolve(__dirname, 'public'),
+  esbuild: {
+    drop: mode === 'production' ? ['debugger'] : [],
+    pure: mode === 'production' ? ['console.log', 'console.debug', 'console.info', 'console.assert'] : [],
+  },
   build: {
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'public/index.html'),
-        shared: resolve(__dirname, 'source/shared/index.mjs'),
+        main: resolve(__dirname, 'index.html'),
       },
       output: {
         entryFileNames: 'libs/[name]-[hash].js',
@@ -88,9 +89,6 @@ export default defineConfig(({ mode }) => ({
     sourcemap: mode !== 'production',
     chunkSizeWarningLimit: 1000,
     minify: mode === 'production' ? 'esbuild' : false,
-    esbuild: mode === 'production' ? {
-      drop: ['console', 'debugger'],
-    } : undefined,
     reportCompressedSize: true,
     target: 'es2022',
   },
