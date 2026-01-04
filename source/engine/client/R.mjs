@@ -950,6 +950,9 @@ R.PolyBlend = function() {
 };
 
 R.SetFrustum = function() {
+  if (R.vup.isOrigin() || R.vright.isOrigin() || R.vpn.isOrigin()) { // can’t set frustum with these
+    return;
+  }
   R.frustum[0].normal = R.vup.rotatePointAroundVector(R.vpn, -(90.0 - R.refdef.fov_x * 0.5));
   R.frustum[1].normal = R.vup.rotatePointAroundVector(R.vpn, 90.0 - R.refdef.fov_x * 0.5);
   R.frustum[2].normal = R.vright.rotatePointAroundVector(R.vpn, 90.0 - R.refdef.fov_y * 0.5);
@@ -2392,12 +2395,12 @@ R.MarkLeaves = function() {
     const p = R.refdef.vieworg.copy();
     let leaf;
     if (R.viewleaf.contents <= content.CONTENT_WATER) {
-      leaf = CL.state.worldmodel.getLeafForPoint(p.add([0, 0, 16.0]));
+      leaf = CL.state.worldmodel.getLeafForPoint(p.add(new Vector(0, 0, 16.0)));
       if (leaf.contents <= content.CONTENT_WATER) {
         break;
       }
     } else {
-      leaf = CL.state.worldmodel.getLeafForPoint(p.add([0, 0, -16.0]));
+      leaf = CL.state.worldmodel.getLeafForPoint(p.add(new Vector(0, 0, -16.0)));
       if (leaf.contents > content.CONTENT_WATER) {
         break;
       }
