@@ -26,7 +26,7 @@ let gl = null;
 const textureModes = {};
 
 /** @type {string} */
-let currentTextureMode = 'GL_LINEAR';
+let currentTextureMode = 'GL_LINEAR_MIPMAP_LINEAR';
 
 const ortho = [
   0.0, 0.0, 0.0, 0.0,

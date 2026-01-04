@@ -7,7 +7,8 @@ export type ClientEngineAPI = Readonly<typeof ClientEngineAPI>;
 export type ServerEngineAPI = Readonly<typeof ServerEngineAPI>;
 export type ServerEdict = Readonly<ServerEdict>;
 
-export type GLTexture = Readonly<import("../engine/client/GL.mjs").GLTexture>;
+//export type GLTexture = Readonly<import("../engine/client/GL.mjs").GLTexture>;
+export type GLTexture = import("../engine/client/GL.mjs").GLTexture;
 export type Cvar = Readonly<import("../engine/common/Cvar.mjs").default>;
 
 export type SerializableType = (string | number | boolean | Vector | ServerEdict | SerializableType[] | null);

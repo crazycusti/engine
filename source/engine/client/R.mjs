@@ -148,8 +148,9 @@ R.PushDlights = function() {
   if (R.flashblend.value !== 0) {
     return;
   }
+
   for (let i = 0; i < LIGHTMAP_BLOCK_SIZE; i++) {
-    R.lightmap_modified[i] = false;
+    R.lightmap_modified[i] = 0;
   }
 
   let bit = 1;
@@ -184,11 +185,11 @@ R.PushDlights = function() {
 
   GL.Bind(0, R.dlightmap_rgba_texture);
   for (let i = 0; i < LIGHTMAP_BLOCK_SIZE; i++) {
-    if (R.lightmap_modified[i] !== true) {
+    if (!R.lightmap_modified[i]) {
       continue;
     }
     for (let j = LIGHTMAP_BLOCK_SIZE - 1; j >= i; j--) {
-      if (R.lightmap_modified[j] !== true) {
+      if (!R.lightmap_modified[j]) {
         continue;
       }
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, i, LIGHTMAP_BLOCK_SIZE, j - i + 1, gl.RGBA, gl.UNSIGNED_BYTE, R.dlightmaps_rgba.subarray(i * LIGHTMAP_BLOCK_SIZE * 4, (j + 1) * LIGHTMAP_BLOCK_SIZE * 4));
@@ -2166,7 +2167,7 @@ R.AllocParticles = function(count) {
 
 // surf
 
-R.lightmap_modified = [];
+R.lightmap_modified = new Uint8Array(LIGHTMAP_BLOCK_SIZE);
 R.lightmaps = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT));
 R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
 R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
@@ -2229,7 +2230,7 @@ R.AddDynamicLights = function(surf) {
   }
 
   for (let t = 0, i = 0; t < tmax; t++) {
-    R.lightmap_modified[surf.light_t + t] = true;
+    R.lightmap_modified[surf.light_t + t] = 1;
     const dest = ((surf.light_t + t) * LIGHTMAP_BLOCK_SIZE) + surf.light_s;
     for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;
@@ -2251,7 +2252,7 @@ R.RemoveDynamicLights = function(surf) {
   const smax = (surf.extents[0] >> surf.lmshift) + 1;
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
   for (let t = 0; t < tmax; t++) {
-    R.lightmap_modified[surf.light_t + t] = true;
+    R.lightmap_modified[surf.light_t + t] = 1;
     const dest = ((surf.light_t + t) * LIGHTMAP_BLOCK_SIZE) + surf.light_s;
     for (let s = 0; s < smax; s++) {
       const dldest = (dest + s) * 4;

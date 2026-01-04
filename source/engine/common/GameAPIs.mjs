@@ -594,11 +594,10 @@ export class ClientEngineAPI extends CommonEngineAPI {
   /**
    * Loads texture from file.
    * @param {string} filename texture filename
-   * @returns {GLTexture} texture
-   * @deprecated not implemented yet.
+   * @returns {Promise<GLTexture>} texture
    */
-  static LoadPicFromFile(filename) {
-    return Draw.LoadPicFromFileDeferred(filename);
+  static async LoadPicFromFile(filename) {
+    return await Draw.LoadPicFromFile(filename);
   }
 
   /**
