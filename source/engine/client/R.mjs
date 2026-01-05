@@ -48,6 +48,10 @@ const R = {};
 
 export default R;
 
+eventBus.subscribe('client.disconnected', () => {
+  R.ClearAll();
+});
+
 // light
 
 R.dlightframecount = 0;
@@ -504,7 +508,12 @@ R.LightPointFromGrid = function(pos) {
 
 R.visframecount = 0;
 
-R.frustum = [{}, {}, {}, {}];
+R.frustum = [
+  {signbits: 0, normal: new Vector(), dist: 0},
+  {signbits: 0, normal: new Vector(), dist: 0},
+  {signbits: 0, normal: new Vector(), dist: 0},
+  {signbits: 0, normal: new Vector(), dist: 0},
+];
 
 R.vup = new Vector();
 R.vpn = new Vector();
@@ -1189,7 +1198,7 @@ R.RenderScene = function() {
   gl.disable(gl.CULL_FACE);
 };
 
-R._speeds = [];
+R._speeds = /** @type {string[]} */ ([]);
 
 R.RenderView = function() {
   gl.finish();
@@ -1585,17 +1594,8 @@ R.NewMapFog = function() {
 };
 
 R.NewMap = function() {
-  if (R.particles) {
-    R.particles.length = 0;
-  }
+  R.ClearAll();
 
-  for (let i = 0; i < 64; i++) {
-    R.lightstylevalue_a[i] = 12;
-    R.lightstylevalue_b[i] = 12;
-  }
-
-  R.ClearParticles();
-  R.ClearDecals();
   R.BuildLightmaps();
 
   for (let i = 0; i <= R.dlightmaps_rgba.length; i++) {
@@ -1606,6 +1606,29 @@ R.NewMap = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
   R.NewMapFog();
+};
+
+R.ClearAll = function() {
+  if (R.particles) {
+    R.particles.length = 0;
+  }
+
+  for (let i = 0; i < 64; i++) {
+    R.lightstylevalue_a[i] = 12;
+    R.lightstylevalue_b[i] = 12;
+  }
+
+  R.oldviewleaf = null;
+  R.viewleaf = null;
+
+  R.deluxemap = null;
+  R.lightmaps_rgb = null;
+  R.dlightmaps_rgba = null;
+
+  R.allocated = null;
+
+  R.ClearParticles();
+  R.ClearDecals();
 };
 
 // part
@@ -2171,9 +2194,8 @@ R.AllocParticles = function(count) {
 // surf
 
 R.lightmap_modified = new Uint8Array(LIGHTMAP_BLOCK_SIZE);
-R.lightmaps = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT));
-R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
-R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
+R.lightmaps_rgb = /** @type {Uint8Array} */ (null); // allocated on demand
+R.dlightmaps_rgba = /** @type {Uint8Array} */ (null); // allocated on demand
 R.deluxemap = /** @type {Uint8Array} */ (null); // allocated on demand
 
 R.AddDynamicLights = function(surf) {
@@ -2458,6 +2480,9 @@ R.AllocBlock = function(surf) {
 
 R.BuildLightmaps = function() {
   R.allocated = (new Array(LIGHTMAP_BLOCK_SIZE)).fill(0);
+
+  R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+  R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
 
   const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
   const meshRenderer = modelRendererRegistry.getRenderer(Mod.type.mesh);

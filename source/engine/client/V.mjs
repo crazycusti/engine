@@ -450,6 +450,9 @@ V.RenderView = function () {
   if (Con.forcedup) {
     return;
   }
+  if (!CL.state.worldmodel) {
+    return;
+  }
   R.PushDlights();
   R.RenderView();
 };

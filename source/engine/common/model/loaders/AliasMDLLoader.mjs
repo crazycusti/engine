@@ -437,7 +437,6 @@ export class AliasMDLLoader extends ModelLoader {
     }
 
     // Build vertex data for each frame
-
     for (let i = 0; i < loadmodel.frames.length; i++) {
       const group = loadmodel.frames[i];
 
@@ -481,6 +480,8 @@ export class AliasMDLLoader extends ModelLoader {
           cmds.push(R.avertexnormals[vert.lightnormalindex][2]);
         }
       }
+
+      frame.v.length = 0; // Free memory
     }
 
     // Upload to WebGL

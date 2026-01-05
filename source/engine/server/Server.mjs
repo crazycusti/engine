@@ -500,6 +500,14 @@ export default class SV {
     SV.server.edicts.length = 0;
     SV.server.num_edicts = 0;
 
+    for (const model of SV.server.models) {
+      if (model) {
+        model.reset(); // TODO: should be .free() in future
+      }
+    }
+
+    SV.server.models.length = 0;
+
     if (SV.server.navigation) {
       SV.server.navigation.shutdown();
       SV.server.navigation = null;

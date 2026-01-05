@@ -65,16 +65,9 @@ Mod.Init = function () {
   Mod.modelLoaderRegistry.register(new WavefrontOBJLoader());
 };
 
-/**
- * Despite the name, it clears brush models only.
- */
 Mod.ClearAll = function () {
   for (const name of Object.keys(Mod.known)) {
     const mod = Mod.known[name];
-
-    if (mod.type !== Mod.type.brush) {
-      continue;
-    }
 
     if (mod.cmds !== null) { // TODO: move responsibility to model.free or the renderer
       gl.deleteBuffer(mod.cmds);

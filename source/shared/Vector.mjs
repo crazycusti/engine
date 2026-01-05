@@ -78,7 +78,7 @@ export class Quaternion extends Array {
   }
 };
 
-export default class Vector extends Array {
+export default class Vector extends Float32Array {
   /** Vector origin constant */
   static origin = (new Vector()).freeze();
 
@@ -93,7 +93,10 @@ export default class Vector extends Array {
   constructor(x = 0.0, y = 0.0, z = 0.0) {
     console.assert(typeof x === 'number' && typeof y === 'number' && typeof z === 'number', 'not a number');
     console.assert(!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(z), 'NaN component');
-    super(x, y, z);
+    super(3);
+    this[0] = x;
+    this[1] = y;
+    this[2] = z;
   }
 
   /**
@@ -726,7 +729,7 @@ export default class Vector extends Array {
    * @returns {Vector} this
    */
   freeze() {
-    Object.freeze(this);
+    // Object.freeze(this);
     return this;
   }
 
@@ -735,6 +738,6 @@ export default class Vector extends Array {
    * @returns {string} Quake-style string of this vector
    */
   toString() {
-    return `${this.map((e) => e.toFixed(1)).join(' ')}`;
+    return `${this.map((e) => +e.toFixed(1)).join(' ')}`;
   }
 };
