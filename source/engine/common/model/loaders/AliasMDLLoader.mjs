@@ -14,6 +14,171 @@ eventBus.subscribe('registry.frozen', () => {
   ({ R } = registry);
 });
 
+export const avertexnormals = [
+  new Vector(-0.525731, 0.0, 0.850651),
+  new Vector(-0.442863, 0.238856, 0.864188),
+  new Vector(-0.295242, 0.0, 0.955423),
+  new Vector(-0.309017, 0.5, 0.809017),
+  new Vector(-0.16246, 0.262866, 0.951056),
+  new Vector(0.0, 0.0, 1.0),
+  new Vector(0.0, 0.850651, 0.525731),
+  new Vector(-0.147621, 0.716567, 0.681718),
+  new Vector(0.147621, 0.716567, 0.681718),
+  new Vector(0.0, 0.525731, 0.850651),
+  new Vector(0.309017, 0.5, 0.809017),
+  new Vector(0.525731, 0.0, 0.850651),
+  new Vector(0.295242, 0.0, 0.955423),
+  new Vector(0.442863, 0.238856, 0.864188),
+  new Vector(0.16246, 0.262866, 0.951056),
+  new Vector(-0.681718, 0.147621, 0.716567),
+  new Vector(-0.809017, 0.309017, 0.5),
+  new Vector(-0.587785, 0.425325, 0.688191),
+  new Vector(-0.850651, 0.525731, 0.0),
+  new Vector(-0.864188, 0.442863, 0.238856),
+  new Vector(-0.716567, 0.681718, 0.147621),
+  new Vector(-0.688191, 0.587785, 0.425325),
+  new Vector(-0.5, 0.809017, 0.309017),
+  new Vector(-0.238856, 0.864188, 0.442863),
+  new Vector(-0.425325, 0.688191, 0.587785),
+  new Vector(-0.716567, 0.681718, -0.147621),
+  new Vector(-0.5, 0.809017, -0.309017),
+  new Vector(-0.525731, 0.850651, 0.0),
+  new Vector(0.0, 0.850651, -0.525731),
+  new Vector(-0.238856, 0.864188, -0.442863),
+  new Vector(0.0, 0.955423, -0.295242),
+  new Vector(-0.262866, 0.951056, -0.16246),
+  new Vector(0.0, 1.0, 0.0),
+  new Vector(0.0, 0.955423, 0.295242),
+  new Vector(-0.262866, 0.951056, 0.16246),
+  new Vector(0.238856, 0.864188, 0.442863),
+  new Vector(0.262866, 0.951056, 0.16246),
+  new Vector(0.5, 0.809017, 0.309017),
+  new Vector(0.238856, 0.864188, -0.442863),
+  new Vector(0.262866, 0.951056, -0.16246),
+  new Vector(0.5, 0.809017, -0.309017),
+  new Vector(0.850651, 0.525731, 0.0),
+  new Vector(0.716567, 0.681718, 0.147621),
+  new Vector(0.716567, 0.681718, -0.147621),
+  new Vector(0.525731, 0.850651, 0.0),
+  new Vector(0.425325, 0.688191, 0.587785),
+  new Vector(0.864188, 0.442863, 0.238856),
+  new Vector(0.688191, 0.587785, 0.425325),
+  new Vector(0.809017, 0.309017, 0.5),
+  new Vector(0.681718, 0.147621, 0.716567),
+  new Vector(0.587785, 0.425325, 0.688191),
+  new Vector(0.955423, 0.295242, 0.0),
+  new Vector(1.0, 0.0, 0.0),
+  new Vector(0.951056, 0.16246, 0.262866),
+  new Vector(0.850651, -0.525731, 0.0),
+  new Vector(0.955423, -0.295242, 0.0),
+  new Vector(0.864188, -0.442863, 0.238856),
+  new Vector(0.951056, -0.16246, 0.262866),
+  new Vector(0.809017, -0.309017, 0.5),
+  new Vector(0.681718, -0.147621, 0.716567),
+  new Vector(0.850651, 0.0, 0.525731),
+  new Vector(0.864188, 0.442863, -0.238856),
+  new Vector(0.809017, 0.309017, -0.5),
+  new Vector(0.951056, 0.16246, -0.262866),
+  new Vector(0.525731, 0.0, -0.850651),
+  new Vector(0.681718, 0.147621, -0.716567),
+  new Vector(0.681718, -0.147621, -0.716567),
+  new Vector(0.850651, 0.0, -0.525731),
+  new Vector(0.809017, -0.309017, -0.5),
+  new Vector(0.864188, -0.442863, -0.238856),
+  new Vector(0.951056, -0.16246, -0.262866),
+  new Vector(0.147621, 0.716567, -0.681718),
+  new Vector(0.309017, 0.5, -0.809017),
+  new Vector(0.425325, 0.688191, -0.587785),
+  new Vector(0.442863, 0.238856, -0.864188),
+  new Vector(0.587785, 0.425325, -0.688191),
+  new Vector(0.688191, 0.587785, -0.425325),
+  new Vector(-0.147621, 0.716567, -0.681718),
+  new Vector(-0.309017, 0.5, -0.809017),
+  new Vector(0.0, 0.525731, -0.850651),
+  new Vector(-0.525731, 0.0, -0.850651),
+  new Vector(-0.442863, 0.238856, -0.864188),
+  new Vector(-0.295242, 0.0, -0.955423),
+  new Vector(-0.16246, 0.262866, -0.951056),
+  new Vector(0.0, 0.0, -1.0),
+  new Vector(0.295242, 0.0, -0.955423),
+  new Vector(0.16246, 0.262866, -0.951056),
+  new Vector(-0.442863, -0.238856, -0.864188),
+  new Vector(-0.309017, -0.5, -0.809017),
+  new Vector(-0.16246, -0.262866, -0.951056),
+  new Vector(0.0, -0.850651, -0.525731),
+  new Vector(-0.147621, -0.716567, -0.681718),
+  new Vector(0.147621, -0.716567, -0.681718),
+  new Vector(0.0, -0.525731, -0.850651),
+  new Vector(0.309017, -0.5, -0.809017),
+  new Vector(0.442863, -0.238856, -0.864188),
+  new Vector(0.16246, -0.262866, -0.951056),
+  new Vector(0.238856, -0.864188, -0.442863),
+  new Vector(0.5, -0.809017, -0.309017),
+  new Vector(0.425325, -0.688191, -0.587785),
+  new Vector(0.716567, -0.681718, -0.147621),
+  new Vector(0.688191, -0.587785, -0.425325),
+  new Vector(0.587785, -0.425325, -0.688191),
+  new Vector(0.0, -0.955423, -0.295242),
+  new Vector(0.0, -1.0, 0.0),
+  new Vector(0.262866, -0.951056, -0.16246),
+  new Vector(0.0, -0.850651, 0.525731),
+  new Vector(0.0, -0.955423, 0.295242),
+  new Vector(0.238856, -0.864188, 0.442863),
+  new Vector(0.262866, -0.951056, 0.16246),
+  new Vector(0.5, -0.809017, 0.309017),
+  new Vector(0.716567, -0.681718, 0.147621),
+  new Vector(0.525731, -0.850651, 0.0),
+  new Vector(-0.238856, -0.864188, -0.442863),
+  new Vector(-0.5, -0.809017, -0.309017),
+  new Vector(-0.262866, -0.951056, -0.16246),
+  new Vector(-0.850651, -0.525731, 0.0),
+  new Vector(-0.716567, -0.681718, -0.147621),
+  new Vector(-0.716567, -0.681718, 0.147621),
+  new Vector(-0.525731, -0.850651, 0.0),
+  new Vector(-0.5, -0.809017, 0.309017),
+  new Vector(-0.238856, -0.864188, 0.442863),
+  new Vector(-0.262866, -0.951056, 0.16246),
+  new Vector(-0.864188, -0.442863, 0.238856),
+  new Vector(-0.809017, -0.309017, 0.5),
+  new Vector(-0.688191, -0.587785, 0.425325),
+  new Vector(-0.681718, -0.147621, 0.716567),
+  new Vector(-0.442863, -0.238856, 0.864188),
+  new Vector(-0.587785, -0.425325, 0.688191),
+  new Vector(-0.309017, -0.5, 0.809017),
+  new Vector(-0.147621, -0.716567, 0.681718),
+  new Vector(-0.425325, -0.688191, 0.587785),
+  new Vector(-0.16246, -0.262866, 0.951056),
+  new Vector(0.442863, -0.238856, 0.864188),
+  new Vector(0.16246, -0.262866, 0.951056),
+  new Vector(0.309017, -0.5, 0.809017),
+  new Vector(0.147621, -0.716567, 0.681718),
+  new Vector(0.0, -0.525731, 0.850651),
+  new Vector(0.425325, -0.688191, 0.587785),
+  new Vector(0.587785, -0.425325, 0.688191),
+  new Vector(0.688191, -0.587785, 0.425325),
+  new Vector(-0.955423, 0.295242, 0.0),
+  new Vector(-0.951056, 0.16246, 0.262866),
+  new Vector(-1.0, 0.0, 0.0),
+  new Vector(-0.850651, 0.0, 0.525731),
+  new Vector(-0.955423, -0.295242, 0.0),
+  new Vector(-0.951056, -0.16246, 0.262866),
+  new Vector(-0.864188, 0.442863, -0.238856),
+  new Vector(-0.951056, 0.16246, -0.262866),
+  new Vector(-0.809017, 0.309017, -0.5),
+  new Vector(-0.864188, -0.442863, -0.238856),
+  new Vector(-0.951056, -0.16246, -0.262866),
+  new Vector(-0.809017, -0.309017, -0.5),
+  new Vector(-0.681718, 0.147621, -0.716567),
+  new Vector(-0.681718, -0.147621, -0.716567),
+  new Vector(-0.850651, 0.0, -0.525731),
+  new Vector(-0.688191, 0.587785, -0.425325),
+  new Vector(-0.587785, 0.425325, -0.688191),
+  new Vector(-0.425325, 0.688191, -0.587785),
+  new Vector(-0.425325, -0.688191, -0.587785),
+  new Vector(-0.587785, -0.425325, -0.688191),
+  new Vector(-0.688191, -0.587785, -0.425325),
+];
+
 /**
  * Loader for Quake Alias Model format (.mdl)
  * Magic: 0x4f504449 ("IDPO")
@@ -450,13 +615,13 @@ export class AliasMDLLoader extends ModelLoader {
 
             for (let l = 0; l < 3; l++) {
               const vert = frame.v[triangle.vertindex[l]];
-              console.assert(vert.lightnormalindex < R.avertexnormals.length);
+              console.assert(vert.lightnormalindex < avertexnormals.length);
               cmds.push(vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0]);
               cmds.push(vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1]);
               cmds.push(vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2]);
-              cmds.push(R.avertexnormals[vert.lightnormalindex][0]);
-              cmds.push(R.avertexnormals[vert.lightnormalindex][1]);
-              cmds.push(R.avertexnormals[vert.lightnormalindex][2]);
+              cmds.push(avertexnormals[vert.lightnormalindex][0]);
+              cmds.push(avertexnormals[vert.lightnormalindex][1]);
+              cmds.push(avertexnormals[vert.lightnormalindex][2]);
             }
           }
         }
@@ -471,13 +636,13 @@ export class AliasMDLLoader extends ModelLoader {
 
         for (let k = 0; k < 3; k++) {
           const vert = frame.v[triangle.vertindex[k]];
-          console.assert(vert.lightnormalindex < R.avertexnormals.length);
+          console.assert(vert.lightnormalindex < avertexnormals.length);
           cmds.push(vert.v[0] * loadmodel._scale[0] + loadmodel._scale_origin[0]);
           cmds.push(vert.v[1] * loadmodel._scale[1] + loadmodel._scale_origin[1]);
           cmds.push(vert.v[2] * loadmodel._scale[2] + loadmodel._scale_origin[2]);
-          cmds.push(R.avertexnormals[vert.lightnormalindex][0]);
-          cmds.push(R.avertexnormals[vert.lightnormalindex][1]);
-          cmds.push(R.avertexnormals[vert.lightnormalindex][2]);
+          cmds.push(avertexnormals[vert.lightnormalindex][0]);
+          cmds.push(avertexnormals[vert.lightnormalindex][1]);
+          cmds.push(avertexnormals[vert.lightnormalindex][2]);
         }
       }
 
