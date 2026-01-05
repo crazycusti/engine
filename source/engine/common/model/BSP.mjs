@@ -1,6 +1,7 @@
 import { BaseMaterial } from '../../client/renderer/Materials.mjs';
 import { content } from '../../../shared/Defs.mjs';
 import { BaseModel } from './BaseModel.mjs';
+import { SkyRenderer } from '../../client/renderer/Sky.mjs';
 
 /** @typedef {import('../../../shared/Vector.mjs').default} Vector */
 /** @typedef {import('./BaseModel.mjs').Face} Face */
@@ -443,5 +444,13 @@ export class BrushModel extends BaseModel {
    */
   getFatPvsByPoint(point) {
     return Visibility.fromBrushModel(this, this.leafs[0].visofs).addFatPoint(point);
+  }
+
+  /**
+   * Will create a new sky renderer for this brush model, if supported.
+   * @returns {SkyRenderer|null} desired sky renderer
+   */
+  newSkyRenderer() {
+    return null;
   }
 };

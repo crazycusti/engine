@@ -20,6 +20,7 @@ import { Node, revealedVisibility } from '../common/model/BSP.mjs';
 import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { BaseMaterial } from './renderer/Materials.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
+import { SkyRenderer } from './renderer/Sky.mjs';
 
 let { CL, COM, Host, Mod, SCR, SV, Sys, V  } = registry;
 
@@ -1142,9 +1143,6 @@ R.CalculateTangentBitangents = function(cmds, cutoff) {
 
 // misc
 
-const solidskytexture = new GLTexture('r_solidsky', 128, 128);
-const alphaskytexture = new GLTexture('r_alphasky', 128, 128);
-
 R.InitTextures = function() {
   if (registry.isDedicatedServer) {
     return;
@@ -1179,10 +1177,6 @@ R.InitTextures = function() {
   R.notexture = GLTexture.Allocate('r_notexture', 16, 16, data);
   R.blacktexture = GLTexture.Allocate('r_blacktexture', 1, 1, new Uint8Array([0, 0, 0, 255]));
   R.flatnormalmap = GLTexture.Allocate('r_flatnormalmap', 1, 1, new Uint8Array([128, 128, 255, 255]));
-
-  // CR: this combination of texture modes make the sky look more crisp
-  alphaskytexture.lockTextureMode('GL_NEAREST');
-  solidskytexture.lockTextureMode('GL_LINEAR');
 
   R.deluxemap_texture = gl.createTexture();
   GL.Bind(0, R.deluxemap_texture);
@@ -1404,7 +1398,7 @@ R.Init = async function() {
     return new Float32Array(positions);
   })(), gl.STATIC_DRAW);
 
-  R.MakeSky();
+  R.ClearAll();
 };
 
 R.NewMapFog = function() {
@@ -1430,8 +1424,6 @@ R.NewMapFog = function() {
 };
 
 R.NewMap = function() {
-  R.ClearAll();
-
   R.BuildLightmaps();
 
   for (let i = 0; i <= R.dlightmaps_rgba.length; i++) {
@@ -1442,6 +1434,8 @@ R.NewMap = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
   R.NewMapFog();
+
+  R.MakeSky();
 };
 
 R.ClearAll = function() {
@@ -1465,6 +1459,7 @@ R.ClearAll = function() {
 
   R.ClearParticles();
   R.ClearDecals();
+  R.ClearSky();
 };
 
 // part
@@ -2376,203 +2371,33 @@ R.WarpScreen = function() {
 
 // warp
 
-/**
- * Procedurally generates a dome mesh for skybox rendering.
- *
- * Creates a partial hemisphere (dome) using a grid of triangles.
- * The dome is centered at the origin and extends from 0° to 90° in both
- * horizontal directions, covering one octant of a sphere.
- *
- * The mesh is rendered 8 times with different scale transforms to create
- * a complete spherical skybox (see DrawSkyBox for the octant rendering).
- *
- * Grid structure:
- * - 4 vertical segments (0-7 in steps of 2)
- * - 8 horizontal segments (0-8)
- * - Each grid cell becomes 2 triangles
- * - Plus a triangle fan at the top (zenith)
- * - Total: 180 vertices (60 triangles)
- */
-R.MakeSky = function() {
-  // Pre-compute sine values for angles from 0° to 90° in steps of 11.25° (π/16)
-  // These define the dome's curvature
-  const sin = Array.from({ length: 9 }, (_, i) =>
-    Number(Math.sin(i * Math.PI / 16).toFixed(6)),
-  );
-  let vecs = []; let i; let j;
+R.skyrenderer = /** @type {SkyRenderer} */ (null);
+R.drawsky = true;
 
-  // Build the dome mesh in 4 vertical segments
-  for (i = 0; i < 7; i += 2) {
-    // Triangle fan at the top (zenith) of this segment
-    // Connects the peak (0, 0, 1) to the top edge of the dome
-    vecs = vecs.concat(
-        [
-          0.0, 0.0, 1.0,                                          // Zenith point
-          sin[i + 2] * sin[1], sin[6 - i] * sin[1], sin[7],      // Edge point 1
-          sin[i] * sin[1], sin[8 - i] * sin[1], sin[7],          // Edge point 2
-        ]);
-
-    // Build the dome grid: 8 horizontal rings, each forming a strip of quads
-    // Each quad is split into 2 triangles
-    for (j = 0; j < 7; j++) {
-      // The vertices form a spherical coordinate grid:
-      // sin[i] controls the X/Y position (azimuth angle)
-      // sin[j] controls the Z height (elevation angle)
-      vecs = vecs.concat(
-          [
-            // Triangle 1 of the quad
-            sin[i] * sin[8 - j], sin[8 - i] * sin[8 - j], sin[j],           // Bottom-left
-            sin[i] * sin[7 - j], sin[8 - i] * sin[7 - j], sin[j + 1],       // Top-left
-            sin[i + 2] * sin[7 - j], sin[6 - i] * sin[7 - j], sin[j + 1],   // Top-right
-
-            // Triangle 2 of the quad
-            sin[i] * sin[8 - j], sin[8 - i] * sin[8 - j], sin[j],           // Bottom-left
-            sin[i + 2] * sin[7 - j], sin[6 - i] * sin[7 - j], sin[j + 1],   // Top-right
-            sin[i + 2] * sin[8 - j], sin[6 - i] * sin[8 - j], sin[j],       // Bottom-right
-          ]);
-    }
-  }
-
-  // Upload the dome mesh to GPU
-  R.skyvecs = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, R.skyvecs);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vecs), gl.STATIC_DRAW);
-};
-
-/**
- * Renders the skybox using a two-pass technique:
- * 1. First pass: Render sky surfaces to depth buffer only (stencil mask)
- * 2. Second pass: Render the actual skybox dome where the mask was written
- *
- * This ensures the sky only appears where sky-textured surfaces are visible,
- * not behind walls or geometry. The skybox itself is rendered 8 times (once
- * for each octant of the sphere) using a procedurally-generated dome mesh.
- */
 R.DrawSkyBox = function() {
-  if (R.drawsky !== true) {
+  if (!R.drawsky || !R.skyrenderer) {
     return;
   }
 
-  // === PASS 1: Sky Stencil Mask ===
-  // Disable color writes - we only want to mark the depth buffer where sky is visible
-  gl.colorMask(false, false, false, false);
-
-  const clmodel = CL.state.worldmodel;
-  let program = GL.UseProgram('sky-chain');
-  gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, clmodel.skychain);
-
-  // Render all visible sky surfaces from the BSP tree
-  // This writes to the depth buffer, creating a "stencil" of where sky should appear
-  for (let i = 0; i < clmodel.leafs.length; i++) {
-    const leaf = clmodel.leafs[i];
-    // Skip leaves that aren't visible or don't have sky surfaces
-    if (leaf.visframe !== R.visframecount || leaf.skychain === leaf.waterchain) {
-      continue;
-    }
-    // Frustum culling
-    if (R.CullBox(leaf.mins, leaf.maxs)) {
-      continue;
-    }
-    // Draw all sky surface commands in this leaf
-    for (let j = leaf.skychain; j < leaf.waterchain; j++) {
-      const cmds = leaf.cmds[j];
-      gl.drawArrays(gl.TRIANGLES, cmds[0], cmds[1]);
-    }
-  }
-
-  // Re-enable color writes for the actual sky rendering
-  gl.colorMask(true, true, true, true);
-
-  // === PASS 2: Render Skybox Dome ===
-  // Configure depth testing: only draw sky where depth > existing (i.e., behind everything)
-  gl.depthFunc(gl.GREATER);
-  gl.depthMask(false); // Don't write to depth buffer
-  gl.disable(gl.CULL_FACE); // Need to see both sides of the dome
-
-  // Set up the sky shader with scrolling textures
-  program = GL.UseProgram('sky');
-  // Two scrolling layers at different speeds for parallax effect
-  gl.uniform2f(program.uTime, (Host.realtime * 0.125) % 1.0, (Host.realtime * 0.03125) % 1.0);
-  solidskytexture.bind(program.tSolid); // Base sky layer
-  alphaskytexture.bind(program.tAlpha); // Overlay layer (e.g., clouds)
-
-  // Bind the procedurally-generated dome mesh (created in MakeSky)
-  gl.bindBuffer(gl.ARRAY_BUFFER, R.skyvecs);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, 0);
-
-  // Render the sky dome 8 times - once for each octant of a sphere
-  // The uScale uniform transforms the base dome mesh to cover different octants
-  // This creates a full spherical skybox from a single dome mesh
-
-  // Octants with positive X
-  gl.uniform3f(program.uScale, 2.0, -2.0, 1.0);  // +X, -Y, +Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-  gl.uniform3f(program.uScale, 2.0, -2.0, -1.0); // +X, -Y, -Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-
-  gl.uniform3f(program.uScale, 2.0, 2.0, 1.0);   // +X, +Y, +Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-  gl.uniform3f(program.uScale, 2.0, 2.0, -1.0);  // +X, +Y, -Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-
-  // Octants with negative X
-  gl.uniform3f(program.uScale, -2.0, -2.0, 1.0);  // -X, -Y, +Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-  gl.uniform3f(program.uScale, -2.0, -2.0, -1.0); // -X, -Y, -Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-
-  gl.uniform3f(program.uScale, -2.0, 2.0, 1.0);   // -X, +Y, +Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-  gl.uniform3f(program.uScale, -2.0, 2.0, -1.0);  // -X, +Y, -Z
-  gl.drawArrays(gl.TRIANGLES, 0, 180);
-
-  // Restore default GL state
-  gl.enable(gl.CULL_FACE);
-  gl.depthMask(true);
-  gl.depthFunc(gl.LESS);
+  R.skyrenderer.render();
 };
 
-/**
- * Initializes the two-layer skybox textures from Quake's sky texture format.
- *
- * Quake sky textures are 256x128 8-bit indexed images split into two layers:
- * - Left half (0-127): Alpha layer with transparency (clouds/overlay)
- * - Right half (128-255): Solid background layer
- *
- * Each layer is extracted as a 128x128 texture and converted from 8-bit
- * palette indices to 32-bit RGBA. The layers scroll at different speeds
- * in the shader to create a parallax depth effect.
- * @param {Uint8Array} src - 256x128 8-bit indexed sky texture data
- */
-R.InitSky = function(src) { // TODO: respect palette found in WAD3 texture format if available
-  const trans = new ArrayBuffer(65536); // 128x128x4 bytes
-  const trans32 = new Uint32Array(trans);
+R.MakeSky = function() {
+  R.skyrenderer = CL.state.worldmodel.newSkyRenderer();
 
-  // Extract the SOLID (background) layer from the right half of the texture
-  for (let i = 0; i < 128; i++) {
-    for (let j = 0; j < 128; j++) {
-      // Source: right half starts at offset 128 in each row (256-pixel wide row)
-      // Destination: 128x128 texture
-      trans32[(i << 7) + j] = COM.LittleLong(W.d_8to24table[src[(i << 8) + j + 128]] + 0xff000000);
-    }
+  if (!R.skyrenderer) {
+    return;
   }
 
-  solidskytexture.upload(new Uint8Array(trans));
-
-  // Extract the ALPHA (overlay) layer from the left half of the texture
-  for (let i = 0; i < 128; i++) {
-    for (let j = 0; j < 128; j++) {
-      const p = (i << 8) + j; // Left half of the 256-wide texture
-      if (src[p] !== 0) {
-        // Non-zero palette index: convert to RGBA with full opacity
-        trans32[(i << 7) + j] = COM.LittleLong(W.d_8to24table[src[p]] + 0xff000000);
-      } else {
-        // Palette index 0: treat as transparent (for clouds)
-        trans32[(i << 7) + j] = 0;
-      }
-    }
-  }
-
-  alphaskytexture.upload(new Uint8Array(trans));
+  R.skyrenderer.init();
 };
+
+R.ClearSky = function() {
+  if (!R.skyrenderer) {
+    return;
+  }
+
+  R.skyrenderer.shutdown();
+  R.skyrenderer = null;
+};
+

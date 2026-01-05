@@ -2,7 +2,7 @@ import Vector from '../../../shared/Vector.mjs';
 import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
-import { BaseMaterial, materialFlags } from './Materials.mjs';
+import { materialFlags } from './Materials.mjs';
 
 let { CL, Host, R } = registry;
 

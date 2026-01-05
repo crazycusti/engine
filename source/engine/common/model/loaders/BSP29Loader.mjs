@@ -1,6 +1,6 @@
 import Vector from '../../../../shared/Vector.mjs';
 import Q from '../../../../shared/Q.mjs';
-import { GLTexture } from '../../../client/GL.mjs';
+import GL, { GLTexture } from '../../../client/GL.mjs';
 import W, { readWad3Texture, translateIndexToRGBA } from '../../W.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
@@ -9,6 +9,7 @@ import { ModelLoader } from '../ModelLoader.mjs';
 import { BrushModel, Node } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
 import { materialFlags, noTextureMaterial, PBRMaterial, QuakeMaterial } from '../../../client/renderer/Materials.mjs';
+import { Quake1Sky, SimpleSkyBox } from '../../../client/renderer/Sky.mjs';
 
 // Get registry references (will be set by eventBus)
 let { COM, Con, Mod, R } = registry;
@@ -108,6 +109,8 @@ export class BSP29Loader extends ModelLoader {
       await this._loadExternalLighting(loadmodel, name);
     }
 
+    await this._loadSkybox(loadmodel);
+
     // Calculate bounding radius
     this._calculateRadius(loadmodel);
 
@@ -115,6 +118,30 @@ export class BSP29Loader extends ModelLoader {
     loadmodel.checksum = CRC16CCITT.Block(new Uint8Array(buffer));
 
     return loadmodel;
+  }
+
+  async _loadSkybox(loadmodel) {
+    const skyname = loadmodel.worldspawnInfo.skyname;
+
+    if (!skyname) {
+      return;
+    }
+
+    const [front, back, left, right, up, down] = await Promise.all([
+      GLTexture.FromImageFile(`gfx/env/${skyname}ft.png`),
+      GLTexture.FromImageFile(`gfx/env/${skyname}bk.png`),
+      GLTexture.FromImageFile(`gfx/env/${skyname}lf.png`),
+      GLTexture.FromImageFile(`gfx/env/${skyname}rt.png`),
+      GLTexture.FromImageFile(`gfx/env/${skyname}up.png`),
+      GLTexture.FromImageFile(`gfx/env/${skyname}dn.png`),
+    ]);
+
+    // CR: unholy yet convenient hack to pass sky texture data to SkyRenderer
+    loadmodel.newSkyRenderer = function() {
+      const skyrenderer = new SimpleSkyBox(this);
+      skyrenderer.setSkyTextures(front, back, left, right, up, down);
+      return skyrenderer;
+    };
   }
 
   /**
@@ -182,8 +209,15 @@ export class BSP29Loader extends ModelLoader {
       // Load texture data (skip for dedicated server)
       if (!registry.isDedicatedServer) {
         if (tx.name.substring(0, 3).toLowerCase() === 'sky') {
-          R.InitSky(new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), 32768));
-          R.skytexturenum = i;
+          const skyTexture = new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), 32768);
+
+          // CR: unholy yet convenient hack to pass sky texture data to SkyRenderer
+          loadmodel.newSkyRenderer = function() {
+            const skyrenderer = new Quake1Sky(this);
+            skyrenderer.setSkyTexture(skyTexture);
+            return skyrenderer;
+          };
+
           tx.flags |= materialFlags.MF_SKY;
         } else {
           // Try loading WAD3 texture

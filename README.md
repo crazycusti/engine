@@ -21,6 +21,7 @@ Added features include but not limited to:
   * `LIGHTGRID_OCTREE`: used for smoothly lighting dynamically moving objects.
 * Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
+* Static skybox support (like in Half-Life 1 and Quake 2)
 
 Yet, there is still plenty to do.
 
@@ -145,3 +146,6 @@ There are two main entrypoints:
 
 * https://github.com/lrusso/Quake1 (original port to the browser)
 * https://github.com/id-Software/Quake (QuakeWorld)
+* https://github.com/id-Software/Quake-2 (Quake 2)
+* https://github.com/andrei-drexler/ironwail (implementation details of some new features)
+* https://github.com/fte-team/fteqw (understanding the BSPX features in detail)

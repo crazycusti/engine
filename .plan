@@ -138,6 +138,10 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-01-06
+
+- added Half-Life 1 / Quake 2 style skybox support
+
 ### 2025-12-28
 
 - added simple decal support, but a more extended support would be:
