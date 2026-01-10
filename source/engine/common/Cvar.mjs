@@ -347,6 +347,42 @@ export default class Cvar {
     Con.Print(`"${name}" toggled to "${variable.string}"\n`);
   }
 
+  static Cvarlist_f(start) {
+    const names = Object.keys(Cvar._vars).sort();
+
+    for (const name of names) {
+      const v = Cvar._vars[name];
+
+      if (start !== undefined && !name.startsWith(start)) {
+        continue;
+      }
+
+      const flags = new Array(5).fill(' ');
+
+      if (v.flags & Cvar.FLAG.ARCHIVE) {
+        flags[0] = 'A';
+      }
+
+      if (v.flags & Cvar.FLAG.GAME) {
+        flags[1] = 'G';
+      }
+
+      if (v.flags & Cvar.FLAG.SERVER) {
+        flags[2] = 'S';
+      }
+
+      if (v.flags & Cvar.FLAG.READONLY) {
+        flags[3] = 'R';
+      }
+
+      if (v.flags & Cvar.FLAG.CHEAT) {
+        flags[4] = 'C';
+      }
+
+      Con.Print(`${v.name.padEnd(24)} | ${flags.join('')} | ${v.string.padEnd(16)} | ${v.description || ''}\n`);
+    }
+  }
+
   /**
    * Initializes the Cvar system.
    */
@@ -354,6 +390,7 @@ export default class Cvar {
     Cmd.AddCommand('set', Cvar.Set_f);
     Cmd.AddCommand('seta', Cvar.Seta_f);
     Cmd.AddCommand('toggle', Cvar.Toggle_f);
+    Cmd.AddCommand('cvarlist', Cvar.Cvarlist_f);
   }
 
   /**
