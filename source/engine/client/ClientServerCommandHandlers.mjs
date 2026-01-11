@@ -7,14 +7,12 @@ import { gameCapabilities } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { ScoreSlot } from './ClientState.mjs';
 
 /** @typedef {typeof import('./CL.mjs').default} ClientLayer */
 /** @typedef {import('./ClientMessages.mjs').ClientMessages} ClientMessages */
 
 let { CL, Con, SCR, S, R, V, Host, SV, NET, Mod, PR, COM } = registry;
-
-/** Tracks entity updates during message parsing */
-let entitiesReceived = 0;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -31,26 +29,8 @@ eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
 });
 
-/**
- * Creates a score slot wrapper that keeps the entity getter wired back to the client state.
- * @param {number} index Player slot index.
- * @returns {{name: string, entertime: number, frags: number, colors: number, ping: number, readonly isActive: boolean, readonly entity: import('./ClientEntities.mjs').ClientEdict}} Scoreboard slot view.
- */
-function createScoreSlot(index) {
-  return {
-    name: '',
-    entertime: 0.0,
-    frags: 0,
-    colors: 0,
-    ping: 0,
-    get isActive() {
-      return this.name !== '';
-    },
-    get entity() {
-      return CL.state.clientEntities.getEntity(index + 1);
-    },
-  };
-}
+/** Tracks entity updates during message parsing */
+let entitiesReceived = 0;
 
 /**
  * Parses the serverdata payload and prepares the client for the new map.
@@ -107,7 +87,7 @@ function parseServerData() {
   CL.state.scores.length = 0;
 
   for (let i = 0; i < CL.state.maxclients; i++) {
-    CL.state.scores[i] = createScoreSlot(i);
+    CL.state.scores[i] = new ScoreSlot(i);
   }
 
   CL.state.levelname = MSG.ReadString();
@@ -342,6 +322,7 @@ function parseServerCvars() {
       eventBus.publish('client.server-info.updated', name, value);
     }
 
+    // reset cheat cvars when sv_cheats is turned off
     if (name === 'sv_cheats' && value === '0') {
       CL.ResetCheatCvars();
     }

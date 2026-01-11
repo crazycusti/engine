@@ -283,6 +283,10 @@ export class Quake1Sky extends SkyRenderer {
   }
 };
 
+/**
+ * GoldSrc style simple skybox rendering.
+ * Accepts 6 separate textures for each face of the skybox cube.
+ */
 export class SimpleSkyBox extends SkyRenderer {
   #front = /** @type {GLTexture|null} */ (null);
   #back = /** @type {GLTexture|null} */ (null);

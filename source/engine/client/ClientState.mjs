@@ -3,10 +3,16 @@ import { QSocket } from '../network/NetworkDrivers.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
 import Vector from '../../shared/Vector.mjs';
-import { EventBus, eventBus } from '../registry.mjs';
+import { EventBus, eventBus, registry } from '../registry.mjs';
 import ClientEntities, { ClientEdict } from './ClientEntities.mjs';
 import { ClientMessages } from './ClientMessages.mjs';
 import { BrushModel } from '../common/Mod.mjs';
+
+let { CL } = registry;
+
+eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
+});
 
 const clientGameEvents = [
   'vid.resize',
@@ -100,6 +106,26 @@ class ClientStaticState {
   }
 }
 
+export class ScoreSlot {
+  constructor(index) {
+    this.index = index;
+  }
+
+  name = '';
+  entertime = 0.0;
+  frags = 0;
+  colors = 0;
+  ping = 0;
+
+  get isActive() {
+    return this.name !== '';
+  }
+
+  get entity() {
+    return CL.state.clientEntities.getEntity(this.index + 1);
+  }
+}
+
 class ClientRuntimeState {
   clientEntities = new ClientEntities();
   clientMessages = new ClientMessages();
@@ -139,6 +165,7 @@ class ClientRuntimeState {
   gametype = 0;
   onground = false;
   maxclients = 1;
+  /** @type {ScoreSlot[]} */
   scores = [];
   /** @type {BrushModel|null} */
   worldmodel = null;
