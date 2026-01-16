@@ -22,11 +22,10 @@ import { BaseMaterial } from './renderer/Materials.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
 
-let { CL, COM, Host, Mod, SCR, SV, Sys, V  } = registry;
+let { CL, Host, Mod, SCR, SV, Sys, V  } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
-  COM = registry.COM;
   Host = registry.Host;
   Mod = registry.Mod;
   SCR = registry.SCR;

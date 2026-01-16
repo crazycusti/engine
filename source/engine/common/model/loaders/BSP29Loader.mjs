@@ -1,6 +1,6 @@
 import Vector from '../../../../shared/Vector.mjs';
 import Q from '../../../../shared/Q.mjs';
-import GL, { GLTexture } from '../../../client/GL.mjs';
+import { GLTexture } from '../../../client/GL.mjs';
 import W, { readWad3Texture, translateIndexToRGBA } from '../../W.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
@@ -12,10 +12,10 @@ import { materialFlags, noTextureMaterial, PBRMaterial, QuakeMaterial } from '..
 import { Quake1Sky, SimpleSkyBox } from '../../../client/renderer/Sky.mjs';
 
 // Get registry references (will be set by eventBus)
-let { COM, Con, Mod, R } = registry;
+let { COM, Con, Mod } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ COM, Con, Mod, R } = registry);
+  ({ COM, Con, Mod } = registry);
 });
 
 /**
@@ -121,6 +121,10 @@ export class BSP29Loader extends ModelLoader {
   }
 
   async _loadSkybox(loadmodel) {
+    if (registry.isDedicatedServer) {
+      return;
+    }
+
     const skyname = loadmodel.worldspawnInfo.skyname;
 
     if (!skyname) {
@@ -276,6 +280,10 @@ export class BSP29Loader extends ModelLoader {
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
   async _loadMaterials(loadmodel) {
+    if (registry.isDedicatedServer) {
+      return;
+    }
+
     const matfile = await COM.LoadTextFile(loadmodel.name.replace(/\.bsp$/i, '.qsmat.json'));
 
     if (!matfile) {
@@ -646,9 +654,9 @@ export class BSP29Loader extends ModelLoader {
       out.texturemins = [Math.floor(mins[0] / lmscale) * lmscale, Math.floor(mins[1] / lmscale) * lmscale];
       out.extents = [Math.ceil(maxs[0] / lmscale) * lmscale - out.texturemins[0], Math.ceil(maxs[1] / lmscale) * lmscale - out.texturemins[1]];
 
-      if (loadmodel.textures[tex.texture].turbulent === true) {
+      if (loadmodel.textures[tex.texture].flags & materialFlags.MF_TURBULENT) {
         out.turbulent = true;
-      } else if (loadmodel.textures[tex.texture].sky === true) {
+      } else if (loadmodel.textures[tex.texture].flags & materialFlags.MF_SKY) {
         out.sky = true;
       }
 

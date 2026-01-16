@@ -3,16 +3,9 @@ import Q from '../../../../shared/Q.mjs';
 import GL, { GLTexture, resampleTexture8 } from '../../../client/GL.mjs';
 import W, { translateIndexToRGBA } from '../../W.mjs';
 import { CRC16CCITT } from '../../CRC.mjs';
-import { eventBus, registry } from '../../../registry.mjs';
+import { registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { AliasModel } from '../AliasModel.mjs';
-
-// Get registry references (will be set by eventBus)
-let { R } = registry;
-
-eventBus.subscribe('registry.frozen', () => {
-  ({ R } = registry);
-});
 
 export const avertexnormals = [
   new Vector(-0.525731, 0.0, 0.850651),

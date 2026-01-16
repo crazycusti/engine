@@ -1,6 +1,6 @@
 /* global Buffer */
 
-import { promises as fsPromises, openSync, readSync, closeSync, existsSync, writeFileSync, constants, writeFile } from 'fs';
+import { promises as fsPromises, openSync, readSync, closeSync, existsSync, writeFileSync, constants } from 'fs';
 
 import Q from '../../shared/Q.mjs';
 import { CRC16CCITT as CRC } from '../common/CRC.mjs';
