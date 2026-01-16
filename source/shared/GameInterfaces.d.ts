@@ -2,6 +2,7 @@ import { BaseClientEdictHandler } from "./ClientEdict.mjs";
 import { ClientEngineAPI, ServerEngineAPI } from "../engine/common/GameAPIs.mjs";
 import { ServerEdict } from "../engine/server/Edict.mjs";
 import Vector from "./Vector.mjs";
+import { StartGameInterface } from "../engine/client/ClientLifecycle.mjs";
 
 export type ClientEngineAPI = Readonly<typeof ClientEngineAPI>;
 export type ServerEngineAPI = Readonly<typeof ServerEngineAPI>;
@@ -74,10 +75,15 @@ export interface ClientGameInterface {
 
   // client event handling methods and state change hooks
   handleClientEvent(code: number, ...args: SerializableType[]): void;
-  updateRefDef(refdef: RefDef): unknown;
+  updateRefDef(refdef: RefDef): void;
 
-  static GetClientEdictHandler(classname: string): BaseClientEdictHandler
+  // optional interface for menu integration (NOTE: object to change)
+  static GetStartGameInterface(engineAPI: ClientEngineAPI): StartGameInterface | null;
 
+  // client edict handler retrieval
+  static GetClientEdictHandler(classname: string): typeof BaseClientEdictHandler | null;
+
+  // lifecycle methods
   static Init(engineAPI: ClientEngineAPI): void;
   static Shutdown(): void;
 
@@ -87,6 +93,20 @@ export interface ClientGameInterface {
 export interface PlayerEntitySpawnParamsDynamic {
   saveSpawnParameters(): string;
   restoreSpawnParameters(data: string): void;
+};
+
+export interface ServerInfoField {
+  name: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "maplist" | "enum";
+  enumValues?: Record<string, string | number>;
+};
+
+export interface MapDetails {
+  name: string;
+  label: string;
+  maxplayers: number;
+  pictures: string[];
 };
 
 export interface ServerGameInterface {
@@ -117,6 +137,9 @@ export interface ServerGameInterface {
 
   serialize(): any;
   deserialize(data: any): void;
+
+  static GetServerInfoFields(): ServerInfoField[];
+  static GetMapList(): MapDetails[];
 
   static Init(ServerEngineAPI: ServerEngineAPI): void;
   static Shutdown(): void;

@@ -1,3 +1,5 @@
+import { registry } from '../../../registry.mjs';
+
 import Vector from '../../../../shared/Vector.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
 import { MeshModel } from '../MeshModel.mjs';
@@ -91,11 +93,13 @@ export class WavefrontOBJLoader extends ModelLoader {
     const baseName = name.replace(/\.obj$/i, '.png').replace(/^models\//i, 'textures/');
     loadmodel.textureName = baseName;
 
-    const mat = new PBRMaterial(baseName, 256, 256); // Placeholder material
-    mat.diffuse = await GLTexture.FromImageFile(baseName);
-    mat.width = mat.diffuse.width;
-    mat.height = mat.diffuse.height;
-    loadmodel.texture = mat;
+    if (!registry.isDedicatedServer) {
+      const mat = new PBRMaterial(baseName, 256, 256); // Placeholder material
+      mat.diffuse = await GLTexture.FromImageFile(baseName);
+      mat.width = mat.diffuse.width;
+      mat.height = mat.diffuse.height;
+      loadmodel.texture = mat;
+    }
 
     loadmodel.needload = false;
 

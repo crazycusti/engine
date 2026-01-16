@@ -1062,6 +1062,10 @@ Host.Name_f = function(...names) { // signon 2, step 1
     return;
   }
 
+  if (!this.client) {
+    return;
+  }
+
   const initialNewName = newName;
   let newNameCounter = 2;
 
@@ -1070,15 +1074,15 @@ Host.Name_f = function(...names) { // signon 2, step 1
     newName = `${initialNewName}${newNameCounter++}`;
   }
 
-  const name = Host.client.name;
+  const name = this.client.name;
   if (registry.isDedicatedServer && name && (name.length !== 0) && (name !== 'unconnected') && (name !== newName)) {
     Con.Print(name + ' renamed to ' + newName + '\n');
   }
 
-  Host.client.name = newName;
+  this.client.name = newName;
   const msg = SV.server.reliable_datagram;
   MSG.WriteByte(msg, Protocol.svc.updatename);
-  MSG.WriteByte(msg, Host.client.num);
+  MSG.WriteByte(msg, this.client.num);
   MSG.WriteString(msg, newName);
 };
 

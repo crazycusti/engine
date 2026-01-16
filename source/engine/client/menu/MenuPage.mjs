@@ -28,6 +28,12 @@ export class MenuPage {
   }
 
   /**
+   * Initialize the menu page (called once when menu system is set up)
+   */
+  async init() {
+  }
+
+  /**
    * Draw the menu page
    */
   draw() {
@@ -35,6 +41,9 @@ export class MenuPage {
     if (this.titlePic) {
       const titleX = 160 - Math.floor(this.titlePic.width / 2);
       M.DrawPic(titleX, 4, this.titlePic);
+    } else if (this.title) {
+      const titleX = 160 - (this.title.length * 8) / 2;
+      M.Print(titleX, 8, this.title);
     }
 
     // Custom drawing (for special menus)

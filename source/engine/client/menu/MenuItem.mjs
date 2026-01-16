@@ -48,12 +48,16 @@ export class MenuItem {
   /**
    * Called when item becomes active (e.g., menu opens)
    */
-  activate() { }
+  activate() {
+    // Override in subclasses
+  }
 
   /**
    * Called when item becomes inactive (e.g., menu closes)
    */
-  deactivate() { }
+  deactivate() {
+    // Override in subclasses
+  }
 
   /**
    * Get the height this item needs for rendering
@@ -344,7 +348,7 @@ export class Textbox extends MenuItem {
   draw(x, y, focused) {
     if (!this.visible) {
       return;
-  }
+    }
 
     M.Print(x, y, this.label);
 
@@ -462,18 +466,11 @@ export class Image extends MenuItem {
   }
 }
 
-/**
- * Custom widget - for special rendering like player color picker
- */
-export class CustomWidget extends MenuItem {
-  constructor(config) {
-    super(config);
-    this.drawFn = config.draw || (() => { });
-    this.inputFn = config.handleInput || (() => false);
-    this.activateFn = config.activate || (() => { });
-    this.deactivateFn = config.deactivate || (() => { });
-    this.heightFn = config.getHeight || (() => 8);
-    this.state = config.initialState || {};
+export class PlayerSkin extends MenuItem {
+  value = 0;
+
+  constructor() {
+    super({ focusable: false });
   }
 
   draw(x, y, focused) {
@@ -481,26 +478,16 @@ export class CustomWidget extends MenuItem {
       return;
     }
 
-    this.drawFn(x, y, focused, this.state);
-  }
+    const top = (this.value >> 4) & 0x0F;
+    const bottom = this.value & 0x0F;
 
-  handleInput(key) {
-    if (!this.enabled) {
-      return false;
-    }
-
-    return this.inputFn(key, this.state);
-  }
-
-  activate() {
-    this.activateFn(this.state);
-  }
-
-  deactivate() {
-    this.deactivateFn(this.state);
+    M.DrawPic(x, y, M.bigbox);
+    M.DrawPicTranslate(x + 12, y + 8, M.menuplyr,
+      (top << 4) + (top >= 8 ? 4 : 11),
+      (bottom << 4) + (bottom >= 8 ? 4 : 11));
   }
 
   getHeight() {
-    return this.heightFn(this.state);
+    return M.bigbox.height || 0;
   }
-}
+};

@@ -17,7 +17,30 @@ eventBus.subscribe('registry.frozen', () => {
   S = registry.S;
 });
 
+/** The client game can tell the menu what to do when a new game is requested. */
+export class StartGameInterface {
+  startSingleplayerGame() {
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  startMultiplayerGame(/** @type {string} */ mapname) {
+  }
+};
+
+/** Quake 1 default start game entries */
+export class DefaultStartGameFunctions extends StartGameInterface {
+  startSingleplayerGame() {
+    Cmd.ExecuteString('map start');
+  }
+
+  startMultiplayerGame(/** @type {string} */ mapname) {
+    Cmd.ExecuteString(`map ${mapname}`);
+  }
+};
+
 export default class ClientLifecycle {
+  static startGame = /** @type {StartGameInterface} */ (null);
+
   static async init() {
     CL.ClearState();
     ClientInput.Init();
@@ -44,6 +67,12 @@ export default class ClientLifecycle {
 
     if (PR.QuakeJS.ClientGameAPI) {
       PR.QuakeJS.ClientGameAPI.Init(ClientEngineAPI);
+
+      this.startGame = PR.QuakeJS.ClientGameAPI.GetStartGameInterface(ClientEngineAPI);
+    }
+
+    if (!this.startGame) {
+      this.startGame = new DefaultStartGameFunctions();
     }
 
     CL.gameCapabilities = PR.QuakeJS.identification.capabilities;

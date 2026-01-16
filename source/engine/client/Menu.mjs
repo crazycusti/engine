@@ -2,7 +2,9 @@ import { K } from '../../shared/Keys.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import ClientLifecycle from './ClientLifecycle.mjs';
 import { GLTexture } from './GL.mjs';
+import MultiplayerMainMenu from './menu/Multiplayer.mjs';
 import VID from './VID.mjs';
 
 let { CL, COM, Con, Draw, Host, Key, S, SCR, SV, V } = registry;
@@ -38,7 +40,7 @@ M.state =
   quit: 9,
 
   alert: 10,
-  test: 11,
+  launch_server: 11,
 
   value: 0,
 };
@@ -227,17 +229,18 @@ M.SinglePlayer_Key = function (k) {
       M.entersound = true;
       switch (M.singleplayer_cursor) {
         case 0:
-          if (SV.server.active === true) {
-            Cmd.text += 'disconnect\n';
+          if (SV.server.active) {
+            Cmd.ExecuteString('disconnect');
           }
           Key.dest.value = Key.dest.game;
-          Cmd.text += 'exec start.cfg\n';
+          ClientLifecycle.startGame.startSingleplayerGame();
           return;
         case 1:
           M.Menu_Load_f();
           return;
         case 2:
           M.Menu_Save_f();
+          return;
       }
   }
 };
@@ -415,7 +418,7 @@ M.MultiPlayer_Draw = function () {
   M.Print(64, 96 - y0, 'Shirt color');
   M.Print(64, 120 - y0, 'Pants color');
 
-  const label = CL.cls.state !== CL.active.connected ? 'Join Game!' : 'Accept Changes';
+  const label = CL.cls.state !== CL.active.connected ? 'Join Game' : 'Accept Changes';
 
   M.DrawTextBox(64, 148 - y0, label.length, 1);
   M.PrintWhite(72, 156 - y0, label);
@@ -503,8 +506,9 @@ M.MultiPlayer_Key = function (k) {
           S.LocalSound(M.sfx_menu2);
 
           if (CL.cls.state !== CL.active.connected) {
-            M.CloseMenu();
-            Cmd.text += 'connect "' + M.multiplayer_joinname + '"\n';
+            // M.CloseMenu();
+            // Cmd.text += 'connect "' + M.multiplayer_joinname + '"\n';
+            M.Menu_Launch_Server_f();
             return;
           }
 
@@ -957,32 +961,32 @@ M.Alert_Key = function (k) {
   }
 };
 
-const testMenu = null;
+const launchServerMenu = new MultiplayerMainMenu();
 
-M.Test_Draw = function () {
-  testMenu.draw();
+M.Launch_Server_Draw = function () {
+  launchServerMenu.draw();
 };
 
-M.Test_Key = function (k) {
+M.Launch_Server_Key = function (k) {
   if (k === K.ESCAPE) {
-    testMenu.deactivate();
+    launchServerMenu.deactivate();
     M.CloseMenu();
     return;
   }
 
-  testMenu.handleInput(k);
+  launchServerMenu.handleInput(k);
 };
 
-M.Menu_Test_f = function () {
-  if (M.state.value === M.state.test) {
+M.Menu_Launch_Server_f = function () {
+  if (M.state.value === M.state.launch_server) {
     return;
   }
   M.wasInMenus = (Key.dest.value === Key.dest.menu);
   Key.dest.value = Key.dest.menu;
-  M.state.value = M.state.test;
+  M.state.value = M.state.launch_server;
   M.entersound = true;
 
-  testMenu.activate();
+  launchServerMenu.activate();
 };
 
 M.Quit_Draw = function () {
@@ -1030,7 +1034,7 @@ M.Init = async function () {
   Cmd.AddCommand('menu_keys', M.Menu_Keys_f);
   Cmd.AddCommand('help', M.Menu_Help_f);
   Cmd.AddCommand('menu_quit', M.Menu_Quit_f);
-  Cmd.AddCommand('menu_test', M.Menu_Test_f);
+  Cmd.AddCommand('menu_server_launch', M.Menu_Launch_Server_f);
 
   M.sfx_menu1 = S.PrecacheSound('misc/menu1.wav');
   M.sfx_menu2 = S.PrecacheSound('misc/menu2.wav');
@@ -1110,8 +1114,10 @@ M.Init = async function () {
     Draw.LoadPicFromLumpDeferred('help5'),
   ];
 
+  await launchServerMenu.init();
+
   // always close the menu when a connection progresses
-  eventBus.subscribe('client.signon', (signon) => {
+  eventBus.subscribe('client.signon', () => {
     M.CloseMenu();
   });
 };
@@ -1158,8 +1164,8 @@ M.Draw = function () {
     case M.state.alert:
       M.Alert_Draw();
       break;
-    case M.state.test:
-      M.Test_Draw();
+    case M.state.launch_server:
+      M.Launch_Server_Draw();
       break;
   }
   if (M.entersound === true) {
@@ -1200,8 +1206,8 @@ M.Keydown = function (key) {
     case M.state.alert:
       M.Alert_Key(key);
       return;
-    case M.state.test:
-      M.Test_Key(key);
+    case M.state.launch_server:
+      M.Launch_Server_Key(key);
       return;
   }
 };

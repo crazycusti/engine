@@ -275,7 +275,7 @@ export class GLTexture {
 
   /**
    * Binds the texture.
-   * @param {number} target texture target (0-7)
+   * @param {number} target texture target (0-31)
    * @param {boolean} flushStream flush the stream before binding
    * @returns {GLTexture} this
    */

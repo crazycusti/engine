@@ -163,7 +163,7 @@ export default class NodeCOM extends COM {
     const filepath = `data/${this.searchpaths[this.searchpaths.length - 1].filename}/${filename.toLowerCase()}`;
 
     try {
-      await writeFile(filepath, data);
+      await fsPromises.writeFile(filepath, data);
     } catch (e) {
       Sys.Print('COM.WriteFile: failed on ' + filename + ', ' + e.message + '\n');
       return false;
