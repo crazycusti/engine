@@ -9,6 +9,8 @@ eventBus.subscribe('registry.frozen', () => {
   ({ M, PR } = registry);
 });
 
+// CR: this whole menu is heavily WIP
+
 // Menu (not connected)
 // - player profile
 // - list of servers
@@ -69,17 +71,79 @@ export default class MultiplayerMainMenu extends MenuPage {
 
     this.items.push(new Spacer());
 
-    if (registry.urlFns.signalingURL) {
-      this.items.push(new Label({ label: 'Join Game:' }));
+    this.staticItemCount = this.items.length;
+  }
 
-      this.items.push(new Action({
-        label: 'Find Servers',
-        action() {
-          const url = new URL(registry.urlFns.signalingURL());
-          url.pathname = '/';
-          window.open(url, '_blank');
-        },
-      }));
+  activate() {
+    super.activate();
+    if (registry.urlFns?.signalingURL) {
+      void this.refreshSessions();
+    }
+  }
+
+  #addRefreshSessionsButton() {
+    this.items.push(new Spacer());
+    this.items.push(new Action({
+      label: 'Refresh Sessions',
+      action: async () => {
+        await this.refreshSessions();
+      },
+    }));
+  }
+
+  async refreshSessions() {
+    // Reset to static items
+    if (this.staticItemCount !== undefined && this.items.length > this.staticItemCount) {
+      // Clean up previous dynamic items
+      this.items.length = this.staticItemCount;
+    }
+
+    this.items.push(new Label({ label: 'Finding sessions...' }));
+
+    try {
+      const signalingUrl = new URL(registry.urlFns.signalingURL());
+      const protocol = signalingUrl.protocol === 'wss:' ? 'https:' : 'http:';
+      const url = `${protocol}//${signalingUrl.host}/list-servers`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      // Remove "Finding sessions..."
+      this.items.length = 3;
+      this.items.push(new Spacer());
+      this.items.push(new Label({ label: 'Online Sessions:' }));
+
+      if (!data.servers || data.servers.length === 0) {
+        this.items.push(new Label({ label: 'No sessions found.' }));
+        this.#addRefreshSessionsButton();
+        return;
+      }
+
+      for (const session of data.servers) {
+        const info = session.serverInfo || {};
+        // const hostname = info.hostname || 'Unknown Server';
+        const map = info.map || '?';
+        const players = `${info.currentPlayers ?? 0}/${info.maxPlayers ?? 0}`;
+
+        this.items.push(new Action({
+          label: `${map} near ${[info.colo || null, info.country].filter(Boolean).join(', ')} [${players}]`,
+          action() {
+            M.CloseMenu();
+            Cmd.ExecuteString(`connect webrtc://${session.sessionId}`);
+          },
+        }));
+      }
+
+      this.#addRefreshSessionsButton();
+    } catch (e) {
+      // Remove loading indicator if present
+      const lastItem = this.items[this.items.length - 1];
+      if (lastItem && lastItem.label === 'Finding sessions...') {
+        this.items.length = 4;
+      }
+      this.items.push(new Label({ label: 'Unable to fetch sessions' }));
+      this.#addRefreshSessionsButton();
+      console.error('Failed to fetch sessions:', e);
     }
   }
 
