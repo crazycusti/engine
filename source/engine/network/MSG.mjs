@@ -160,7 +160,7 @@ export class SzBuffer {
   }
 
   writeCoord(f) {
-    this.writeShort(f * 8.0);
+    this.writeLong(f * 8.0);
   }
 
   writeCoordVector(vec) {
@@ -170,7 +170,7 @@ export class SzBuffer {
   }
 
   writeAngle(f) {
-    this.writeByte((f * (256.0 / 360.0)) & 255);
+    this.writeShort((f / 360.0 * 32768.0) & 65535);
   }
 
   writeAngleVector(vec) {
@@ -263,7 +263,7 @@ export class SzBuffer {
   }
 
   readCoord() {
-    return this.readShort() * 0.125;
+    return this.readLong() * 0.125;
   }
 
   readCoordVector() {
@@ -271,7 +271,7 @@ export class SzBuffer {
   }
 
   readAngle() {
-    return this.readChar() * 1.40625;
+    return this.readShort() * (360.0 / 32768.0);
   }
 
   readAngleVector() {
@@ -370,7 +370,7 @@ export default class MSG {
    * @param {number} f coordinate
    */
   static WriteCoord(sb, f) {
-    MSG.WriteShort(sb, f * 8.0);
+    MSG.WriteLong(sb, f * 8.0);
   }
 
   /**
@@ -388,7 +388,7 @@ export default class MSG {
    * @param {number} f angle in degrees (0 to 360)
    */
   static WriteAngle(sb, f) {
-    MSG.WriteByte(sb, ((f >> 0) * (256.0 / 360.0)) & 255);
+    MSG.WriteShort(sb, (f / 360.0 * 32768.0) & 65535);
   }
 
   /**
@@ -649,7 +649,7 @@ export default class MSG {
   }
 
   static ReadCoord() {
-    return MSG.ReadShort() * 0.125;
+    return MSG.ReadLong() * 0.125;
   }
 
   static ReadCoordVector() {
@@ -657,7 +657,7 @@ export default class MSG {
   }
 
   static ReadAngle() {
-    return MSG.ReadChar() * 1.40625;
+    return MSG.ReadShort() * (360.0 / 32768.0);
   }
 
   static ReadAngleVector() {
