@@ -112,5 +112,6 @@ export default defineConfig(({ mode }) => ({
     alias: {
       '@': resolve(__dirname, 'source'),
     },
+    preserveSymlinks: process.env.VITE_PRESERVE_SYMLINKS === 'true',
   },
 }));
