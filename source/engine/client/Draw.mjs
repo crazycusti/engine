@@ -112,7 +112,7 @@ export default class Draw {
     })();
 
     const elem = document.getElementById('loading');
-    if (elem) {
+    if (elem instanceof HTMLImageElement) {
       Draw.#loadingElem = /** @type {HTMLImageElement} */ (elem);
       Draw.#loadingElem.src = Draw.#loading.toDataURL();
     }

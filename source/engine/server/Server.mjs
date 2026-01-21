@@ -501,6 +501,12 @@ export default class SV {
     SV.server.num_edicts = 0;
 
     for (const model of SV.server.models) {
+      if (model instanceof Promise) {
+        // still loading, cannot reset
+        /** @type {Promise} */ void (model).then((m) => m.reset());
+        continue;
+      }
+
       if (model) {
         model.reset(); // TODO: should be .free() in future
       }

@@ -107,6 +107,9 @@ class WalkableSurface {
 class Node {
   id = -1;
   origin = new Vector();
+  absmin = new Vector();
+  absmax = new Vector();
+  octreeNode = null;
   availableHeight = 0; // average available height from all waypoints
   nearLedge = false;
   isClipping = false;
@@ -1332,7 +1335,8 @@ export class Navigation {
         // prepend exact start and append exact goal for precision
         path[0] = startPos.copy();
         path.push(goalPos.copy());
-        const bspath = sampleBSpline(path, Math.min(200, path.length * 4));
+        // CR: not smoothing for now, there are some issues with NPCs following the lines (movestep, unable to step over gaps)
+        const bspath = path; // sampleBSpline(path, Math.min(200, path.length * 4));
         this.#debugPath(bspath);
         return bspath;
       }
