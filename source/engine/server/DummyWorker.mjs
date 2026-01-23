@@ -1,7 +1,7 @@
-import WorkerFramework from './WorkerFramework.mjs';
+import WorkerFramework from '../common/WorkerFramework.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-WorkerFramework.Init();
+await WorkerFramework.Init();
 
 const { Con } = registry;
 
@@ -11,4 +11,17 @@ eventBus.subscribe('worker.test', (message) => {
   }
 
   Con.Print('Dummy Worker reporting back!\n');
+});
+
+eventBus.subscribe('worker.busy', (timeInMillis) => {
+  const start = Date.now();
+
+  let number = 0;
+
+  while (Date.now() - start < +timeInMillis) {
+    // Busy wait
+    number += Math.sqrt(Math.random());
+  }
+
+  Con.Print(`Dummy Worker finished busy work of ${timeInMillis} ms, calculated number: ${number}\n`);
 });

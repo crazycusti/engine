@@ -1629,9 +1629,7 @@ Host.InitCommands = function() {
 
   Cmd.AddCommand('eb_topics', class extends ConsoleCommand {
     run() {
-      if (Host.developer.value === 0) {
-        return;
-      }
+      // TODO: do not allow this command when server is having cheats disabled
 
       for (const topic of eventBus.topics.sort()) {
         Con.Print(topic + '\n');
@@ -1641,9 +1639,7 @@ Host.InitCommands = function() {
 
   Cmd.AddCommand('eb_publish', class extends ConsoleCommand {
     run(eventName, ...args) {
-      if (Host.developer.value === 0) {
-        return;
-      }
+      // TODO: do not allow this command when server is having cheats disabled
 
       if (!eventName) {
         Con.Print(`Usage: ${this.command} <eventName> [args...]\n`);

@@ -2,6 +2,7 @@ import { K } from '../../shared/Keys.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
+import WorkerManager from '../common/WorkerManager.mjs';
 
 let { COM, Host, Key } = registry;
 
@@ -177,6 +178,23 @@ export default class Sys {
   static #oldtime = 0;
   static #isRunning = false;
 
+  /**
+   * Spawns a worker thread and sets up event forwarding.
+   * @param {string} script Path to worker script
+   * @param {string[]} events list of events the worker wants to subscribe to
+   * @returns {import('../common/WorkerManager.mjs').WorkerThread} worker thread wrapper
+   */
+  static SpawnWorker(script, events) {
+    return WorkerManager.SpawnWorker(script, events);
+  }
+
+  static CreateWorker(script) {
+    return new Worker(`./source/engine/${script}`, {
+      name: script,
+      type: 'module',
+    });
+  }
+
   static async Init() {
     // @ts-ignore
     window.registry = registry;
@@ -222,6 +240,9 @@ export default class Sys {
     Sys.#oldtime = Date.now() * 0.001;
 
     document.getElementById('progress').style.display = 'none';
+
+    // Start worker manager
+    WorkerManager.Init();
 
     Sys.Print('Host.Init: Initializing game…\n');
 

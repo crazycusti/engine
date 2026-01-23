@@ -239,6 +239,11 @@ export default class COM {
 
   // eslint-disable-next-line @typescript-eslint/require-await
   static async WriteFile(filename, data, len) {
+    if (registry.isInsideWorker) {
+      Sys.Print('COM.WriteFile: not supported inside worker threads\n');
+      return false;
+    }
+
     filename = filename.toLowerCase();
     const dest = [];
     for (let i = 0; i < len; i++) {
@@ -302,17 +307,19 @@ export default class COM {
     const netpath = this.GetNetpath(filename, gameDir);
 
     // 1) Try localStorage first
-    const localData = localStorage.getItem(`Quake.${gameDir}/${filename}`);
-    if (localData !== null) {
-      Sys.Print(`COM.LoadFile: ${netpath} (localStorage)\n`);
-      eventBus.publish('com.fs.end', filename);
-      return Q.strmem(localData);
+    if (!registry.isInsideWorker) {
+      const localData = localStorage.getItem(`Quake.${gameDir}/${filename}`);
+      if (localData !== null) {
+        Sys.Print(`COM.LoadFile: ${netpath} (localStorage)\n`);
+        eventBus.publish('com.fs.end', filename);
+        return Q.strmem(localData);
+      }
     }
 
     // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
     try {
       const directResponse = await fetch(netpath, {
-        signal: this.abortController.signal,
+        signal: this.abortController?.signal, // FIXME: edge case in WorkerThread
       });
 
       if (directResponse.ok) {
@@ -321,7 +328,8 @@ export default class COM {
         eventBus.publish('com.fs.end', filename);
         return data;
       }
-    } catch {
+    } catch (e) {
+      console.warn(`COM.LoadFile: fetch failed for ${netpath}`, e);
       // File doesn't exist
     }
 

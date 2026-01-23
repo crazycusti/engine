@@ -13,7 +13,7 @@ import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
 /** @typedef {import('./Edict.mjs').ServerEntity} ServerEntity */
 
-/** @typedef {import('./WorkerManager.mjs').WorkerThread} WorkerThread */
+/** @typedef {import('../common/WorkerManager.mjs').WorkerThread} WorkerThread */
 
 let { CL, COM, Con, R, SV, Sys } = registry;
 
@@ -107,8 +107,8 @@ class WalkableSurface {
 class Node {
   id = -1;
   origin = new Vector();
-  absmin = new Vector();
-  absmax = new Vector();
+  absmin = /** @type {Vector} */(null);
+  absmax = /** @type {Vector} */(null);
   octreeNode = null;
   availableHeight = 0; // average available height from all waypoints
   nearLedge = false;
@@ -241,6 +241,8 @@ export class Navigation {
       this.#worker.shutdown().catch((err) => {
         Con.PrintError(`Failed to shutdown the navigation worker: ${err}\n`);
       });
+
+      this.#worker = null;
     }
   }
 
@@ -263,33 +265,9 @@ export class Navigation {
       this.build();
     }
 
-    if (registry.isDedicatedServer) {
-      this.#initWorker();
-      this.#subscribePathResponse();
-      eventBus.publish('nav.load', SV.server.mapname);
-      return;
-    }
-
-    this.load(SV.server.mapname)
-      .then(() => Con.PrintSuccess('Navigation: navigation graph loaded!\n'))
-      .catch((err) => {
-        Con.PrintWarning('Navigation: ' + err + '\n');
-
-        if ((err instanceof NavMeshOutOfDateException) && registry.isDedicatedServer) {
-          setTimeout(() => this.build(), 100); // wait a bit for the server to be ready
-          return;
-        }
-
-        Con.Print('Use nav command to build the navigation graph.\n');
-      });
-
-    this.#pathRequestEventListener = eventBus.subscribe('nav.path.request', (id, start, end) => {
-      const path = this.findPath(new Vector(...start), new Vector(...end));
-
-      eventBus.publish('nav.path.response', id, path);
-    });
-
+    this.#initWorker();
     this.#subscribePathResponse();
+    eventBus.publish('nav.load', SV.server.mapname);
   }
 
   shutdown() {
@@ -301,11 +279,15 @@ export class Navigation {
 
     if (this.#pathRequestEventListener) {
       this.#pathRequestEventListener();
+      this.#pathRequestEventListener = null;
     }
 
     if (this.#pathResponseEventListener) {
       this.#pathResponseEventListener();
+      this.#pathResponseEventListener = null;
     }
+
+    Con.Print('Navigation: shutdown complete.\n');
   }
 
   async load(mapname) {
@@ -1217,7 +1199,7 @@ export class Navigation {
     }
 
     // fallthrough to full scan if nothing found within maxDist in octree
-    console.warn('Navigation: nearest node not found in octree, falling back to linear scan', position, maxDist);
+    console.warn('Navigation: nearest node not found in octree, falling back to linear scan', this, position, maxDist);
 
     let best = null;
     let bestDist = Infinity;

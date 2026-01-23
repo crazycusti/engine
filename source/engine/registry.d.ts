@@ -41,6 +41,7 @@ type WebSocket = typeof WebSocketClass;
 
 interface Registry {
   isDedicatedServer: boolean | null;
+  isInsideWorker: boolean;
 
   COM: Com | null;
   Con: Con | null;

@@ -1,11 +1,11 @@
-import WorkerFramework from './WorkerFramework.mjs';
+import WorkerFramework from '../common/WorkerFramework.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
 import { Navigation, NavMeshOutOfDateException } from './Navigation.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Mod, { BrushModel } from '../common/Mod.mjs';
 
-WorkerFramework.Init();
+await WorkerFramework.Init();
 
 const { Con } = registry;
 

@@ -32,6 +32,7 @@ export const registry = {
 
   /** @type {boolean} true, when running in server mode */
   isDedicatedServer: null,
+  isInsideWorker: false,
 };
 
 // make sure the registry is not extensible beyond the defined properties

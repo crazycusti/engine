@@ -1,5 +1,13 @@
-// @ts-ignore - import.meta.glob is a Vite-specific feature
-const gameModules = 'glob' in import.meta ?  import.meta.glob('../../game/*/main.mjs') : {};
+let gameModules = {};
+
+// CR: dear future self, do not try to optimize this import.meta.glob usage further.
+try {
+  // @ts-ignore - import.meta.glob is a Vite-specific feature
+  gameModules = import.meta.glob('../../game/**/main.mjs');
+// eslint-disable-next-line no-unused-vars
+} catch (e) {
+  // Not in Vite environment
+}
 
 /**
  * Loads a game module by directory name

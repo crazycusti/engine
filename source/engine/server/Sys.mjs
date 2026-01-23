@@ -10,9 +10,10 @@ import { createServer } from 'http';
 import { registry, eventBus } from '../registry.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { REPLServer } from 'node:repl';
+import { Worker } from 'node:worker_threads';
 import Cmd from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
-import WorkerManager, { WorkerThread } from './WorkerManager.mjs';
+import WorkerManager, { WorkerThread } from '../common/WorkerManager.mjs';
 
 let { COM, Host, NET } = registry;
 
@@ -64,6 +65,12 @@ export default class Sys {
    */
   static SpawnWorker(script, events) {
     return WorkerManager.SpawnWorker(script, events);
+  }
+
+  static CreateWorker(script) {
+    return new Worker(`./source/engine/${script}`, {
+      name: script,
+    });
   }
 
   /**
