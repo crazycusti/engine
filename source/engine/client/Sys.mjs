@@ -3,6 +3,7 @@ import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
+import { BaseWorker } from '../common/Sys.mjs';
 
 let { COM, Host, Key } = registry;
 
@@ -174,25 +175,61 @@ const eventHandlers = {
   },
 };
 
+class WebWorker extends BaseWorker {
+  #worker = /** @type {Worker} */ (null);
+
+  constructor(name) {
+    super(name);
+
+    this.#initWorker();
+  }
+
+  #initWorker() {
+    this.#worker = new Worker(`./source/engine/${this.name}`, {
+      name: this.name,
+      type: 'module',
+    });
+
+    this.#worker.addEventListener('error', (e) => {
+      console.error(`WebWorker ${this.name} error: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
+
+      void this.shutdown();
+    });
+  }
+
+  addOnMessageListener(listener) {
+    this.#worker.addEventListener('message', (e) => {
+      listener(e.data);
+    });
+  }
+
+  postMessage(message) {
+    this.#worker.postMessage(message);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async shutdown() {
+    for (const listener of this._shutdownListeners) {
+      listener();
+    }
+
+    this._shutdownListeners.length = 0;
+
+    this.#worker.terminate();
+    this.#worker = null;
+  }
+}
+
 export default class Sys {
   static #oldtime = 0;
   static #isRunning = false;
 
   /**
-   * Spawns a worker thread and sets up event forwarding.
    * @param {string} script Path to worker script
-   * @param {string[]} events list of events the worker wants to subscribe to
-   * @returns {import('../common/WorkerManager.mjs').WorkerThread} worker thread wrapper
+   * @returns {BaseWorker} worker thread wrapper
    */
-  static SpawnWorker(script, events) {
-    return WorkerManager.SpawnWorker(script, events);
-  }
-
   static CreateWorker(script) {
-    return new Worker(`./source/engine/${script}`, {
-      name: script,
-      type: 'module',
-    });
+    return new WebWorker(script);
   }
 
   static async Init() {

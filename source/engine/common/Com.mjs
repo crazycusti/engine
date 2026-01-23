@@ -319,7 +319,7 @@ export default class COM {
     // 2) Load from pre-merged filesystem (all PAKs and priorities resolved at build time)
     try {
       const directResponse = await fetch(netpath, {
-        signal: this.abortController?.signal, // FIXME: edge case in WorkerThread
+        signal: this.abortController?.signal, // unavailable in workers
       });
 
       if (directResponse.ok) {

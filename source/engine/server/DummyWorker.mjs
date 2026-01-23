@@ -25,3 +25,7 @@ eventBus.subscribe('worker.busy', (timeInMillis) => {
 
   Con.Print(`Dummy Worker finished busy work of ${timeInMillis} ms, calculated number: ${number}\n`);
 });
+
+eventBus.subscribe('worker.error', () => {
+  throw new Error('This is a test error from the Dummy Worker!');
+});

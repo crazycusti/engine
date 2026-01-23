@@ -13,7 +13,8 @@ import { REPLServer } from 'node:repl';
 import { Worker } from 'node:worker_threads';
 import Cmd from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
-import WorkerManager, { WorkerThread } from '../common/WorkerManager.mjs';
+import WorkerManager from '../common/WorkerManager.mjs';
+import { BaseWorker } from '../common/Sys.mjs';
 
 let { COM, Host, NET } = registry;
 
@@ -47,6 +48,49 @@ eventBus.subscribe('net.connection.accepted', () => {
   mainLoop.notify();
 });
 
+class NodeWorker extends BaseWorker {
+  #worker = /** @type {Worker} */ (null);
+
+  constructor(name) {
+    super(name);
+
+    this.#initWorker();
+  }
+
+  #initWorker() {
+    this.#worker = new Worker(`./source/engine/${this.name}`, {
+      name: this.name,
+    });
+
+    this.#worker.on('error', (e) => {
+      console.error(`NodeWorker ${this.name} error: ${e.message}`);
+
+      void this.shutdown();
+    });
+  }
+
+  addOnMessageListener(listener) {
+    this.#worker.on('message', (e) => {
+      listener(e);
+    });
+  }
+
+  postMessage(message) {
+    this.#worker.postMessage(message);
+  }
+
+  async shutdown() {
+    for (const listener of this._shutdownListeners) {
+      listener();
+    }
+
+    this._shutdownListeners.length = 0;
+
+    await this.#worker.terminate();
+    this.#worker = null;
+  }
+}
+
 /**
  * System class to manage initialization, quitting, and REPL functionality.
  */
@@ -58,19 +102,11 @@ export default class Sys {
   static #repl = null;
 
   /**
-   * Spawns a worker thread and sets up event forwarding.
    * @param {string} script Path to worker script
-   * @param {string[]} events list of events the worker wants to subscribe to
-   * @returns {WorkerThread} worker thread wrapper
+   * @returns {BaseWorker} worker thread wrapper
    */
-  static SpawnWorker(script, events) {
-    return WorkerManager.SpawnWorker(script, events);
-  }
-
   static CreateWorker(script) {
-    return new Worker(`./source/engine/${script}`, {
-      name: script,
-    });
+    return new NodeWorker(script);
   }
 
   /**

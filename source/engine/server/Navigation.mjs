@@ -9,11 +9,11 @@ import { CorruptedResourceError, MissingResourceError } from '../common/Errors.m
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { BrushModel } from '../common/Mod.mjs';
 import { Face } from '../common/model/BaseModel.mjs';
+import { BaseWorker } from '../common/Sys.mjs';
+import WorkerManager from '../common/WorkerManager.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
 /** @typedef {import('./Edict.mjs').ServerEntity} ServerEntity */
-
-/** @typedef {import('../common/WorkerManager.mjs').WorkerThread} WorkerThread */
 
 let { CL, COM, Con, R, SV, Sys } = registry;
 
@@ -186,7 +186,7 @@ export class Navigation {
   /** @type {Record<string,(path:Vector[]|null)=>(void)>} holds pending requests for the worker thread */
   #requests = {};
 
-  /** @type {WorkerThread?} worker thread handling navigation lookups */
+  /** @type {BaseWorker} worker thread handling navigation lookups */
   #worker = null;
 
   /** @type {Function?} unsubscribe from nav.path.request */
@@ -230,7 +230,7 @@ export class Navigation {
   }
 
   #initWorker() {
-    this.#worker = Sys.SpawnWorker('server/NavigationWorker.mjs', [
+    this.#worker = WorkerManager.SpawnWorker('server/NavigationWorker.mjs', [
       'nav.load',
       'nav.path.request',
     ]);

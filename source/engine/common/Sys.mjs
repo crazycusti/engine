@@ -1,5 +1,36 @@
 import { NotImplementedError } from './Errors.mjs';
 
+export class BaseWorker {
+  /** @type {Function[]} @protected */
+  _shutdownListeners = [];
+
+  /**
+   * @param {string} name name of the worker
+   */
+  constructor(name) {
+    this.name = name;
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  addOnMessageListener(listener) {
+    throw new NotImplementedError('Worker.addOnMessageListener must be implemented in a subclass');
+  }
+
+  addOnShutdownListener(listener) {
+    this._shutdownListeners.push(listener);
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  postMessage(message) {
+    throw new NotImplementedError('Worker.postMessage must be implemented in a subclass');
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async shutdown() {
+    throw new NotImplementedError('Worker.shutdown must be implemented in a subclass');
+  }
+};
+
 /** Base class for Sys implementations. */
 export default class Sys {
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -34,19 +65,6 @@ export default class Sys {
   static CreateWorker(script) {
     throw new NotImplementedError('Sys.CreateWorker must be implemented in a subclass');
     // eslint-disable-next-line no-unreachable
-    return null;
-  }
-
-  /**
-   * Spawns a worker thread and sets up event forwarding.
-   * @param {string} script Path to worker script
-   * @param {string[]} events list of events the worker wants to subscribe to
-   * @returns {import('./WorkerManager.mjs').WorkerThread} worker thread wrapper
-   */
-  // eslint-disable-next-line no-unused-vars
-  static SpawnWorker(script, events) {
-    throw new NotImplementedError('Sys.SpawnWorker must be implemented in a subclass');
-    // eslint-disable-next-line no-unreachable
-    return null;
+    return /** @type {BaseWorker} */ (null);
   }
 };
