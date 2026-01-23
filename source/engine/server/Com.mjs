@@ -1,6 +1,6 @@
 /* global Buffer */
 
-import { promises as fsPromises, openSync, readSync, closeSync, existsSync, writeFileSync, constants } from 'fs';
+import { promises as fsPromises, existsSync, writeFileSync, constants } from 'fs';
 
 import Q from '../../shared/Q.mjs';
 import { CRC16CCITT as CRC } from '../common/CRC.mjs';
@@ -99,19 +99,19 @@ export default class NodeCOM extends COM {
   /**
    * Loads and parses a pack file.
    * @param {string} packfile - The path to the pack file.
-   * @returns {Array<object> | undefined} - The parsed pack file entries or undefined if the file doesn't exist.
+   * @returns {Promise<Array<object> | undefined>} - The parsed pack file entries or undefined if the file doesn't exist.
    */
-  static LoadPackFile(packfile) {
-    if (!existsSync(`data/${packfile}`)) {
+  static async LoadPackFile(packfile) {
+    if (!existsSync(`data/${packfile}`)) { // CR: wanna see something ugly? check out the async version of existsSync…
       return null;
     }
 
-    const fd = openSync(`data/${packfile}`, 'r');
+    const fd = await fsPromises.open(`data/${packfile}`, 'r');
 
     try {
       // Read and validate the pack file header
       const headerBuffer = Buffer.alloc(12);
-      readSync(fd, headerBuffer, 0, 12, 0);
+      await fd.read(headerBuffer, 0, 12, 0);
 
       const header = new DataView(new Uint8Array(headerBuffer).buffer);
       if (header.getUint32(0, true) !== 0x4b434150) { // "PACK" magic number
@@ -130,7 +130,7 @@ export default class NodeCOM extends COM {
 
       if (numpackfiles > 0) {
         const infoBuffer = Buffer.alloc(dirlen);
-        readSync(fd, infoBuffer, 0, dirlen, dirofs);
+        await fd.read(infoBuffer, 0, dirlen, dirofs);
 
         const uint8ArrayInfo = new Uint8Array(infoBuffer);
         if (CRC.Block(uint8ArrayInfo) !== 32981) {
@@ -154,7 +154,7 @@ export default class NodeCOM extends COM {
 
       return pack;
     } finally {
-      closeSync(fd);
+      await fd.close();
     }
   }
 

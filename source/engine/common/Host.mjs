@@ -485,13 +485,13 @@ Host.Init = async function() {
 
   if (!registry.isDedicatedServer) {
     S.Init();
-    await VID.Init();
+    VID.Init();
     await Draw.Init();
     await R.Init();
     await M.Init();
     await CL.Init();
     await SCR.Init();
-    await CDAudio.Init();
+    CDAudio.Init();
 
     if (!CL.gameCapabilities.includes(gameCapabilities.CAP_HUD_INCLUDES_SBAR)) {
       await Sbar.Init();

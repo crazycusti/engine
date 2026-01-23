@@ -15,7 +15,7 @@ import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
 /** @typedef {import('./Edict.mjs').ServerEntity} ServerEntity */
 
-let { CL, COM, Con, R, SV, Sys } = registry;
+let { CL, COM, Con, R, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
@@ -23,7 +23,6 @@ eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   R = registry.R;
   SV = registry.SV;
-  Sys = registry.Sys;
 });
 
 class Waypoint {

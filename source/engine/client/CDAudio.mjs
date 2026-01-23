@@ -134,7 +134,7 @@ export default class CDAudio {
     }
   }
 
-  static async Init() {
+  static Init() {
     Cmd.AddCommand('cd', CDAudio.CD_f.bind(CDAudio));
     if (COM.CheckParm('-nocdaudio')) {
       return;

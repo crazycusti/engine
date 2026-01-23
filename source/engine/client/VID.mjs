@@ -51,7 +51,7 @@ export default class VID {
     document.body.removeChild(link);
   }
 
-  static async Init() {
+  static Init() {
     // @ts-ignore
     VID.mainwindow = document.getElementById('mainwindow');
 

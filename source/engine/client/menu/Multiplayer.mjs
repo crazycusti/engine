@@ -3,10 +3,10 @@ import { eventBus, registry } from '../../registry.mjs';
 import { Action, Label, Spacer } from './MenuItem.mjs';
 import { MenuPage, VerticalLayout } from './MenuPage.mjs';
 
-let { M, PR } = registry;
+let { M } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ M, PR } = registry);
+  ({ M } = registry);
 });
 
 // CR: this whole menu is heavily WIP
