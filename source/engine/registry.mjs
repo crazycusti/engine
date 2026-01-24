@@ -58,7 +58,7 @@ export class EventBus {
    * Registers an event listener for a specific event type.
    * @param {string} eventName The event type to listen for.
    * @param {Function} listener The function to call when the event is triggered.
-   * @returns {Function} A function to remove the listener.
+   * @returns {() => void} A function to remove the listener.
    */
   subscribe(eventName, listener) {
     if (!this.#listeners.has(eventName)) {

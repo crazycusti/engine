@@ -7,11 +7,11 @@ import { eventBus, registry } from '../registry.mjs';
 let { CL, COM, Con, Host } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
-  COM = registry.COM;
-  Con = registry.Con;
-  Host = registry.Host;
+  ({ CL, COM, Con, Host } = registry);
 });
+
+// Limit the number of active dynamic channels to prevent audio engine overloading (stuttering)
+const MAX_DYNAMIC_CHANNELS = 64;
 
 export class SFX {
   static STATE = {
@@ -23,31 +23,43 @@ export class SFX {
 
   /** @param {string} name sfx filename */
   constructor(name) {
+    /** @type {string} */
     this.name = name;
+    /** @type {?{data: AudioBuffer, length: number, size: number, loopstart: ?number}} */
     this.cache = null;
+    /** @type {string} */
     this.state = SFX.STATE.NEW;
+    /** @type {?number} */
     this.loadtime = null;
 
+    /** @type {Array<(sfx: SFX) => void>} */
     this._availableQueue = [];
   }
 
+  /**
+   * @param {(sfx: SFX) => void} handler
+   * @returns {this}
+   */
   queueAvailableHandler(handler) {
     this._availableQueue.push(handler);
-
     return this;
   }
 
+  /** @returns {this} */
   makeAvailable() {
     this.state = SFX.STATE.AVAILABLE;
 
     while (this._availableQueue.length > 0) {
       const handler = this._availableQueue.shift();
-      handler(this);
+      if (handler) {
+        handler(this);
+      }
     }
 
     return this;
   }
 
+  /** @returns {Promise<boolean>} */
   async load() {
     if (this.state !== SFX.STATE.NEW) {
       return false;
@@ -72,6 +84,7 @@ class SoundBaseChannel {
    * @param {typeof S} S Sound system reference
    */
   constructor(S) {
+    /** @type {typeof S} */
     this._S = S;
     this.reset();
   }
@@ -79,11 +92,14 @@ class SoundBaseChannel {
   reset() {
     this.stop();
 
+    /** @type {?SFX} */
     this.sfx = null;
 
     this.origin = new Vector();
     this.dist_mult = 0;
+    /** @type {?number} */
     this.entnum = null;
+    /** @type {?number} */
     this.entchannel = null;
 
     this.end = 0.0;
@@ -93,6 +109,7 @@ class SoundBaseChannel {
     this.channel_vol = 0.0;
     this.pan = 0.0;
 
+    /** @type {?number} */
     this._playFailedTime = null;
     this._state = SoundBaseChannel.STATE.NOT_READY;
 
@@ -113,6 +130,10 @@ class SoundBaseChannel {
     return this;
   }
 
+  /**
+   * @param {ArrayBuffer} rawData
+   * @returns {Promise<AudioBuffer|null>}
+   */
   // eslint-disable-next-line no-unused-vars, @typescript-eslint/require-await
   static async decodeAudioData(rawData) {
     return null;
@@ -189,15 +210,72 @@ class SoundBaseChannel {
 }
 
 class AudioContextChannel extends SoundBaseChannel {
+  /**
+   * @param {ArrayBuffer} rawData
+   */
   static async decodeAudioData(rawData) {
     return await S._context.decodeAudioData(rawData);
+  }
+
+  /**
+   * @param {typeof S} S
+   */
+  constructor(S) {
+    super(S);
+
+    /** @type {?AudioBufferSourceNode} */
+    this._source = null;
+
+    /** @type {?StereoPannerNode} */
+    this._panner = null;
+
+    /** @type {?GainNode} */
+    this._gain = null;
+
+    /** @type {?GainNode} */
+    this._effectWet = null;
+
+    /** @type {?GainNode} */
+    this._effectDry = null;
+
+    /** @type {?number} */
+    this._startTime = null; // used for AudioContextChannel to track when playback started
+
+    this._initGraph();
+  }
+
+  _initGraph() {
+    if (!this._S._context) {
+      return;
+    }
+
+    // Create persistent nodes to reuse (optimization)
+    this._panner = this._S._context.createStereoPanner();
+    this._gain = this._S._context.createGain();
+    this._effectWet = this._S._context.createGain();
+    this._effectDry = this._S._context.createGain();
+
+    // Wiring: [Source] -> Panner -> Gain -> (Wet/Dry) -> Destination
+    this._panner.connect(this._gain);
+    this._gain.connect(this._effectDry);
+    this._gain.connect(this._effectWet);
+
+    // Connect to the context destination
+    this._effectDry.connect(this._S._context.destination);
+
+    // Connect underwater effect if available
+    if (this._S._underwaterFilter) {
+      this._effectWet.connect(this._S._underwaterFilter.input);
+    } else {
+      this._effectWet.connect(this._S._context.destination);
+    }
   }
 
   reset() {
     super.reset();
 
-    this._nodes = null;
-    this._startTime = null; // used for AudioContextChannel to track when playback started
+    // NOTE: We do NOT null _panner/_gain/etc because we reuse them
+    this._startTime = null;
 
     return this;
   }
@@ -208,44 +286,30 @@ class AudioContextChannel extends SoundBaseChannel {
       return this;
     }
 
+    // Ensure graph exists
+    if (!this._panner) {
+      this._initGraph();
+      if (!this._panner) {
+        this._state = SoundBaseChannel.STATE.NOT_READY;
+        return this;
+      }
+    }
+
     const sc = this.sfx.cache;
 
-    const nodes = {
-      source: this._S._context.createBufferSource(),
-      panner: this._S._context.createStereoPanner(),
-      gain: this._S._context.createGain(),
-      effectWet: this._S._context.createGain(),
-      effectDry: this._S._context.createGain(),
-    };
-
-    nodes.source.buffer = sc.data;
+    // Create a new source node (cannot be reused)
+    this._source = this._S._context.createBufferSource();
+    this._source.buffer = sc.data;
 
     // looping
     if (sc.loopstart !== null) {
-      nodes.source.loop = true;
-      nodes.source.loopStart = sc.loopstart;
-      nodes.source.loopEnd = sc.data.duration;
+      this._source.loop = true;
+      this._source.loopStart = sc.loopstart;
+      this._source.loopEnd = sc.data.duration;
     }
 
-    // Chain: Source -> Panner -> Gain -> (Wet/Dry) -> Destination
-    nodes.source.connect(nodes.panner);
-    nodes.panner.connect(nodes.gain);
-
-    nodes.gain.connect(nodes.effectDry);
-    nodes.gain.connect(nodes.effectWet);
-
-    // Connect to the context destination
-    nodes.effectDry.connect(this._S._context.destination);
-
-    // Connect underwater effect if available
-    if (this._S._underwaterFilter) {
-      nodes.effectWet.connect(this._S._underwaterFilter.input);
-      this._S._underwaterFilter.output.connect(this._S._context.destination);
-    } else {
-      nodes.effectWet.connect(this._S._context.destination);
-    }
-
-    this._nodes = nodes;
+    // Connect source to our existing panner
+    this._source.connect(this._panner);
 
     // Set initial volume
     this.updateVol();
@@ -256,19 +320,19 @@ class AudioContextChannel extends SoundBaseChannel {
   }
 
   updateVol() {
-    if (!this._nodes) {
+    if (!this._panner || !this._gain) {
       return this;
     }
 
-    this._nodes.panner.pan.value = Math.min(1, Math.max(-1, this.pan));
-    this._nodes.gain.gain.value = this.channel_vol * this._S.volume.value;
+    this._panner.pan.value = Math.min(1, Math.max(-1, this.pan));
+    this._gain.gain.value = this.channel_vol * this._S.volume.value;
 
     if (this._S._listenerUnderwater && this.entchannel >= 0) {
-      this._nodes.effectWet.gain.value = 1.0;
-      this._nodes.effectDry.gain.value = 0.0;
+      this._effectWet.gain.value = 1.0;
+      this._effectDry.gain.value = 0.0;
     } else {
-      this._nodes.effectWet.gain.value = 0.0;
-      this._nodes.effectDry.gain.value = 1.0;
+      this._effectWet.gain.value = 0.0;
+      this._effectDry.gain.value = 1.0;
     }
 
     return this;
@@ -277,16 +341,16 @@ class AudioContextChannel extends SoundBaseChannel {
   stop() {
     // Stop regardless of state if we have an active source
     try {
-      if (this._nodes && this._nodes.source) {
-        this._nodes.source.stop(0);
+      if (this._source) {
+        this._source.stop(0);
+        this._source.disconnect(); // Important to disconnect for GC
       }
     } catch {
       // ignore exceptions from stopping an already stopped source
     }
 
+    this._source = null;
     this._startTime = null;
-    // discard nodes so we recreate them on resume (AudioBufferSourceNodes are single-use)
-    this._nodes = null;
 
     this._state = SoundBaseChannel.STATE.STOPPED;
     return this;
@@ -297,15 +361,15 @@ class AudioContextChannel extends SoundBaseChannel {
       return this;
     }
 
-    if (this._nodes && this._nodes.source) {
+    if (this._source) {
       // record start time so we can calculate pausing offset
       try {
-        this._nodes.source.start(0, this.pos);
+        this._source.start(0, this.pos);
       } catch {
         // if starting fails, try to recreate nodes and start again
         this.loadData();
-        if (this._nodes && this._nodes.source) {
-          this._nodes.source.start(0, this.pos);
+        if (this._source) {
+          this._source.start(0, this.pos);
         }
       }
       this._startTime = this._S._context.currentTime;
@@ -316,12 +380,12 @@ class AudioContextChannel extends SoundBaseChannel {
   }
 
   pause() {
-    // Pause must capture playback position and stop the source. On resume we'll recreate nodes.
+    // Pause must capture playback position and stop the source. On resume we'll recreate source.
     if (this._state !== SoundBaseChannel.STATE.PLAYING) {
       return this;
     }
 
-    if (this._nodes && this._nodes.source && this._startTime !== null) {
+    if (this._source && this._startTime !== null) {
       const now = this._S._context.currentTime;
       let elapsed = now - this._startTime;
 
@@ -342,15 +406,16 @@ class AudioContextChannel extends SoundBaseChannel {
       }
     }
 
-    // Stop and drop nodes
+    // Stop and drop source
     try {
-      if (this._nodes && this._nodes.source) {
-        this._nodes.source.stop(0);
+      if (this._source) {
+        this._source.stop(0);
+        this._source.disconnect();
       }
     } catch {
       // ignore
     }
-    this._nodes = null;
+    this._source = null;
     this._startTime = null;
     this._state = SoundBaseChannel.STATE.STOPPED;
 
@@ -362,13 +427,13 @@ class AudioContextChannel extends SoundBaseChannel {
       return this;
     }
 
-    // Recreate nodes if needed and start from stored pos
-    if (!this._nodes) {
+    // Recreate source if needed and start from stored pos
+    if (!this._source) {
       this.loadData();
     }
 
     // Ensure we have data and are allowed to start
-    if (!this._nodes || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
+    if (!this._source || !this.sfx || this.sfx.state === SFX.STATE.FAILED) {
       return this;
     }
 
@@ -415,16 +480,23 @@ const S = {
   _context: null,
 
   // Cvars
+  /** @type {Cvar} */
   _precache: null,
+  /** @type {Cvar} */
   _nosound: null,
+  /** @type {Cvar} */
   _ambientLevel: null,
+  /** @type {Cvar} */
   _ambientFade: null,
 
   // Public Cvars
+  /** @type {Cvar} */
   volume: null,
+  /** @type {Cvar} */
   bgmvolume: null,
 
   // Event listeners
+  /** @type {Array<()=>void>} */
   _eventListeners: [],
 
   // Optional special effects
@@ -436,49 +508,88 @@ const S = {
   },
 
   /**
-   * Picks or finds an available channel for a new sound to Play on.
-   * Possibly kills an older channel from same entnum/entchannel.
+   * Picking a channel with limited voice count and voice stealing.
    * @param {number} entnum entity number that owns the sound
    * @param {number} entchannel channel index for the entity (0 = any, -1 = local)
    * @returns {SoundBaseChannel} allocated or reused channel
    */
   PickChannel(entnum, entchannel) {
-    let i;
     let channel = null;
 
-    // If entchannel != 0, see if there is an existing channel with the same
-    // entnum and entchannel. If so, kill it.
+    // 1. If entchannel != 0, override existing channel for this entity
     if (entchannel !== 0) {
-      for (i = 0; i < this._channels.length; i++) {
-        channel = this._channels[i];
-        if (!channel) {
-          continue;
-        }
-        const matchingEnt = (channel.entnum === entnum);
-        const matchingChan = (channel.entchannel === entchannel) || (entchannel === -1);
-        if (matchingEnt && matchingChan) {
-          // Kill old
-          channel.reset();
-          break;
-        }
+      channel = this._channels.find(ch => ch.entnum === entnum && ch.entchannel === entchannel);
+      if (channel) {
+        channel.reset();
+        return channel;
       }
     }
 
-    // If entchannel == 0 or we never found a free channel, pick a free or new channel.
-    if ((entchannel === 0) || (i === this._channels.length)) {
-      for (i = 0; i < this._channels.length; i++) {
-        channel = this._channels[i];
-        if (!channel || !channel.sfx) {
-          break;
-        }
+    // 2. Look for a free channel (STOPPED or no sfx)
+    // In strict sense, just because it is stopped doesn't mean it's free if we keep it around...
+    // But SoundBaseChannel.reset() is called by the caller usually? No, we call it here.
+    // An unused channel usually has ch.sfx === null.
+    // Let's look for one with no SFX first (truly empty).
+    channel = this._channels.find(ch => !ch.sfx);
+
+    if (channel) {
+      channel.reset();
+      return channel;
+    }
+
+    // 3. Allocate new channel if below limit
+    if (this._channels.length < MAX_DYNAMIC_CHANNELS) {
+      const newCh = this._NewChannel();
+      this._channels.push(newCh);
+      newCh.reset();
+      return newCh;
+    }
+
+    // 4. Voice Stealing: Find the least important channel to interrupt
+    // We prioritize keeping:
+    // - Local sounds (entnum == viewentity)
+    // - Loudest sounds (highest channel_vol)
+
+    let bestCandidate = null;
+    let lowestVolume = Number.MAX_VALUE;
+
+    for (const ch of this._channels) {
+      // Try to avoid stealing from local player
+      if (ch.entnum === CL.state.viewentity) {
+        continue;
+      }
+
+      // Candidate based on volume (maybe add distance or time playing?)
+      if (ch.channel_vol < lowestVolume) {
+        lowestVolume = ch.channel_vol;
+        bestCandidate = ch;
       }
     }
-    if (i === this._channels.length) {
-      // No free channel found, allocate a new one
-      this._channels[i] = this._NewChannel();
+
+    if (bestCandidate) {
+      bestCandidate.stop(); // Stop it cleanly
+      bestCandidate.reset();
+      return bestCandidate;
     }
-    this._channels[i].reset();
-    return this._channels[i];
+
+    // 5. Fallback: If we assume all are local or equally critical, just recycle the oldest one (index 0 usually oldest allocated)
+    // Or just fail to play? Standard engines often steal the oldest.
+    // Let's steal index 0 if it exists.
+    if (this._channels.length > 0) {
+      const ch = this._channels[0];
+      ch.stop();
+      ch.reset();
+      return ch;
+    }
+
+    // Should not happen if MAX_DYNAMIC_CHANNELS > 0
+    // Panic: Create one anyway (violating limit but avoiding crash) or return dummy?
+    // We will create one to be safe, but warn.
+    Con.DPrint('Sound: Warning: Exceeded MAX_DYNAMIC_CHANNELS fallback\n');
+    const emergencyCh = this._NewChannel();
+    this._channels.push(emergencyCh);
+    emergencyCh.reset();
+    return emergencyCh;
   },
 
   //
@@ -500,7 +611,7 @@ const S = {
 
     // Attempt to create an AudioContext
     try {
-      this._context = new AudioContext({sampleRate: 22050});
+      this._context = new AudioContext({ sampleRate: 22050 });
       this._channelDriver = AudioContextChannel;
 
       this._underwaterFilter = this._MakeUnderwaterChain();
@@ -539,13 +650,13 @@ const S = {
       });
 
       if (sfx.state === SFX.STATE.NEW) {
-          this.LoadSound(sfx).catch((error) => {
-            if (!this._started) {
-              return;
-            }
-            Con.Print(`S.Init: async load of ambient ${name} failed, ${error}\n`);
-          });
-        }
+        this.LoadSound(sfx).catch((error) => {
+          if (!this._started) {
+            return;
+          }
+          Con.Print(`S.Init: async load of ambient ${name} failed, ${error}\n`);
+        });
+      }
     }
 
     this._eventListeners.push(eventBus.subscribe('client.paused', () => this._PauseAllSounds()));
@@ -564,6 +675,12 @@ const S = {
     setTimeout(() => {
       this._knownSfx = [];
     }, 1001);
+
+    // Close context
+    if (this._context) {
+      this._context.close().catch(() => null);
+    }
+
     Con.Print('S.Shutdown: sound subsystem shut down.\n');
   },
 
@@ -673,6 +790,7 @@ const S = {
     };
 
     sfx.state = SFX.STATE.LOADING;
+    // @ts-ignore
     sfx.loadtime = Host.realtime || null;
     const data = await COM.LoadFile(`sound/${sfx.name}`);
 
@@ -707,8 +825,9 @@ const S = {
     sc.size = data.byteLength;
 
     if (loopInfo.loopstartSamples !== null) {
-      sc.loopstart = loopInfo.loopstartSamples / sc.data.sampleRate;
-      Con.DPrint(`S.LoadSound: ${sfx.name} loopstart ${loopInfo.loopstartSamples} samples -> ${sc.loopstart}s\n`);
+      const sampleRate = loopInfo.sampleRate || sc.data.sampleRate;
+      sc.loopstart = loopInfo.loopstartSamples / sampleRate;
+      Con.DPrint(`S.LoadSound: ${sfx.name} loopstart ${loopInfo.loopstartSamples} samples @ ${sampleRate}Hz -> ${sc.loopstart}s\n`);
     }
 
     // eslint-disable-next-line require-atomic-updates
@@ -730,6 +849,7 @@ const S = {
     let loopstartSamples = null;
     let cueFound = false;
     let cueLoopStart = null;
+    let sampleRate = null;
 
     while (p + 8 <= data.byteLength) {
       const chunkId = view.getUint32(p, true);
@@ -742,10 +862,35 @@ const S = {
       }
 
       switch (chunkId) {
+        case 0x20746d66: // 'fmt '
+           if (actualChunkSize >= 4) {
+             // Offset 4 in fmt chunk is NumChannels (2 bytes)
+             // Offset 4 in fmt chunk is SampleRate (4 bytes)
+             // Wait, standard: 
+             // 0-1: AudioFormat
+             // 2-3: NumChannels
+             // 4-7: SampleRate
+             sampleRate = view.getUint32(p + 8 + 4, true);
+           }
+           break;
         case 0x20657563: // 'cue '
-          if (actualChunkSize >= 28) {
-            cueFound = true;
-            cueLoopStart = view.getUint32(p + 32, true);
+          // header: dwCuePoints(4)
+          // cue points: 24 bytes each
+          if (actualChunkSize >= 4) {
+            const numCues = view.getUint32(p + 8, true);
+            if (numCues > 0) {
+              const cuesSize = numCues * 24;
+              if (actualChunkSize >= 4 + cuesSize) {
+                cueFound = true;
+                // Iterate all cues, keeping the last one's offset as the loop marker
+                // This matches Quake behavior where loopstart is overwritten by subsequent cues
+                for (let i = 0; i < numCues; i++) {
+                  const offset = p + 8 + 4 + (i * 24);
+                  // SampleOffset is at +20 bytes into the struct
+                  cueLoopStart = view.getUint32(offset + 20, true);
+                }
+              }
+            }
           }
           break;
         case 0x5453494c: // 'LIST'
@@ -796,7 +941,7 @@ const S = {
       loopstartSamples = cueLoopStart;
     }
 
-    return { loopstartSamples };
+    return { loopstartSamples, sampleRate };
   },
 
   //
@@ -829,7 +974,11 @@ const S = {
 
       // Out of reach
       if (targetChan.channel_vol <= 0) {
-        return;
+        // Optimization: If volume is 0, we can stop the channel immediately and save a voice?
+        // But in Quake, sometimes sound moves into range?
+        // Dynamic channels might move. Spatialize handles updates.
+        // But if it starts at 0 vol and isn't close, maybe we don't start it?
+        // Quake behavior: Start it, it might become audible.
       }
 
       targetChan.pos = 0.0;
@@ -872,9 +1021,10 @@ const S = {
     // release that channel
     const ch = this._channels.find((ch) => ch && ch.entnum === entnum && ch.entchannel === entchannel);
 
-    console.assert(ch, 'valid channel', entnum, entchannel);
-
-    ch.stop();
+    if (ch) {
+      ch.stop();
+      ch.reset();
+    }
   },
 
   StopAllSounds() {
@@ -889,16 +1039,21 @@ const S = {
     }
 
     // Dynamic channels
-    while (this._channels.length > 0) {
-      const ch = this._channels.shift();
+    for (const ch of this._channels) {
       ch.stop();
+      ch.reset();
     }
 
+    // We can clear the array, but PickChannel reuses slots, so keeping them is fine.
+    // If we want to truly clean up:
+    // this._channels = [];
+    // But we are pooling channels now. So just stopping them makes them available.
+
     // Static channels
-    while (this._staticChannels.length > 0) {
-      const ch = this._staticChannels.shift();
+    for (const ch of this._staticChannels) {
       ch.stop();
     }
+    // Static channels usually persist.
   },
 
   _PauseAllSounds() {
@@ -987,10 +1142,12 @@ const S = {
       switch (sfx.state) {
         case SFX.STATE.AVAILABLE: {
           const sc = sfx.cache;
-          sizeStr = sc.size.toString();
-          total += sc.size;
-          if (sc.loopstart !== null) {
-            flags.push('L');
+          if (sc) {
+            sizeStr = sc.size.toString();
+            total += sc.size;
+            if (sc.loopstart !== null) {
+              flags.push('L');
+            }
           }
         }
           break;
@@ -1012,6 +1169,7 @@ const S = {
       Con.Print(`${sizeStr} : ${sfx.name}\n`);
     }
     Con.Print(`Total resident: ${total}\n`);
+    Con.Print(`Active Channels: ${this._channels.filter(c => c._state === SoundBaseChannel.STATE.PLAYING).length}/${this._channels.length}\n`);
   },
 
   Play_f(...samples) {
@@ -1112,7 +1270,7 @@ const S = {
       if (Host.realtime >= ch.end) {
         const sc = ch.sfx.cache;
         // If it's looped, try to wrap around
-        if (sc.loopstart !== null) {
+        if (sc && sc.loopstart !== null) {
           ch.updateLoop();
         } else {
           // no longer needed, release channel
@@ -1132,7 +1290,7 @@ const S = {
       ch.spatialize();
 
       // Only load sound files when really needed
-      if (ch.sfx.state === SFX.STATE.NEW && ch.channel_vol > 0) {
+      if (ch.sfx && ch.sfx.state === SFX.STATE.NEW && ch.channel_vol > 0) {
         ch.sfx.load().catch((err) => {
           Con.Print(`S.UpdateStaticSounds: failed to lazy load ${ch.sfx.name}, ${err.message}\n`);
         });
