@@ -36,6 +36,8 @@ This is an educational and recreational project.
 Though the vision is to provide an id tech 2 based game engine running in the browser for fun multiplayer projects.
 The engine is supposed to be extensible and fun to work with. Made for boomer shooter enthusiasts.
 
+Work on this project is supported by LLMs. Please read [LLM.md](./LLM.md) for more information on this matter.
+
 ## Documentation
 
 ### Turn-key ready build and deploy
