@@ -20,6 +20,7 @@ Where’s what these tools have worked on in big chunks and my experience:
 | A* algorithm, merging waypoints | ChatGPT came up with the initial version of the A* algorithm in `Navigation`, I enhanced it with the Octree data structure, later together with ChatGPT I optimized the waypoint placement. ChatGPT did a great job tutoring me in linear algebra, specially working with vectors and planes. |
 | PBR materials | I had zero prior knowledge on bump mapping and specular mapping. I had a loose idea, but lacked the in-depth knowledge on calculating tagents and bitangents. Together with Claude I managed to come up with a working prototype and slowly I extended its code base getting it production ready. |
 | Vite | It was faster to get Claude setting up Vite for me than to read the documentation. It’s pretty much a vanilla setup adjusted for the engine-game-separation though. |
+| Documentation | Some of the documentation has been created/updated/improved using Gemini. |
 
 ## Conclusion
 

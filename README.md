@@ -143,6 +143,7 @@ There are two main entrypoints:
 | source/engine/main-browser.mjs | launcher for a full browser session |
 | source/engine/main-dedicated.mjs | launcher for a dedicated server |
 
+Please also checkout the documents in `docs/`. There are many more features that have been added to the original engine.
 
 ## Based on the work of
 

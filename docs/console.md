@@ -2,10 +2,10 @@
 
 Everything related to this is in:
 
-* `Console.js`
-* `Cmd.js`
-* `Cvar.js`
-* `Key.js`
+* `Console.mjs`
+* `Cmd.mjs`
+* `Cvar.mjs`
+* `Key.mjs`
 
 ## Console Frontend
 
@@ -16,6 +16,12 @@ Everything related to this is in:
   * `Key.dest.console` is for the console
   * `Key.dest.message` is for chatting
   * However, actual handling of the key strokes is happening in `Key.Console`.
+
+### Console Background Customization
+
+By default the engine will render the color-indexed `gfx/conback.lmp` with the version burned into it.
+
+However, you can provide a `gfx/conback.png` as a fallback.
 
 ## Console Variables
 
