@@ -615,6 +615,7 @@ const S = {
       this._channelDriver = AudioContextChannel;
 
       this._underwaterFilter = this._MakeUnderwaterChain();
+      this._underwaterFilter.output.connect(this._context.destination);
       this._started = true;
     } catch (err) {
       Con.Print(`S.Init: failed to initialize AudioContext (${err.message}). Sound disabled.\n`);
@@ -866,7 +867,7 @@ const S = {
            if (actualChunkSize >= 4) {
              // Offset 4 in fmt chunk is NumChannels (2 bytes)
              // Offset 4 in fmt chunk is SampleRate (4 bytes)
-             // Wait, standard: 
+             // Wait, standard:
              // 0-1: AudioFormat
              // 2-3: NumChannels
              // 4-7: SampleRate
