@@ -174,9 +174,10 @@ export class GLTexture {
   /**
    * Allocates a new texture from an image file or returns an existing one from the cache.
    * @param {string} filename filename an any image
-   * @returns {Promise<GLTexture>} texture instance
+   * @param {boolean} ignoreMissing whether to ignore missing files
+   * @returns {Promise<GLTexture|null>} texture instance
    */
-  static async FromImageFile(filename) {
+  static async FromImageFile(filename, ignoreMissing = false) {
     // shortcut if the texture is already cached, ignore texture dimensions check
     if (textureCache.has(filename)) {
       return textureCache.get(filename);
@@ -185,6 +186,10 @@ export class GLTexture {
     const data = await COM.LoadFile(filename);
 
     if (data === null) {
+      if (ignoreMissing) {
+        return null;
+      }
+
       throw new MissingResourceError(filename);
     }
 

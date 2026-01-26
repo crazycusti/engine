@@ -305,7 +305,7 @@ export default class CL {
     if (this.cls.connecting !== null && this.cls.state !== Def.clientConnectionState.disconnected && !this.cls.changelevel) {
       const x0 = 32, y0 = 32;
       Draw.BlackScreen();
-      Draw.String(x0, y0, 'Connecting', 2);
+      Draw.String(x0, y0, 'Connecting', 2.0);
       Draw.StringWhite(x0, y0 + 32, this.cls.connecting.message);
 
       const len = 30;
@@ -316,7 +316,7 @@ export default class CL {
 
     if (this.cls.changelevel) {
       Draw.BlackScreen();
-      Draw.String(VID.width / 2 - 64, VID.height / 2 - 16, 'Loading', 2); // TODO: use the loading graphic
+      Draw.String(VID.width / 2 - 96, VID.height / 2 - 32, 'Loading', 3.0); // TODO: use the loading graphic
     }
   }
 

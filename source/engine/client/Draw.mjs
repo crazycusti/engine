@@ -24,6 +24,8 @@ eventBus.subscribe('gl.shutdown', () => {
   gl = null;
 });
 
+const HIDPI_THRESHOLD = 2.0;
+
 /**
  * Based on the old Draw.CharToConback function but in 32 bit, this function places conchars into the conback texture data.
  * @param {Uint8Array} conback conback texture data
@@ -57,6 +59,8 @@ export default class Draw {
   static #gfxWad = null;
   /** @type {GLTexture|null} */
   static #chars = null;
+  /** @type {GLTexture|null} */
+  static #charsLarge = null;
   /** @type {WadLumpTexture|null} */
   static #loading = null;
   /** @type {GLTexture|null} */
@@ -65,15 +69,90 @@ export default class Draw {
   static #loadingCounter = 0;
 
   /**
+   * Generates a GLTexture from a given font string to be used as a replacement for ConChars.
+   * NOTE: does not generate the special symbols, only ASCII 32-127
+   * @param {string} font Font string (e.g. 'bold 30px monospace')
+   * @param {number} [size] Texture size (default 512)
+   * @returns {Promise<GLTexture>} A promise that resolves to the generated font texture.
+   * @protected
+   */
+  static async CreateFontTexture(font, size = 512) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Failed to get 2d context');
+    }
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = font;
+
+    const cellSize = size / 16;
+    const halfCell = cellSize / 2;
+    const shadowOffset = size / 512;
+
+    // 0-127: Normal colored text
+    // 128-255: Alternate colored text
+
+    const c = ClientEngineAPI.IndexToRGB(95);
+    const r = Math.floor(c[0] * 255);
+    const g = Math.floor(c[1] * 255);
+    const b = Math.floor(c[2] * 255);
+    const gold = `rgb(${r},${g},${b})`;
+    const white = '#fff';
+
+    const drawChar = (i, color) => {
+      const charCode = i % 128;
+      if (charCode < 32) {
+        return; // Skip non-printables
+      }
+
+      const char = String.fromCharCode(charCode);
+      const row = Math.floor(i / 16);
+      const col = i % 16;
+
+      const x = (col * cellSize) + halfCell;
+      const y = (row * cellSize) + halfCell;
+
+      ctx.fillStyle = color;
+      ctx.shadowColor = 'black';
+      ctx.shadowOffsetX = shadowOffset;
+      ctx.shadowOffsetY = shadowOffset;
+      ctx.shadowBlur = 0;
+
+      if (['!', '.', ',', ':', ';'].includes(char)) {
+        ctx.textAlign = 'left';
+        ctx.fillText(char, col * cellSize, y);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.fillText(char, x, y);
+      }
+    };
+
+    for (let i = 0; i < 256; i++) {
+        drawChar(i, i < 128 ? gold : white);
+    }
+
+    // window.open('', '_blank')?.document.write('<img src="' + canvas.toDataURL() + '">');
+
+    const bitmap = await createImageBitmap(canvas);
+    return GLTexture.Allocate('font:' + font, size, size, bitmap).lockTextureMode('GL_LINEAR');
+  }
+
+  /**
    * Initializes the Draw system, loads resources, and sets up event listeners.
    * @returns {Promise<void>}
    */
   static async Init() {
     // Load gfx.wad and essential lumps in parallel
-    const [gfxWad, conback, loading] = await Promise.all([
+    const [gfxWad, conback, loading, conback32] = await Promise.all([
       W.LoadFile('gfx.wad'),
       W.LoadLump('gfx/conback.lmp'),
       W.LoadLump('gfx/loading.lmp'),
+      GLTexture.FromImageFile('gfx/conback.png', true), // optional 32-bit conback
 
       // also load all shaders we need
       GL.CreateProgram('fill',
@@ -97,6 +176,10 @@ export default class Draw {
     Draw.#chars = GLTexture.FromLumpTexture(conchars).lockTextureMode('GL_NEAREST');
 
     Draw.#conback = (() => {
+      if (conback32 !== null) {
+        return conback32.lockTextureMode('GL_LINEAR');
+      }
+
       if (conback === null) {
         throw new MissingResourceError('gfx/conback.lmp');
       }
@@ -120,6 +203,10 @@ export default class Draw {
     eventBus.subscribe('com.fs.being', Draw.BeginDisc);
     eventBus.subscribe('com.fs.end', Draw.EndDisc);
     VID.mainwindow.style.backgroundImage = 'url("' + Draw.#gfxWad.getLumpMipmap('BACKTILE', 0).toDataURL() + '")';
+
+    // eslint-disable-next-line require-atomic-updates
+    Draw.#charsLarge = await Draw.CreateFontTexture('bold 15px monospace', 256);
+    // Draw.#charsLarge = Draw.#chars;
   }
 
   /**
@@ -145,7 +232,11 @@ export default class Draw {
   static Character(x, y, num, scale = 1.0) {
     const program = GL.UseProgram('pic', true);
     gl.uniform3f(program.uColor, 1.0, 1.0, 1.0);
-    Draw.#chars.bind(program.tTexture, true);
+    if (scale > HIDPI_THRESHOLD) {
+      Draw.#charsLarge.bind(program.tTexture, true);
+    } else {
+      Draw.#chars.bind(program.tTexture, true);
+    }
     Draw.Char(x, y, num, scale);
   }
 
@@ -160,7 +251,11 @@ export default class Draw {
   static String(x, y, str, scale = 1.0, color = new Vector(1.0, 1.0, 1.0)) {
     const program = GL.UseProgram('pic', true);
     gl.uniform3f(program.uColor, color[0], color[1], color[2]);
-    Draw.#chars.bind(program.tTexture, true);
+    if (scale > HIDPI_THRESHOLD) {
+      Draw.#charsLarge.bind(program.tTexture, true);
+    } else {
+      Draw.#chars.bind(program.tTexture, true);
+    }
     for (let i = 0; i < str.length; i++) {
       Draw.Char(x, y, str.charCodeAt(i), scale);
       x += 8 * scale;
@@ -178,7 +273,11 @@ export default class Draw {
   static StringWhite(x, y, str, scale = 1.0) {
     const program = GL.UseProgram('pic', true);
     gl.uniform3f(program.uColor, 1.0, 1.0, 1.0);
-    Draw.#chars.bind(program.tTexture);
+    if (scale > HIDPI_THRESHOLD) {
+      Draw.#charsLarge.bind(program.tTexture, true);
+    } else {
+      Draw.#chars.bind(program.tTexture, true);
+    }
     for (let i = 0; i < str.length; i++) {
       Draw.Char(x, y, str.charCodeAt(i) + 128, scale);
       x += 8 * scale;
