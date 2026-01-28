@@ -6,6 +6,7 @@ import { SzBuffer } from './MSG.mjs';
 import { BaseDriver, LoopDriver, QSocket, WebRTCDriver, WebSocketDriver } from './NetworkDrivers.mjs';
 import { DriverRegistry } from './DriverRegistry.mjs';
 import { InviteCommand } from './ConsoleCommands.mjs';
+import { clientConnectionState } from '../common/Def.mjs';
 
 const NET = {};
 
@@ -58,7 +59,7 @@ NET.Connect = function(address) {
   const ret = driver.Connect(address);
 
   if (ret === 0) {
-    CL.cls.state = CL.active.connecting;
+    CL.cls.state = clientConnectionState.connecting;
     Con.Print('trying...\n');
     NET.start_time = NET.time;
     NET.reps = 0;

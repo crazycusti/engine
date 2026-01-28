@@ -3,6 +3,7 @@
 import { gameCapabilities } from '../../shared/Defs.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
+import { clientConnectionState } from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import GL from './GL.mjs';
 import VID from './VID.mjs';
@@ -295,7 +296,7 @@ SCR.ScreenShot_f = function() {
 
 SCR.BeginLoadingPlaque = function() {
   S.StopAllSounds();
-  if ((CL.cls.state !== CL.active.connected) || (CL.cls.signon !== 4)) {
+  if ((CL.cls.state !== clientConnectionState.connected) || (CL.cls.signon !== 4)) {
     return;
   }
   SCR.centertime_off = 0.0;
@@ -377,7 +378,7 @@ SCR.UpdateScreen = function() {
       R.PolyBlend();
     }
 
-    if (CL.cls.state === CL.active.connecting) {
+    if (CL.cls.state === clientConnectionState.connecting) {
       CL.Draw();
     } else if ((CL.state.intermission === 1) && (Key.dest.value === Key.dest.game)) {
       if (!CL.sbarDisabled) {

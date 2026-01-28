@@ -130,7 +130,8 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
    */
   renderWorld(clmodel) {
-    R.currententity = CL.state.clientEntities.getEntity(0);
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
     R.c_brush_vbos++;
 
@@ -183,6 +184,10 @@ export class BrushModelRenderer extends ModelRenderer {
         const cmds = leaf.cmds[j];
         const material = clmodel.textures[cmds[0]];
 
+        if (material.flags & materialFlags.MF_SKIP) {
+          continue;
+        }
+
         // Skip transparent surfaces in opaque pass
         if (material.flags & materialFlags.MF_TRANSPARENT) {
           continue;
@@ -191,7 +196,7 @@ export class BrushModelRenderer extends ModelRenderer {
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
 
-        material.emit(R.currententity);
+        material.emit(worldspawn);
         material.bindTo(program);
 
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
@@ -206,7 +211,8 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
    */
   renderWorldTransparent(clmodel) {
-    R.currententity = CL.state.clientEntities.getEntity(0);
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
     R.c_brush_vbos++;
 
@@ -264,6 +270,11 @@ export class BrushModelRenderer extends ModelRenderer {
         const cmds = leaf.cmds[j];
         const material = clmodel.textures[cmds[0]];
 
+        // Skip requested
+        if (material.flags & materialFlags.MF_SKIP) {
+          continue;
+        }
+
         // Only render transparent surfaces in this pass
         if (!(material.flags & materialFlags.MF_TRANSPARENT)) {
           continue;
@@ -272,7 +283,7 @@ export class BrushModelRenderer extends ModelRenderer {
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
 
-        material.emit(R.currententity);
+        material.emit(worldspawn);
         material.bindTo(program);
 
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
@@ -291,7 +302,8 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
    */
   renderWorldTurbolents(clmodel) {
-    R.currententity = CL.state.clientEntities.getEntity(0);
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
     R.c_brush_vbos++;
 
@@ -320,7 +332,7 @@ export class BrushModelRenderer extends ModelRenderer {
         const cmds = leaf.cmds[j];
         R.c_brush_verts += cmds[2];
         R.c_brush_tris += cmds[2] / 3;
-        clmodel.textures[cmds[0]].emit(R.currententity);
+        clmodel.textures[cmds[0]].emit(worldspawn);
         clmodel.textures[cmds[0]].bindTo(program);
         gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
         R.c_brush_draws++;
@@ -517,6 +529,11 @@ export class BrushModelRenderer extends ModelRenderer {
       const chain = clmodel.chains[i];
       const material = clmodel.textures[chain[0]];
 
+      // Skip requested
+      if (material.flags & materialFlags.MF_SKIP) {
+        continue;
+      }
+
       // Only render transparent surfaces in this pass
       if ((material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)) {
         continue;
@@ -581,9 +598,14 @@ export class BrushModelRenderer extends ModelRenderer {
 
     for (let i = 0; i < clmodel.chains.length; i++) {
       const chain = clmodel.chains[i];
-      const texture = clmodel.textures[chain[0]];
+      const material = clmodel.textures[chain[0]];
 
-      if (!(texture.flags & materialFlags.MF_TURBULENT)) {
+      // Skip requested
+      if (material.flags & materialFlags.MF_SKIP) {
+        continue;
+      }
+
+      if (!(material.flags & materialFlags.MF_TURBULENT)) {
         continue; // Skip non-turbulent surfaces in this pass
       }
 

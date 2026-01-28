@@ -2,6 +2,7 @@ import { K } from '../../shared/Keys.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
+import { clientConnectionState } from '../common/Def.mjs';
 import { registry, eventBus } from '../registry.mjs';
 
 const Key = {};
@@ -325,7 +326,7 @@ Key.Init = function() {
 };
 
 Key.Event = function(key, down) {
-  if (CL.cls.state === CL.active.connecting && key === K.ESCAPE && down === true) {
+  if (CL.cls.state === clientConnectionState.connecting && key === K.ESCAPE && down === true) {
     CL.Disconnect();
     M.ToggleMenu_f();
     return;

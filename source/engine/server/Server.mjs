@@ -278,10 +278,6 @@ export default class SV {
 
     SV.InitPmove();
 
-    // SV.nop = new SzBuffer(4);
-    // SV.cursize = 1;
-    // MSG.WriteByte(SV.nop, Protocol.svc.nop);
-
     SV.area.initBoxHull(); // pmove, remove
   }
 

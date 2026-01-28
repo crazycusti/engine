@@ -24,7 +24,7 @@ eventBus.subscribe('gl.shutdown', () => {
   gl = null;
 });
 
-const HIDPI_THRESHOLD = 2.0;
+const HIDPI_THRESHOLD = 1.0;
 
 /**
  * Based on the old Draw.CharToConback function but in 32 bit, this function places conchars into the conback texture data.
@@ -61,22 +61,82 @@ export default class Draw {
   static #chars = null;
   /** @type {GLTexture|null} */
   static #charsLarge = null;
+  /** @type {Record<string, number>} */
+  static #charsLargeWidthTable = {};
   /** @type {WadLumpTexture|null} */
   static #loading = null;
   /** @type {GLTexture|null} */
   static #conback = null;
   /** @type {number} */
   static #loadingCounter = 0;
+  /** @type {WebGLFramebuffer|null} */
+  static #fbo = null;
+  /** @type {GLTexture|null} */
+  static #currentTexture = null;
+
+  /**
+   * Redirects all subsequent Draw calls to the specified texture.
+   * @param {GLTexture} texture The texture to render to.
+   */
+  static BeginTexture(texture) {
+    if (!texture.ready) {
+      texture.upload(null);
+    }
+
+    Draw.#currentTexture = texture;
+
+    GL.StreamFlush();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, Draw.#fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture.texnum, 0);
+    gl.viewport(0, 0, texture.width, texture.height);
+
+    // Calc ortho for this texture
+    const ortho = [
+      2.0 / texture.width, 0.0, 0.0, 0.0,
+      0.0, 2.0 / texture.height, 0.0, 0.0,
+      0.0, 0.0, -1.0, 0.0,
+      -1.0, -1.0, 0.0, 1.0,
+    ];
+
+    for (const { program, uOrtho } of GL.programs) {
+      if (!uOrtho) {
+        continue;
+      }
+      gl.useProgram(program);
+      gl.uniformMatrix4fv(uOrtho, false, ortho);
+    }
+
+    // Reset current program tracking so next UseProgram works correctly
+    GL.UnbindProgram();
+  }
+
+  /**
+   * Ends rendering to texture and restores screen output.
+   */
+  static EndTexture() {
+    GL.StreamFlush();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    if (Draw.#currentTexture !== null) {
+      Draw.#currentTexture.bind(0);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      Draw.#currentTexture = null;
+    }
+
+    GL.Set2D();
+  }
 
   /**
    * Generates a GLTexture from a given font string to be used as a replacement for ConChars.
    * NOTE: does not generate the special symbols, only ASCII 32-127
    * @param {string} font Font string (e.g. 'bold 30px monospace')
-   * @param {number} [size] Texture size (default 512)
+   * @param {number} size Texture size (default 512)
+   * @param {Record<string, number>} widthTable Optional width table to fill
    * @returns {Promise<GLTexture>} A promise that resolves to the generated font texture.
    * @protected
    */
-  static async CreateFontTexture(font, size = 512) {
+  static async CreateFontTexture(font, size = 512, widthTable = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -86,16 +146,13 @@ export default class Draw {
     }
 
     ctx.clearRect(0, 0, size, size);
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.font = font;
 
     const cellSize = size / 16;
     const halfCell = cellSize / 2;
     const shadowOffset = size / 512;
-
-    // 0-127: Normal colored text
-    // 128-255: Alternate colored text
 
     const c = ClientEngineAPI.IndexToRGB(95);
     const r = Math.floor(c[0] * 255);
@@ -105,16 +162,15 @@ export default class Draw {
     const white = '#fff';
 
     const drawChar = (i, color) => {
-      const charCode = i % 128;
+      const charCode = i % 128; // splitting it in half
       if (charCode < 32) {
-        return; // Skip non-printables
+        return; // the font most likely does not have the Quake special symbols
       }
 
       const char = String.fromCharCode(charCode);
       const row = Math.floor(i / 16);
       const col = i % 16;
 
-      const x = (col * cellSize) + halfCell;
       const y = (row * cellSize) + halfCell;
 
       ctx.fillStyle = color;
@@ -123,19 +179,18 @@ export default class Draw {
       ctx.shadowOffsetY = shadowOffset;
       ctx.shadowBlur = 0;
 
-      if (['!', '.', ',', ':', ';'].includes(char)) {
-        ctx.textAlign = 'left';
-        ctx.fillText(char, col * cellSize, y);
-      } else {
-        ctx.textAlign = 'center';
-        ctx.fillText(char, x, y);
-      }
+      ctx.fillText(char, col * cellSize, y);
+
+      const metrics = ctx.measureText(char);
+
+      widthTable[char] = metrics.width;
     };
 
     for (let i = 0; i < 256; i++) {
-        drawChar(i, i < 128 ? gold : white);
+      drawChar(i, i < 128 ? white : gold);
     }
 
+    // console.log('widthTable:', widthTable);
     // window.open('', '_blank')?.document.write('<img src="' + canvas.toDataURL() + '">');
 
     const bitmap = await createImageBitmap(canvas);
@@ -148,11 +203,12 @@ export default class Draw {
    */
   static async Init() {
     // Load gfx.wad and essential lumps in parallel
-    const [gfxWad, conback, loading, conback32] = await Promise.all([
+    const [gfxWad, conback, loading, conback32, concharsLarge] = await Promise.all([
       W.LoadFile('gfx.wad'),
       W.LoadLump('gfx/conback.lmp'),
       W.LoadLump('gfx/loading.lmp'),
       GLTexture.FromImageFile('gfx/conback.png', true), // optional 32-bit conback
+      GLTexture.FromImageFile('gfx/concharslarge.png', true), // optional large conchars
 
       // also load all shaders we need
       GL.CreateProgram('fill',
@@ -194,6 +250,14 @@ export default class Draw {
       return GLTexture.FromLumpTexture(conback).lockTextureMode('GL_NEAREST');
     })();
 
+    if (concharsLarge !== null) {
+      Draw.#charsLarge = concharsLarge.lockTextureMode('GL_LINEAR');
+      Draw.#charsLargeWidthTable = { '0': 17, '1': 17, '2': 17, '3': 17, '4': 17, '5': 17, '6': 17, '7': 17, '8': 17, '9': 17, ' ': 17, '!': 17, '"': 17, '#': 17, '$': 17, '%': 17, '&': 17, "'": 17, '(': 17, ')': 17, '*': 17, '+': 17, ',': 17, '-': 17, '.': 17, '/': 17, ':': 17, ';': 17, '<': 17, '=': 17, '>': 17, '?': 17, '@': 17, 'A': 17, 'B': 17, 'C': 17, 'D': 17, 'E': 17, 'F': 17, 'G': 17, 'H': 17, 'I': 17, 'J': 17, 'K': 17, 'L': 17, 'M': 17, 'N': 17, 'O': 17, 'P': 17, 'Q': 17, 'R': 17, 'S': 17, 'T': 17, 'U': 17, 'V': 17, 'W': 17, 'X': 17, 'Y': 17, 'Z': 17, '[': 17, '\\': 17, ']': 17, '^': 17, '_': 17, '`': 17, 'a': 17, 'b': 17, 'c': 17, 'd': 17, 'e': 17, 'f': 17, 'g': 17, 'h': 17, 'i': 17, 'j': 17, 'k': 17, 'l': 17, 'm': 17, 'n': 17, 'o': 17, 'p': 17, 'q': 17, 'r': 17, 's': 17, 't': 17, 'u': 17, 'v': 17, 'w': 17, 'x': 17, 'y': 17, 'z': 17, '{': 17, '|': 17, '}': 17, '~': 17, '\x7f': 0 };
+
+    } else {
+      Draw.#charsLarge = Draw.#chars; // fallback to normal chars
+    }
+
     const elem = document.getElementById('loading');
     if (elem instanceof HTMLImageElement) {
       Draw.#loadingElem = /** @type {HTMLImageElement} */ (elem);
@@ -204,8 +268,12 @@ export default class Draw {
     eventBus.subscribe('com.fs.end', Draw.EndDisc);
     VID.mainwindow.style.backgroundImage = 'url("' + Draw.#gfxWad.getLumpMipmap('BACKTILE', 0).toDataURL() + '")';
 
-    // eslint-disable-next-line require-atomic-updates
-    Draw.#charsLarge = await Draw.CreateFontTexture('bold 15px monospace', 256);
+    Draw.#fbo = gl.createFramebuffer(); // TODO: cleanup
+
+    // await Draw.CreateFontTexture('bold 28px "monospace"', 512, Draw.#charsLargeWidthTable);
+
+
+    // Draw.#charsLarge = await Draw.CreateFontTexture('bold 28px "Fira Code"', 512, Draw.#charsLargeWidthTable);
     // Draw.#charsLarge = Draw.#chars;
   }
 
@@ -247,6 +315,7 @@ export default class Draw {
    * @param {string} str The string to draw.
    * @param {number} scale The scale factor.
    * @param {Vector} color The color vector.
+   * @returns {number} The new x position after drawing the string.
    */
   static String(x, y, str, scale = 1.0, color = new Vector(1.0, 1.0, 1.0)) {
     const program = GL.UseProgram('pic', true);
@@ -258,9 +327,10 @@ export default class Draw {
     }
     for (let i = 0; i < str.length; i++) {
       Draw.Char(x, y, str.charCodeAt(i), scale);
-      x += 8 * scale;
+      x += Math.floor((Draw.#charsLargeWidthTable[str.charAt(i)] || 32) * scale * 0.25);
     }
     GL.StreamFlush();
+    return x;
   }
 
   /**

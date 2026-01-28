@@ -5,6 +5,7 @@ import Cvar from './Cvar.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Cmd from './Cmd.mjs';
 import VID from '../client/VID.mjs';
+import { clientConnectionState } from './Def.mjs';
 
 let { CL, Draw, Host, Key, M, SCR } = registry;
 
@@ -34,7 +35,7 @@ export default class Con {
   static ToggleConsole_f() {
     SCR.EndLoadingPlaque();
     if (Key.dest.value === Key.dest.console) {
-      if (CL.cls.state !== CL.active.connected) {
+      if (CL.cls.state !== clientConnectionState.connected) {
         M.Menu_Main_f();
         return;
       }
@@ -149,15 +150,15 @@ export default class Con {
       return;
     }
     let text = ']' + Key.edit_line + String.fromCharCode(10 + ((Host.realtime * 4.0) & 1));
-    const width = (VID.width / 8) - 2;
+    const width = (VID.width / 16) - 2;
     if (text.length >= width) {
       text = text.substring(1 + text.length - width);
     }
-    Draw.String(8, Con.vislines - 16, text);
+    Draw.String(8, Con.vislines - 32, text, 2.0);
   }
 
   static DrawNotify() {
-    const width = (VID.width / 8) - 2;
+    const width = (VID.width / 16) - 2;
     let i = Con.text.length - 4; let v = 0;
     if (i < 0) {
       i = 0;
@@ -166,11 +167,11 @@ export default class Con {
       if ((Host.realtime - Con.text[i].time) > Con.notifytime.value) {
         continue;
       }
-      Draw.String(8, v, Con.text[i].text.substring(0, width));
-      v += 8;
+      Draw.String(8, v, Con.text[i].text.substring(0, width), 2.0);
+      v += 16;
     }
 
-    v += 8;
+    v += 16;
 
     if (Key.dest.value === Key.dest.message) {
       Draw.String(8, v, 'say: ' + Key.chat_buffer + String.fromCharCode(10 + ((Host.realtime * 4.0) & 1)), 2.0);
@@ -192,13 +193,13 @@ export default class Con {
 
     const width = (VID.width / 8) - 2;
     let rows;
-    let y = lines - 16;
+    let y = lines - 32;
     let i;
     for (i = Con.text.length - 1 - Con.backscroll; i >= 0;) {
       if (Con.text[i].text.length === 0) {
-        y -= 8;
+        y -= 16;
       } else {
-        y -= Math.ceil(Con.text[i].text.length / width) << 3;
+        y -= Math.ceil(Con.text[i].text.length / width) << 4;
       }
       i--;
       if (y <= 0) {
@@ -209,12 +210,12 @@ export default class Con {
       const { text, color } = Con.text[i];
       rows = Math.ceil(text.length / width);
       if (rows === 0) {
-        y += 8;
+        y += 16;
         continue;
       }
       for (let j = 0; j < rows; j++) {
-        Draw.String(8, y, text.substr(j * width, width), 1.0, color);
-        y += 8;
+        Draw.String(8, y, text.substr(j * width, width), 2.0, color);
+        y += 16;
       }
     }
     Con.DrawInput();

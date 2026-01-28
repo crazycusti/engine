@@ -13,15 +13,17 @@ import VID from './VID.mjs';
 import { clientRuntimeState, clientStaticState } from './ClientState.mjs';
 import ClientConnection from './ClientConnection.mjs';
 import ClientLifecycle from './ClientLifecycle.mjs';
+import { materialFlags, PBRMaterial, QuakeMaterial } from './renderer/Materials.mjs';
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
-let { Con, Draw, Host, S, Sbar } = registry;
+let { Con, Draw, Host, R, S, Sbar } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   Draw = registry.Draw;
   Host = registry.Host;
   S = registry.S;
+  R = registry.R;
   Sbar = registry.Sbar;
 });
 
@@ -344,10 +346,25 @@ export default class CL {
     }
 
     this.state.clientEntities.think();
+
+    // CR: playing around with rendering into textures
+    // const comptex = CL.state.worldmodel.textures.find((t) => t.name === 'BIGDOOR4');
+    // if (comptex && comptex instanceof QuakeMaterial) {
+    //   const dateTime = (new Date().toISOString()).split('T');
+    //   Draw.BeginTexture(comptex.texture);
+    //   Draw.String(8, 8, 'Hello world!', 1.0);
+    //   Draw.String(8, 24, dateTime[0], 1.0);
+    //   Draw.String(8, 32, dateTime[1], 1.0);
+    //   // comptex.flags |= materialFlags.MF_SKIP;
+    //   // R.RenderWorld();
+    //   // comptex.flags &= ~materialFlags.MF_SKIP;
+    //   Draw.EndTexture();
+    // }
+
   }
 
   static ServerInfo_f() { // private
-    if (CL.cls.state !== CL.active.connected) {
+    if (CL.cls.state !== Def.clientConnectionState.connected) {
       Con.Print('Can\'t "serverinfo", not connected\n');
       return;
     }
@@ -358,7 +375,7 @@ export default class CL {
   }
 
   static MoveAround_f() { // private
-    if (this.cls.state !== this.active.connected) {
+    if (this.cls.state !== Def.clientConnectionState.connected) {
       Con.Print('Can\'t "movearound", not connected\n');
       return;
     }
@@ -376,7 +393,7 @@ export default class CL {
     }
 
     this.cls.movearound = setInterval(() => {
-      if (this.cls.state !== this.active.connected) {
+      if (this.cls.state !== Def.clientConnectionState.connected) {
         Con.Print('No longer connected, stopped moving around.\n');
         clearInterval(this.cls.movearound);
         this.cls.movearound = null;

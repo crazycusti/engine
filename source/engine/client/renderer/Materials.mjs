@@ -24,6 +24,7 @@ export const materialFlags = Object.freeze({
   MF_TRANSPARENT: 1,
   MF_SKY: 2,
   MF_TURBULENT: 4,
+  MF_SKIP: 8,
 });
 
 /**

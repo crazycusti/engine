@@ -201,7 +201,7 @@ Host.ShutdownServer = function(isCrashShutdown = false) { // TODO: SV duties
   }
   eventBus.publish('server.shutting-down');
   SV.server.active = false;
-  if (!registry.isDedicatedServer && CL.cls.state === CL.active.connected) {
+  if (!registry.isDedicatedServer && CL.cls.state === Def.clientConnectionState.connected) {
     CL.Disconnect();
   }
   const start = Sys.FloatTime(); let count; let i;
@@ -353,7 +353,7 @@ Host._Frame = async function() {
     return;
   }
 
-  if (CL.cls.state === CL.active.connecting) {
+  if (CL.cls.state === Def.clientConnectionState.connecting) {
     CL.CheckConnectingState();
     SCR.UpdateScreen();
     return;
@@ -361,7 +361,7 @@ Host._Frame = async function() {
 
   Cmd.Execute();
 
-  if (CL.cls.state === CL.active.connected) {
+  if (CL.cls.state === Def.clientConnectionState.connected) {
     CL.ReadFromServer();
   }
 
@@ -1056,7 +1056,7 @@ Host.Name_f = function(...names) { // signon 2, step 1
 
   if (!registry.isDedicatedServer && !this.client) {
     Cvar.Set('_cl_name', newName);
-    if (CL.cls.state === CL.active.connected) {
+    if (CL.cls.state === Def.clientConnectionState.connected) {
       this.forward();
     }
     return;
@@ -1185,7 +1185,7 @@ Host.Color_f = function(...argv) { // signon 2, step 2 // FIXME: Host.client
 
   if (!registry.isDedicatedServer && !this.client) {
     Cvar.Set('_cl_color', playercolor);
-    if (CL.cls.state === CL.active.connected) {
+    if (CL.cls.state === Def.clientConnectionState.connected) {
       this.forward();
     }
     return;
@@ -1334,11 +1334,8 @@ Host.Spawn_f = function() { // signon 2, step 3
     MSG.WriteLong(message, SV.server.gameAPI.killed_monsters);
   }
 
-  const angles = ent.entity.angles;
   MSG.WriteByte(message, Protocol.svc.setangle);
-  MSG.WriteAngle(message, angles[0]);
-  MSG.WriteAngle(message, angles[1]);
-  MSG.WriteAngle(message, 0.0);
+  MSG.WriteAngleVector(message, ent.entity.angles);
 
   SV.messages.writeClientdataToMessage(ent, message);
 

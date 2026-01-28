@@ -3,6 +3,7 @@ import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Cvar from './Cvar.mjs';
+import { clientConnectionState } from './Def.mjs';
 
 let { CL, COM, Con, Host } = registry;
 
@@ -62,7 +63,7 @@ export class ConsoleCommand {
 
     console.assert(CL !== null, 'CL must be available');
 
-    if (CL.cls.state !== CL.active.connected) {
+    if (CL.cls.state !== clientConnectionState.connected) {
       Con.Print('Can\'t "' + command + '", not connected\n');
       return true;
     }

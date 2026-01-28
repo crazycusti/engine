@@ -659,7 +659,6 @@ R.DrawEntitiesOnList = function() {
 
     renderer.setupRenderState(0);
     for (const entity of entities) {
-      R.currententity = entity;
       renderer.render(entity.model, entity, 0);
     }
     renderer.cleanupRenderState(0);
@@ -674,7 +673,6 @@ R.DrawEntitiesOnList = function() {
       gl.enable(gl.BLEND);
       renderer.setupRenderState(1);
       for (const entity of spriteEntities) {
-        R.currententity = entity;
         renderer.render(entity.model, entity, 1);
       }
       renderer.cleanupRenderState(1);
@@ -710,14 +708,12 @@ R.DrawTransparentEntitiesOnList = function() {
   const brushEntities = entitiesByType.get(Mod.type.brush);
   if (brushEntities) {
     const renderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    if (renderer) {
-      renderer.setupRenderState(2);
-      for (const entity of brushEntities) {
-        R.currententity = entity;
-        renderer.render(entity.model, entity, 2);
-      }
-      renderer.cleanupRenderState(2);
+
+    renderer.setupRenderState(2);
+    for (const entity of brushEntities) {
+      renderer.render(entity.model, entity, 2);
     }
+    renderer.cleanupRenderState(2);
   }
   GL.StreamFlush();
 };
@@ -765,11 +761,9 @@ R.DrawViewModel = function() {
 
   if (CL.state.viewent.model !== null) {
     const aliasRenderer = modelRendererRegistry.getRenderer(Mod.type.alias);
-    if (aliasRenderer) {
-      aliasRenderer.setupRenderState(0);
-      aliasRenderer.render(CL.state.viewent.model, CL.state.viewent, 0);
-      aliasRenderer.cleanupRenderState(0);
-    }
+    aliasRenderer.setupRenderState(0);
+    aliasRenderer.render(CL.state.viewent.model, CL.state.viewent, 0);
+    aliasRenderer.cleanupRenderState(0);
   }
 
   ymax = 4.0 * Math.tan(R.refdef.fov_y * Math.PI / 360.0);
@@ -986,22 +980,13 @@ R.PreRenderScene = function() {
   R.dowarp = (R.waterwarp.value !== 0) && (R.viewleaf.contents <= content.CONTENT_WATER);
 };
 
-R.RenderScene = function() {
-  R.SetFrustum();
-  R.SetupGL();
-  R.MarkLeaves();
-  gl.enable(gl.CULL_FACE);
-  R.DrawSkyBox();
-  R.DrawViewModel();
-
+R.RenderWorld = function() {
   // Render world and entities using the renderer registry
   const worldEntity = CL.state.clientEntities.getEntity(0);
   if (worldEntity && worldEntity.model) {
     const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    if (brushRenderer) {
-      // Pass 0: World opaque surfaces
-      brushRenderer.render(worldEntity.model, worldEntity, 0);
-    }
+    // Pass 0: World opaque surfaces
+    brushRenderer.render(worldEntity.model, worldEntity, 0);
   }
 
   // Draw all other entities (pass 0 for opaque, pass 1 for turbulent)
@@ -1010,9 +995,7 @@ R.RenderScene = function() {
   // Pass 1: World turbulent surfaces
   if (worldEntity && worldEntity.model) {
     const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    if (brushRenderer) {
-      brushRenderer.render(worldEntity.model, worldEntity, 1);
-    }
+    brushRenderer.render(worldEntity.model, worldEntity, 1);
   }
 
   gl.disable(gl.CULL_FACE);
@@ -1024,14 +1007,22 @@ R.RenderScene = function() {
   gl.enable(gl.CULL_FACE);
   if (worldEntity && worldEntity.model) {
     const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    if (brushRenderer) {
-      brushRenderer.render(worldEntity.model, worldEntity, 2);
-    }
+    brushRenderer.render(worldEntity.model, worldEntity, 2);
   }
 
   // Draw transparent entities
   R.DrawTransparentEntitiesOnList();
   gl.disable(gl.CULL_FACE);
+};
+
+R.RenderScene = function() {
+  R.SetFrustum();
+  R.SetupGL();
+  R.MarkLeaves();
+  gl.enable(gl.CULL_FACE);
+  R.DrawSkyBox();
+  R.DrawViewModel();
+  R.RenderWorld();
 };
 
 R._speeds = /** @type {string[]} */ ([]);
@@ -2193,15 +2184,6 @@ R.BuildLightMapEx = function(currentmodel, surf) {
       }
     }
   }
-};
-
-/**
- * @param {BaseMaterial} base
- * @returns {[BaseMaterial, BaseMaterial]}
- */
-R.TextureAnimation = function(base) {
-  base.emit(R.currententity);
-  return [base, base];
 };
 
 R.RecursiveWorldNode = function(node) {

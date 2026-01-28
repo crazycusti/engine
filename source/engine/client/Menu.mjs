@@ -1,6 +1,7 @@
 import { K } from '../../shared/Keys.mjs';
 import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
+import { clientConnectionState } from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import ClientLifecycle from './ClientLifecycle.mjs';
 import { GLTexture } from './GL.mjs';
@@ -101,7 +102,7 @@ M.DrawTextBox = function (x, y, width, lines) {
 };
 
 M.CloseMenu = function () {
-  if (CL.cls.state === CL.active.connected) {
+  if (CL.cls.state === clientConnectionState.connected) {
     Key.dest.value = Key.dest.game;
   } else {
     Key.dest.value = Key.dest.console;
@@ -154,7 +155,7 @@ M.Main_Key = function (k) {
     case K.ESCAPE:
       M.CloseMenu();
       CL.cls.demonum = M.save_demonum;
-      if ((CL.cls.demonum !== -1) && (CL.cls.demoplayback !== true) && (CL.cls.state !== CL.active.connected)) {
+      if ((CL.cls.demonum !== -1) && (CL.cls.demoplayback !== true) && (CL.cls.state !== clientConnectionState.connected)) {
         CL.NextDemo();
       }
       return;
@@ -418,7 +419,7 @@ M.MultiPlayer_Draw = function () {
   M.Print(64, 96 - y0, 'Shirt color');
   M.Print(64, 120 - y0, 'Pants color');
 
-  const label = CL.cls.state !== CL.active.connected ? 'Join Game' : 'Accept Changes';
+  const label = CL.cls.state !== clientConnectionState.connected ? 'Join Game' : 'Accept Changes';
 
   M.DrawTextBox(64, 148 - y0, label.length, 1);
   M.PrintWhite(72, 156 - y0, label);
@@ -505,7 +506,7 @@ M.MultiPlayer_Key = function (k) {
 
           S.LocalSound(M.sfx_menu2);
 
-          if (CL.cls.state !== CL.active.connected) {
+          if (CL.cls.state !== clientConnectionState.connected) {
             // M.CloseMenu();
             // Cmd.text += 'connect "' + M.multiplayer_joinname + '"\n';
             M.Menu_Launch_Server_f();
