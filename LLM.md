@@ -21,6 +21,7 @@ Where’s what these tools have worked on in big chunks and my experience:
 | PBR materials | I had zero prior knowledge on bump mapping and specular mapping. I had a loose idea, but lacked the in-depth knowledge on calculating tagents and bitangents. Together with Claude I managed to come up with a working prototype and slowly I extended its code base getting it production ready. |
 | Vite | It was faster to get Claude setting up Vite for me than to read the documentation. It’s pretty much a vanilla setup adjusted for the engine-game-separation though. |
 | Documentation | Some of the documentation has been created/updated/improved using Gemini. |
+| `MSG` into `SzBuffer` refactor | Played around with Claude Opus 4.5 and tasked it to merge the old C-style `MSG` functions into `SzBuffer` and it was 99% on point and it actually due to the asserts a couple of bugs I fixed myself afterwards. |
 
 ## Conclusion
 

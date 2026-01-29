@@ -2,7 +2,6 @@ import Vector from '../../shared/Vector.mjs';
 import Cmd from '../common/Cmd.mjs';
 import { HostError } from '../common/Errors.mjs';
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
-import MSG from '../network/MSG.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ED, ServerEdict } from './Edict.mjs';
 
@@ -199,7 +198,7 @@ function _PF_GenerateBuiltinFunction(name, func, argTypes = [], returnType = ety
   ${returnCode}
 }`;
 
-  return (new Function('ED', 'MSG', 'PF', 'ServerEdict', 'Vector', 'registry', '_' + name, code))(ED, MSG, PF, ServerEdict, Vector, registry, func);
+  return (new Function('ED', 'PF', 'ServerEdict', 'Vector', 'registry', '_' + name, code))(ED, PF, ServerEdict, Vector, registry, func);
 };
 
 PF._VarString = function _VarString(first) {
@@ -437,13 +436,13 @@ function WriteGeneric(dest) {
   throw new Error('WriteGeneric: bad destination ' + dest);
 };
 
-for (const fn of ['WriteByte', 'WriteChar', 'WriteShort', 'WriteLong', 'WriteAngle', 'WriteCoord']) {
-  PF[fn] = _PF_GenerateBuiltinFunction(fn, (dest, val) => MSG[fn](WriteGeneric(dest), val), [etype.ev_integer, etype.ev_float]);
+for (const [fn, method] of [['WriteByte', 'writeByte'], ['WriteChar', 'writeChar'], ['WriteShort', 'writeShort'], ['WriteLong', 'writeLong'], ['WriteAngle', 'writeAngle'], ['WriteCoord', 'writeCoord']]) {
+  PF[fn] = _PF_GenerateBuiltinFunction(fn, (dest, val) => WriteGeneric(dest)[method](val), [etype.ev_integer, etype.ev_float]);
 }
 
-PF.WriteString = _PF_GenerateBuiltinFunction('WriteString', (dest, val) => MSG.WriteString(WriteGeneric(dest), val), [etype.ev_integer, etype.ev_string]);
+PF.WriteString = _PF_GenerateBuiltinFunction('WriteString', (dest, val) => WriteGeneric(dest).writeString(val), [etype.ev_integer, etype.ev_string]);
 
-PF.WriteEntity = _PF_GenerateBuiltinFunction('WriteEntity', (dest, val) => MSG.WriteShort(WriteGeneric(dest), val.num), [etype.ev_integer, etype.ev_entity]);
+PF.WriteEntity = _PF_GenerateBuiltinFunction('WriteEntity', (dest, val) => WriteGeneric(dest).writeShort(val.num), [etype.ev_integer, etype.ev_entity]);
 
 PF.makestatic = _PF_GenerateBuiltinFunction('makestatic', (edict) => edict.makeStatic(), [etype.ev_entity]);
 

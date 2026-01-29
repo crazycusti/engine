@@ -1,7 +1,7 @@
 import Cvar from '../common/Cvar.mjs';
 import { MoveVars } from '../common/Pmove.mjs';
 import Vector from '../../shared/Vector.mjs';
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from './../common/Def.mjs';
 import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
@@ -167,9 +167,9 @@ export default class SV {
     gameCapabilities: [],
     /** @type {string[]} clientdata field names */
     clientdataFields: [],
-    /** @type {MSG.WriteByte|MSG.WriteShort|MSG.WriteLong} */
+    /** @type {'writeByte' | 'writeShort' | 'writeLong' | null} */
     clientdataFieldsBitsWriter: null,
-    /** @type {Record<string, { fields: string[], bitsWriter: MSG.WriteByte|MSG.WriteShort|MSG.WriteLong}>} maps classname to its fields and the apropriate bits writer  */
+    /** @type {Record<string, { fields: string[], bitsWriter: 'writeByte' | 'writeShort' | 'writeLong'}>} maps classname to its fields and the apropriate bits writer */
     clientEntityFields: {},
     /** @type {import('../common/Mod.mjs').BaseModel[]} */
     models: [],
@@ -345,8 +345,8 @@ export default class SV {
       if (i === SV.svs.maxclients) {
         Con.Print('SV.CheckForNewClients: Server is full\n');
         const message = new SzBuffer(32);
-        MSG.WriteByte(message, Protocol.svc.disconnect);
-        MSG.WriteString(message, 'Server is full');
+        message.writeByte(Protocol.svc.disconnect);
+        message.writeString('Server is full');
         NET.SendUnreliableMessage(ret, message);
         NET.Close(ret);
         return;
@@ -537,11 +537,11 @@ export default class SV {
    */
   static WriteCvar(msg, cvar) {
     if (cvar.flags & Cvar.FLAG.SECRET) {
-      MSG.WriteString(msg, cvar.name);
-      MSG.WriteString(msg, cvar.string ? 'REDACTED' : '');
+      msg.writeString(cvar.name);
+      msg.writeString(cvar.string ? 'REDACTED' : '');
     } else {
-      MSG.WriteString(msg, cvar.name);
-      MSG.WriteString(msg, cvar.string);
+      msg.writeString(cvar.name);
+      msg.writeString(cvar.string);
     }
   }
 
@@ -556,8 +556,8 @@ export default class SV {
         continue;
       }
 
-      MSG.WriteByte(client.message, Protocol.svc.cvar);
-      MSG.WriteByte(client.message, 1);
+      client.message.writeByte(Protocol.svc.cvar);
+      client.message.writeByte(1);
       SV.WriteCvar(client.message, cvar);
     }
   }
@@ -572,18 +572,18 @@ export default class SV {
    * @param {ServerClient} client client
    */
   static ReadClientMove(client) {
-    client.cmd.msec = MSG.ReadByte();
-    client.cmd.angles = MSG.ReadAngleVector();
-    client.cmd.forwardmove = MSG.ReadShort();
-    client.cmd.sidemove = MSG.ReadShort();
-    client.cmd.upmove = MSG.ReadShort();
+    client.cmd.msec = NET.message.readByte();
+    client.cmd.angles = NET.message.readAngleVector();
+    client.cmd.forwardmove = NET.message.readShort();
+    client.cmd.sidemove = NET.message.readShort();
+    client.cmd.upmove = NET.message.readShort();
     // CR: we could restructure this a bit and let the ServerGameAPI handle the rest
-    client.cmd.buttons = MSG.ReadByte();
+    client.cmd.buttons = NET.message.readByte();
     client.edict.entity.button0 = (client.cmd.buttons & Protocol.button.attack) === 1; // QuakeC
     client.edict.entity.button1 = ((client.cmd.buttons & Protocol.button.use) >> 2) === 1; // QuakeC
     client.edict.entity.button2 = ((client.cmd.buttons & Protocol.button.jump) >> 1) === 1; // QuakeC
     client.edict.entity.v_angle = client.cmd.angles;
-    client.cmd.impulse = MSG.ReadByte();
+    client.cmd.impulse = NET.message.readByte();
     if (client.cmd.impulse !== 0) {
       client.edict.entity.impulse = client.cmd.impulse; // QuakeC
     }
@@ -597,14 +597,14 @@ export default class SV {
   static HandleRconRequest(client) {
     const message = client.message;
 
-    const password = MSG.ReadString();
-    const cmd = MSG.ReadString();
+    const password = NET.message.readString();
+    const cmd = NET.message.readString();
 
     const rconPassword = SV.rcon_password.string;
 
     if (rconPassword === '' || rconPassword !== password) {
-      MSG.WriteByte(message, Protocol.svc.print);
-      MSG.WriteString(message, 'Wrong rcon password!\n');
+      message.writeByte(Protocol.svc.print);
+      message.writeString('Wrong rcon password!\n');
       if (rconPassword === '') {
         Con.Print(`SV.HandleRconRequest: rcon attempted by ${client.name} from ${client.netconnection.address}: ${cmd}\n`);
       }
@@ -617,8 +617,8 @@ export default class SV {
     Cmd.ExecuteString(cmd);
 
     const response = Con.StopCapturing();
-    MSG.WriteByte(message, Protocol.svc.print);
-    MSG.WriteString(message, response);
+    message.writeByte(Protocol.svc.print);
+    message.writeString(response);
   }
 
   /**
@@ -640,7 +640,7 @@ export default class SV {
         return true; // No more messages
       }
 
-      MSG.BeginReading();
+      NET.message.beginReading();
 
       // Process all commands in this message
       while (true) {
@@ -648,7 +648,7 @@ export default class SV {
           return false;
         }
 
-        if (MSG.badread) {
+        if (NET.message.badread) {
           Con.Print('SV.ReadClientMessage: badread\n');
           return false;
         }
@@ -656,7 +656,7 @@ export default class SV {
         // Update client ping time
         client.ping_times[client.num_pings++ % client.ping_times.length] = SV.server.time - client.sync_time;
 
-        const cmd = MSG.ReadChar();
+        const cmd = NET.message.readChar();
 
         if (cmd === -1) {
           break; // End of message
@@ -855,11 +855,11 @@ export default class SV {
 
       // Select appropriate bits writer based on field count
       if (fields.length <= 8) {
-        SV.server.clientdataFieldsBitsWriter = MSG.WriteByte;
+        SV.server.clientdataFieldsBitsWriter = 'writeByte';
       } else if (fields.length <= 16) {
-        SV.server.clientdataFieldsBitsWriter = MSG.WriteShort;
+        SV.server.clientdataFieldsBitsWriter = 'writeShort';
       } else if (fields.length <= 32) {
-        SV.server.clientdataFieldsBitsWriter = MSG.WriteLong;
+        SV.server.clientdataFieldsBitsWriter = 'writeLong';
       }
 
       // Double check that all fields are actually defined
@@ -888,11 +888,11 @@ export default class SV {
 
         // Select appropriate bits writer based on field count
         if (extendedFields.length <= 8) {
-          clientEntityField.bitsWriter = MSG.WriteByte;
+          clientEntityField.bitsWriter = 'writeByte';
         } else if (extendedFields.length <= 16) {
-          clientEntityField.bitsWriter = MSG.WriteShort;
+          clientEntityField.bitsWriter = 'writeShort';
         } else if (extendedFields.length <= 32) {
-          clientEntityField.bitsWriter = MSG.WriteLong;
+          clientEntityField.bitsWriter = 'writeLong';
         }
 
         SV.server.clientEntityFields[classname] = clientEntityField;
@@ -999,13 +999,13 @@ export default class SV {
         return true;
 
       case Protocol.clc.stringcmd: {
-        const input = MSG.ReadString();
+        const input = NET.message.readString();
         SV.#handleClientStringCommand(client, input);
         return true;
       }
 
       case Protocol.clc.sync:
-        client.sync_time = MSG.ReadFloat();
+        client.sync_time = NET.message.readFloat();
         return true;
 
       case Protocol.clc.rconcmd:
@@ -1064,16 +1064,16 @@ class PlayerMoveCvars extends MoveVars {
    * @param {SzBuffer} message message stream
    */
   sendToClient(message) {
-    MSG.WriteFloat(message, this.gravity);
-    MSG.WriteFloat(message, this.stopspeed);
-    MSG.WriteFloat(message, this.maxspeed);
-    MSG.WriteFloat(message, this.spectatormaxspeed);
-    MSG.WriteFloat(message, this.accelerate);
-    MSG.WriteFloat(message, this.airaccelerate);
-    MSG.WriteFloat(message, this.wateraccelerate);
-    MSG.WriteFloat(message, this.friction);
-    MSG.WriteFloat(message, this.waterfriction);
-    MSG.WriteFloat(message, this.entgravity);
+    message.writeFloat(this.gravity);
+    message.writeFloat(this.stopspeed);
+    message.writeFloat(this.maxspeed);
+    message.writeFloat(this.spectatormaxspeed);
+    message.writeFloat(this.accelerate);
+    message.writeFloat(this.airaccelerate);
+    message.writeFloat(this.wateraccelerate);
+    message.writeFloat(this.friction);
+    message.writeFloat(this.waterfriction);
+    message.writeFloat(this.entgravity);
   }
 
   // CR: leaving out entgravity, it's entity specific

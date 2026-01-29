@@ -5,21 +5,16 @@ import Cvar from '../common/Cvar.mjs';
 import * as Def from '../common/Def.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import MSG from '../network/MSG.mjs';
 import Chase from './Chase.mjs';
 
 const V = {};
 
 export default V;
 
-let { CL, Con, Host, R, SCR } = registry;
+let { CL, Con, Host, NET, R, SCR } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
-  Con = registry.Con;
-  Host = registry.Host;
-  R = registry.R;
-  SCR = registry.SCR;
+  ({ CL, Con, Host, NET, R, SCR } = registry);
 });
 
 V.dmg_time = 0.0;
@@ -133,10 +128,10 @@ V.cshift_lava = [255.0, 80.0, 0.0, 150.0];
 V.blend = [0.0, 0.0, 0.0, 0.0];
 
 V.ParseDamage = function () { // Client
-  const armor = MSG.ReadByte();
-  const blood = MSG.ReadByte();
+  const armor = NET.message.readByte();
+  const blood = NET.message.readByte();
   const ent = CL.state.playerentity;
-  const from = MSG.ReadCoordVector().subtract(ent.origin);
+  const from = NET.message.readCoordVector().subtract(ent.origin);
 
   eventBus.publish('client.damage', { damageReceived: blood, armorLost: armor, attackOrigin: from.copy() });
 

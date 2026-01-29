@@ -129,7 +129,7 @@ export class ScoreSlot {
 class ClientRuntimeState {
   clientEntities = new ClientEntities();
   clientMessages = new ClientMessages();
-  /** @type {Record<string,{fields: string[], bitsReader: Function}>} */
+  /** @type {Record<string,{fields: string[], bitsReader: 'readByte' | 'readShort' | 'readLong'}>} */
   clientEntityFields = {};
   /** @type {Record<string, import('../../shared/GameInterfaces').SerializableType>} */
   clientdata = {};

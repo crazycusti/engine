@@ -3,14 +3,37 @@ import Vector from '../../shared/Vector.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 
-let { Con, NET } = registry;
+let { Con } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  Con = registry.Con;
-  NET = registry.NET;
+  ({ Con } = registry);
 });
 
+/** @type {{id: number, constructor: Function, serialize: (sz: SzBuffer, object: object) => void, deserializeOnServer: (sz: SzBuffer) => object, deserializeOnClient: (sz: SzBuffer) => object}[]} */
+const serializableHandlers = [];
+
+/**
+ * Registers a custom serializable type for network transmission.
+ * @param {Function} constructor The constructor function of the type
+ * @param {{ serialize: (sz: SzBuffer, object: object) => void, deserializeOnServer: (sz: SzBuffer) => object, deserializeOnClient: (sz: SzBuffer) => object }} handlers serialization handlers
+ */
+export function registerSerializableType(constructor, { serialize, deserializeOnServer, deserializeOnClient }) {
+  serializableHandlers.push({
+    constructor,
+    serialize,
+    deserializeOnServer,
+    deserializeOnClient,
+    id: Object.keys(Protocol.serializableTypes).length + serializableHandlers.length,
+  });
+}
+
 export class SzBuffer {
+  /** current read position in the buffer */
+  readcount = 0;
+
+  /** set to true when a read operation fails due to insufficient data */
+  badread = false;
+
   /**
    * @param {number} size maximum size of the buffer
    * @param {string} name name for debugging purposes
@@ -142,6 +165,11 @@ export class SzBuffer {
     new DataView(this.data).setInt16(this.allocate(2), c, true);
   }
 
+  writeUint16(c) {
+    console.assert(c >= 0 && c <= 65535, 'must be unsigned short', c);
+    new DataView(this.data).setUint16(this.allocate(2), c, true);
+  }
+
   writeLong(c) {
     console.assert(c >= -2147483648 && c <= 2147483647, 'must be signed long', c);
     new DataView(this.data).setInt32(this.allocate(4), c, true);
@@ -170,7 +198,7 @@ export class SzBuffer {
   }
 
   writeAngle(f) {
-    this.writeShort((f / 360.0 * 32768.0) & 65535);
+    this.writeShort(Math.round((f / 360.0 * 32768.0)) % 32768);
   }
 
   writeAngleVector(vec) {
@@ -224,6 +252,17 @@ export class SzBuffer {
       return -1;
     }
     const num = new DataView(this.data).getInt16(this.readcount, true);
+    this.readcount += 2;
+    return num;
+  }
+
+  readUint16() {
+    if ((this.readcount + 2) > this.cursize) {
+      this.badread = true;
+      // debugger;
+      return -1;
+    }
+    const num = new DataView(this.data).getUint16(this.readcount, true);
     this.readcount += 2;
     return num;
   }
@@ -289,145 +328,13 @@ export class SzBuffer {
   readRGBA() {
     return [this.readRGB(), this.readByte() / 255];
   }
-};
-
-export default class MSG {
-  static readcount = 0;
-  static badread = false;
-
-  /** @type {{ type: string, value: number | string }[]} */
-  static _messageLog = [];
-
-  /** @type {{id: number, constructor: Function, serialize: (sz: SzBuffer, object: any) => void, deserializeOnServer: (sz: SzBuffer) => any, deserializeOnClient: (sz: SzBuffer) => any}[]} NOTE: any is actually T and Function typeof T */
-  static #serializableHandlers = [];
-
-  static RegisterSerializableType(constructor, { serialize, deserializeOnServer, deserializeOnClient }) {
-    this.#serializableHandlers.push({constructor, serialize, deserializeOnServer, deserializeOnClient, id: Object.keys(Protocol.serializableTypes).length + this.#serializableHandlers.length});
-  }
-
-  // ============================================================================
-  // WRITE METHODS (Static - take buffer as first parameter)
-  // ============================================================================
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} c signed byte value (-128 to 127)
-   */
-  static WriteChar(sb, c) {
-    console.assert(c >= -128 && c <= 127, 'must be signed byte', c);
-    (new DataView(sb.data)).setInt8(sb.allocate(1), c);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} c unsigned byte value (0 to 255)
-   */
-  static WriteByte(sb, c) {
-    // console.assert(c >= 0 && c <= 255, 'must be unsigned byte', c);
-    (new DataView(sb.data)).setUint8(sb.allocate(1), c);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} c short value (-32768 to 32767)
-   */
-  static WriteShort(sb, c) {
-    // console.assert(c >= -32768 && c <= 32767, 'must be signed short', c);
-    (new DataView(sb.data)).setInt16(sb.allocate(2), c, true);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} c signed long value (-2147483648 to 2147483647)
-   */
-  static WriteLong(sb, c) {
-    // console.assert(c >= -2147483648 && c <= 2147483647, 'must be signed long', c);
-    (new DataView(sb.data)).setInt32(sb.allocate(4), c, true);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} f floating point value (32-bit)
-   */
-  static WriteFloat(sb, f) {
-    // console.assert(typeof f === 'number' && !Q.isNaN(f) && isFinite(f), 'must be a real number, not NaN or Infinity');
-    (new DataView(sb.data)).setFloat32(sb.allocate(4), f, true);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {string} s string
-   */
-  static WriteString(sb, s) {
-    if (s !== null) {
-      sb.write(new Uint8Array(Q.strmem(s)), s.length);
-    }
-    MSG.WriteChar(sb, 0);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} f coordinate
-   */
-  static WriteCoord(sb, f) {
-    MSG.WriteLong(sb, f * 8.0);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {Vector} vec position vector
-   */
-  static WriteCoordVector(sb, vec) {
-    MSG.WriteCoord(sb, vec[0]);
-    MSG.WriteCoord(sb, vec[1]);
-    MSG.WriteCoord(sb, vec[2]);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {number} f angle in degrees (0 to 360)
-   */
-  static WriteAngle(sb, f) {
-    MSG.WriteShort(sb, (f / 360.0 * 32768.0) & 65535);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {Vector} vec angles vector
-   */
-  static WriteAngleVector(sb, vec) {
-    MSG.WriteAngle(sb, vec[0]);
-    MSG.WriteAngle(sb, vec[1]);
-    MSG.WriteAngle(sb, vec[2]);
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {Vector} color color RGB vector (0.0 to 1.0)
-   */
-  static WriteRGB(sb, color) {
-    MSG.WriteByte(sb, Math.round(color[0] * 255));
-    MSG.WriteByte(sb, Math.round(color[1] * 255));
-    MSG.WriteByte(sb, Math.round(color[2] * 255));
-  }
-
-  /**
-   * @param {SzBuffer} sb message buffer
-   * @param {Vector} color color RGB vector (0.0 to 1.0)
-   * @param {number} alpha alpha value (0.0 to 1.0)
-   */
-  static WriteRGBA(sb, color, alpha) {
-    MSG.WriteRGB(sb, color);
-    MSG.WriteByte(sb, Math.round(alpha * 255));
-  }
 
   /**
    * Write a delta usercmd to the message buffer.
-   * @param {SzBuffer} sb message buffer
    * @param {Protocol.UserCmd} from previous usercmd
    * @param {Protocol.UserCmd} to current usercmd
    */
-  static WriteDeltaUsercmd(sb, from, to) {
+  writeDeltaUsercmd(from, to) {
     let bits = 0;
 
     if (to.forwardmove !== from.forwardmove) {
@@ -462,92 +369,145 @@ export default class MSG {
       bits |= Protocol.cm.CM_IMPULSE;
     }
 
-    MSG.WriteByte(sb, bits);
+    this.writeByte(bits);
 
     if (bits & Protocol.cm.CM_FORWARD) {
-      MSG.WriteShort(sb, to.forwardmove);
+      this.writeShort(to.forwardmove);
     }
 
     if (bits & Protocol.cm.CM_SIDE) {
-      MSG.WriteShort(sb, to.sidemove);
+      this.writeShort(to.sidemove);
     }
 
     if (bits & Protocol.cm.CM_UP) {
-      MSG.WriteShort(sb, to.upmove);
+      this.writeShort(to.upmove);
     }
 
     if (bits & Protocol.cm.CM_ANGLE1) {
-      MSG.WriteAngle(sb, to.angles[0]);
+      this.writeAngle(to.angles[0]);
     }
 
     if (bits & Protocol.cm.CM_ANGLE2) {
-      MSG.WriteAngle(sb, to.angles[1]);
+      this.writeAngle(to.angles[1]);
     }
 
     if (bits & Protocol.cm.CM_ANGLE3) {
-      MSG.WriteAngle(sb, to.angles[2]);
+      this.writeAngle(to.angles[2]);
     }
 
     if (bits & Protocol.cm.CM_BUTTONS) {
-      MSG.WriteByte(sb, to.buttons);
+      this.writeByte(to.buttons);
     }
 
     if (bits & Protocol.cm.CM_IMPULSE) {
-      MSG.WriteByte(sb, to.impulse);
+      this.writeByte(to.impulse);
     }
 
-    MSG.WriteByte(sb, to.msec);
+    this.writeByte(to.msec);
   }
 
-  static WriteSerializables(sb, serializables) {
+  /**
+   * Read a delta usercmd from the message buffer.
+   * @param {Protocol.UserCmd} from previous usercmd
+   * @returns {Protocol.UserCmd} current usercmd
+   */
+  readDeltaUsercmd(from) {
+    const to = new Protocol.UserCmd();
+
+    to.set(from);
+
+    const bits = this.readByte();
+
+    if (bits & Protocol.cm.CM_FORWARD) {
+      to.forwardmove = this.readShort();
+    }
+
+    if (bits & Protocol.cm.CM_SIDE) {
+      to.sidemove = this.readShort();
+    }
+
+    if (bits & Protocol.cm.CM_UP) {
+      to.upmove = this.readShort();
+    }
+
+    if (bits & Protocol.cm.CM_ANGLE1) {
+      to.angles[0] = this.readAngle();
+    }
+
+    if (bits & Protocol.cm.CM_ANGLE2) {
+      to.angles[1] = this.readAngle();
+    }
+
+    if (bits & Protocol.cm.CM_ANGLE3) {
+      to.angles[2] = this.readAngle();
+    }
+
+    if (bits & Protocol.cm.CM_BUTTONS) {
+      to.buttons = this.readByte();
+    }
+
+    if (bits & Protocol.cm.CM_IMPULSE) {
+      to.impulse = this.readByte();
+    }
+
+    to.msec = this.readByte();
+
+    return to;
+  }
+
+  /**
+   * Write an array of serializable values to the buffer.
+   * @param {Array} serializables array of values to serialize
+   */
+  writeSerializables(serializables) {
     for (const serializable of serializables) {
       switch (true) {
       case serializable === undefined:
         console.assert(false, 'serializable must not be undefined');
-        MSG.WriteByte(sb, Protocol.serializableTypes.null);
+        this.writeByte(Protocol.serializableTypes.null);
         continue;
       case serializable === null:
-        MSG.WriteByte(sb, Protocol.serializableTypes.null);
+        this.writeByte(Protocol.serializableTypes.null);
         continue;
       case typeof serializable === 'string':
-        MSG.WriteByte(sb, Protocol.serializableTypes.string);
-        MSG.WriteString(sb, serializable);
+        this.writeByte(Protocol.serializableTypes.string);
+        this.writeString(serializable);
         continue;
       case typeof serializable === 'number':
         if (Number.isInteger(serializable)) {
           if (serializable >= 0 && serializable < 256) {
-            MSG.WriteByte(sb, Protocol.serializableTypes.byte);
-            MSG.WriteByte(sb, serializable);
+            this.writeByte(Protocol.serializableTypes.byte);
+            this.writeByte(serializable);
           } else if (serializable >= -32768 && serializable < 32768) {
-            MSG.WriteByte(sb, Protocol.serializableTypes.short);
-            MSG.WriteShort(sb, serializable);
+            this.writeByte(Protocol.serializableTypes.short);
+            this.writeShort(serializable);
           } else {
-            MSG.WriteByte(sb, Protocol.serializableTypes.long);
-            MSG.WriteLong(sb, serializable);
+            this.writeByte(Protocol.serializableTypes.long);
+            this.writeLong(serializable);
           }
         } else {
-          MSG.WriteByte(sb, Protocol.serializableTypes.float);
-          MSG.WriteFloat(sb, serializable);
+          this.writeByte(Protocol.serializableTypes.float);
+          this.writeFloat(serializable);
         }
         continue;
       case typeof serializable === 'boolean':
-        MSG.WriteByte(sb, serializable ? Protocol.serializableTypes.true : Protocol.serializableTypes.false);
+        this.writeByte(serializable ? Protocol.serializableTypes.true : Protocol.serializableTypes.false);
         continue;
       case serializable instanceof Vector:
-        MSG.WriteByte(sb, Protocol.serializableTypes.vector);
-        MSG.WriteCoordVector(sb, serializable);
+        this.writeByte(Protocol.serializableTypes.vector);
+        this.writeCoordVector(serializable);
         continue;
       case serializable instanceof Array:
-        MSG.WriteByte(sb, Protocol.serializableTypes.array);
-        MSG.WriteSerializables(sb, serializable);
+        this.writeByte(Protocol.serializableTypes.array);
+        this.writeSerializables(serializable);
         continue;
       }
 
-      const handler = this.#serializableHandlers.find((h) => serializable instanceof h.constructor);
+      const handler = serializableHandlers.find((h) => serializable instanceof h.constructor);
 
       if (handler) {
-        MSG.WriteByte(sb, handler.id);
-        handler.serialize(sb, serializable);
+        this.writeByte(handler.id);
+        handler.serialize(this, serializable);
         continue;
       }
 
@@ -555,197 +515,37 @@ export default class MSG {
     }
 
     // end of event data
-    MSG.WriteByte(sb, Protocol.serializableTypes.none);
-  }
-
-  // ============================================================================
-  // READ METHODS (Static - use NET.message and instance state)
-  // ============================================================================
-
-  static BeginReading() {
-    // MSG._messageLog = [];
-    MSG.readcount = 0;
-    MSG.badread = false;
-  }
-
-  static PrintLastRead() {
-    for (const { type, value } of MSG._messageLog) {
-      Con.Print(`"${value}" (${type})\n`);
-    }
-  }
-
-  static ReadChar() {
-    if (MSG.readcount >= NET.message.cursize) {
-      MSG.badread = true;
-      // debugger;
-      return -1;
-    }
-    const c = (new Int8Array(NET.message.data, MSG.readcount, 1))[0];
-    MSG.readcount++;
-    // MSG._messageLog.push({type: 'char', value: c});
-    return c;
-  }
-
-  static ReadByte() {
-    if (MSG.readcount >= NET.message.cursize) {
-      MSG.badread = true;
-      // debugger;
-      return -1;
-    }
-    const c = (new Uint8Array(NET.message.data, MSG.readcount, 1))[0];
-    MSG.readcount++;
-    // MSG._messageLog.push({type: 'byte', value: c});
-    return c;
-  }
-
-  static ReadShort() {
-    if ((MSG.readcount + 2) > NET.message.cursize) {
-      MSG.badread = true;
-      // debugger;
-      return -1;
-    }
-    const c = (new DataView(NET.message.data)).getInt16(MSG.readcount, true);
-    MSG.readcount += 2;
-    // MSG._messageLog.push({type: 'short', value: c});
-    return c;
-  }
-
-  static ReadLong() {
-    if ((MSG.readcount + 4) > NET.message.cursize) {
-      MSG.badread = true;
-      // debugger;
-      return -1;
-    }
-    const c = (new DataView(NET.message.data)).getInt32(MSG.readcount, true);
-    MSG.readcount += 4;
-    // MSG._messageLog.push({type: 'long', value: c});
-    return c;
-  }
-
-  static ReadFloat() {
-    if ((MSG.readcount + 4) > NET.message.cursize) {
-      MSG.badread = true;
-      // debugger;
-      return -1;
-    }
-    const f = (new DataView(NET.message.data)).getFloat32(MSG.readcount, true);
-    MSG.readcount += 4;
-    // MSG._messageLog.push({type: 'float', value: f});
-    return f;
-  }
-
-  static ReadString() {
-    const string = [];
-    for (let l = 0; l < NET.message.cursize; l++) {
-      const c = MSG.ReadByte();
-      if (c <= 0) {
-        break;
-      }
-      string.push(String.fromCharCode(c));
-    }
-    const s = string.join('');
-    // MSG._messageLog.push({type: 'string', value: s});
-    return s;
-  }
-
-  static ReadCoord() {
-    return MSG.ReadLong() * 0.125;
-  }
-
-  static ReadCoordVector() {
-    return new Vector(MSG.ReadCoord(), MSG.ReadCoord(), MSG.ReadCoord());
-  }
-
-  static ReadAngle() {
-    return MSG.ReadShort() * (360.0 / 32768.0);
-  }
-
-  static ReadAngleVector() {
-    return new Vector(MSG.ReadAngle(), MSG.ReadAngle(), MSG.ReadAngle());
-  }
-
-  static ReadRGB() {
-    return new Vector(MSG.ReadByte() / 255, MSG.ReadByte() / 255, MSG.ReadByte() / 255);
-  }
-
-  static ReadRGBA() {
-    return [MSG.ReadRGB(), MSG.ReadByte() / 255];
+    this.writeByte(Protocol.serializableTypes.none);
   }
 
   /**
-   * Read a delta usercmd from the message buffer.
-   * To will be set to from and updated with the new values in-place.
-   * @param {Protocol.UserCmd} from previous usercmd
-   * @returns {Protocol.UserCmd} current usercmd
+   * Read an array of serializable values from the buffer (client-side).
+   * @returns {Array} array of deserialized values
    */
-  static ReadDeltaUsercmd(from) {
-    const to = new Protocol.UserCmd();
-
-    to.set(from);
-
-    const bits = MSG.ReadByte();
-
-    if (bits & Protocol.cm.CM_FORWARD) {
-      to.forwardmove = MSG.ReadShort();
-    }
-
-    if (bits & Protocol.cm.CM_SIDE) {
-      to.sidemove = MSG.ReadShort();
-    }
-
-    if (bits & Protocol.cm.CM_UP) {
-      to.upmove = MSG.ReadShort();
-    }
-
-    if (bits & Protocol.cm.CM_ANGLE1) {
-      to.angles[0] = MSG.ReadAngle();
-    }
-
-    if (bits & Protocol.cm.CM_ANGLE2) {
-      to.angles[1] = MSG.ReadAngle();
-    }
-
-    if (bits & Protocol.cm.CM_ANGLE3) {
-      to.angles[2] = MSG.ReadAngle();
-    }
-
-    if (bits & Protocol.cm.CM_BUTTONS) {
-      to.buttons = MSG.ReadByte();
-    }
-
-    if (bits & Protocol.cm.CM_IMPULSE) {
-      to.impulse = MSG.ReadByte();
-    }
-
-    to.msec = MSG.ReadByte();
-
-    return to;
-  }
-
-  static ReadSerializablesOnClient() {
+  readSerializablesOnClient() {
     const serializables = [];
 
     while (true) {
-      const type = MSG.ReadByte();
+      const type = this.readByte();
       if (type === Protocol.serializableTypes.none) {
         break; // end of stream of serializables
       }
 
       switch (type) {
       case Protocol.serializableTypes.string:
-        serializables.push(MSG.ReadString());
+        serializables.push(this.readString());
         continue;
       case Protocol.serializableTypes.long:
-        serializables.push(MSG.ReadLong());
+        serializables.push(this.readLong());
         continue;
       case Protocol.serializableTypes.short:
-        serializables.push(MSG.ReadShort());
+        serializables.push(this.readShort());
         continue;
       case Protocol.serializableTypes.byte:
-        serializables.push(MSG.ReadByte());
+        serializables.push(this.readByte());
         continue;
       case Protocol.serializableTypes.float:
-        serializables.push(MSG.ReadFloat());
+        serializables.push(this.readFloat());
         continue;
       case Protocol.serializableTypes.true:
         serializables.push(true);
@@ -757,17 +557,17 @@ export default class MSG {
         serializables.push(null);
         continue;
       case Protocol.serializableTypes.vector:
-        serializables.push(MSG.ReadCoordVector());
+        serializables.push(this.readCoordVector());
         continue;
       case Protocol.serializableTypes.array:
-        serializables.push(MSG.ReadSerializablesOnClient());
+        serializables.push(this.readSerializablesOnClient());
         continue;
       }
 
-      const handler = this.#serializableHandlers.find((h) => h.id === type);
+      const handler = serializableHandlers.find((h) => h.id === type);
 
       if (handler) {
-        serializables.push(handler.deserializeOnClient(NET.message));
+        serializables.push(handler.deserializeOnClient(this));
         continue;
       }
 
@@ -777,4 +577,3 @@ export default class MSG {
     return serializables;
   }
 }
-

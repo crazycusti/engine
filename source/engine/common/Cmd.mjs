@@ -1,5 +1,4 @@
 import { AsyncFunction } from '../../shared/Q.mjs';
-import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Cvar from './Cvar.mjs';
@@ -73,8 +72,8 @@ export class ConsoleCommand {
     }
 
     // send command to the server in behalf of the client
-    MSG.WriteByte(CL.cls.message, Protocol.clc.stringcmd);
-    MSG.WriteString(CL.cls.message, this.args);
+    CL.cls.message.writeByte(Protocol.clc.stringcmd);
+    CL.cls.message.writeString(this.args);
 
     return true;
   }

@@ -5,7 +5,6 @@ import * as Def from '../common/Def.mjs';
 
 import { eventBus, registry } from '../registry.mjs';
 import Chase from './Chase.mjs';
-import MSG from '../network/MSG.mjs';
 import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { GLTexture } from './GL.mjs';
@@ -21,16 +20,10 @@ import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
 
-let { CL, Host, Mod, SCR, SV, Sys, V  } = registry;
+let { CL, Host, Mod, NET, SCR, SV, Sys, V } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
-  Host = registry.Host;
-  Mod = registry.Mod;
-  SCR = registry.SCR;
-  SV = registry.SV;
-  Sys = registry.Sys;
-  V = registry.V;
+  ({ CL, Host, Mod, NET, SCR, SV, Sys, V } = registry);
 });
 
 /** @type {WebGL2RenderingContext} */
@@ -1545,18 +1538,6 @@ R.ClearParticles = function() {
   R.particles = [];
   for (let i = 0; i < R.numparticles; i++) {
     R.particles[i] = {die: -1.0};
-  }
-};
-
-R.ParseParticleEffect = function() {
-  const org = new Vector(MSG.ReadCoord(), MSG.ReadCoord(), MSG.ReadCoord());
-  const dir = new Vector(MSG.ReadChar() * 0.0625, MSG.ReadChar() * 0.0625, MSG.ReadChar() * 0.0625);
-  const msgcount = MSG.ReadByte();
-  const color = MSG.ReadByte();
-  if (msgcount === 255) {
-    R.ParticleExplosion(org);
-  } else {
-    R.RunParticleEffect(org, dir, color, msgcount);
   }
 };
 

@@ -1,4 +1,4 @@
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import Cvar from '../common/Cvar.mjs';
@@ -29,21 +29,11 @@ export class ServerMessages {
     if (datagram.cursize >= 1009) {
       return;
     }
-    MSG.WriteByte(datagram, Protocol.svc.particle);
-    MSG.WriteCoord(datagram, org[0]);
-    MSG.WriteCoord(datagram, org[1]);
-    MSG.WriteCoord(datagram, org[2]);
-    for (let i = 0; i <= 2; i++) {
-      let v = (dir[i] * 16.0) >> 0;
-      if (v > 127) {
-        v = 127;
-      } else if (v < -128) {
-        v = -128;
-      }
-      MSG.WriteChar(datagram, v);
-    }
-    MSG.WriteByte(datagram, Math.min(count, 255));
-    MSG.WriteByte(datagram, color);
+    datagram.writeByte(Protocol.svc.particle);
+    datagram.writeCoordVector(org);
+    datagram.writeCoordVector(dir);
+    datagram.writeByte(Math.min(count, 255));
+    datagram.writeByte(color);
   }
 
   startSound(edict, channel, sample, volume, attenuation) {
@@ -65,9 +55,9 @@ export class ServerMessages {
     if (i >= SV.server.soundPrecache.length) {
       Con.Print('SV.StartSound: ' + sample + ' was not precached\n');
       SV.server.soundPrecache.push(sample);
-      MSG.WriteByte(datagram, Protocol.svc.loadsound);
-      MSG.WriteByte(datagram, i);
-      MSG.WriteString(datagram, sample);
+      datagram.writeByte(Protocol.svc.loadsound);
+      datagram.writeByte(i);
+      datagram.writeString(sample);
     }
 
     let fieldMask = 0;
@@ -79,17 +69,17 @@ export class ServerMessages {
       fieldMask |= 2;
     }
 
-    MSG.WriteByte(datagram, Protocol.svc.sound);
-    MSG.WriteByte(datagram, fieldMask);
+    datagram.writeByte(Protocol.svc.sound);
+    datagram.writeByte(fieldMask);
     if ((fieldMask & 1) !== 0) {
-      MSG.WriteByte(datagram, volume);
+      datagram.writeByte(volume);
     }
     if ((fieldMask & 2) !== 0) {
-      MSG.WriteByte(datagram, Math.floor(attenuation * 64.0));
+      datagram.writeByte(Math.floor(attenuation * 64.0));
     }
-    MSG.WriteShort(datagram, (edict.num << 3) + channel);
-    MSG.WriteByte(datagram, i);
-    MSG.WriteCoordVector(datagram, edict.entity.origin.copy().add(edict.entity.mins.copy().add(edict.entity.maxs).multiply(0.5)));
+    datagram.writeShort((edict.num << 3) + channel);
+    datagram.writeByte(i);
+    datagram.writeCoordVector(edict.entity.origin.copy().add(edict.entity.mins.copy().add(edict.entity.maxs).multiply(0.5)));
   }
 
   /**
@@ -100,53 +90,53 @@ export class ServerMessages {
   sendServerData(client) {
     const message = client.message;
 
-    MSG.WriteByte(message, Protocol.svc.print);
-    MSG.WriteString(message, `\x02\nVERSION ${Host.version.string} SERVER (${SV.server.gameVersion})\n`);
+    message.writeByte(Protocol.svc.print);
+    message.writeString(`\x02\nVERSION ${Host.version.string} SERVER (${SV.server.gameVersion})\n`);
 
-    MSG.WriteByte(message, Protocol.svc.serverdata);
-    MSG.WriteByte(message, Protocol.version);
+    message.writeByte(Protocol.svc.serverdata);
+    message.writeByte(Protocol.version);
 
     if (PR.QuakeJS?.ClientGameAPI) {
       const { author, name, version } = PR.QuakeJS.identification;
-      MSG.WriteByte(message, 1);
-      MSG.WriteString(message, name);
-      MSG.WriteString(message, author);
-      MSG.WriteByte(message, version[0]);
-      MSG.WriteByte(message, version[1]);
-      MSG.WriteByte(message, version[2]);
+      message.writeByte(1);
+      message.writeString(name);
+      message.writeString(author);
+      message.writeByte(version[0]);
+      message.writeByte(version[1]);
+      message.writeByte(version[2]);
     } else {
-      MSG.WriteByte(message, 0);
-      MSG.WriteString(message, COM.game);
+      message.writeByte(0);
+      message.writeString(COM.game);
     }
 
-    MSG.WriteByte(message, SV.svs.maxclients);
-    MSG.WriteString(message, SV.server.edicts[0].entity.message || SV.server.mapname);
+    message.writeByte(SV.svs.maxclients);
+    message.writeString(SV.server.edicts[0].entity.message || SV.server.mapname);
     // SV.pmove.movevars.sendToClient(message);
     for (let i = 1; i < SV.server.modelPrecache.length; i++) {
-      MSG.WriteString(message, SV.server.modelPrecache[i]);
+      message.writeString(SV.server.modelPrecache[i]);
     }
-    MSG.WriteByte(message, 0);
+    message.writeByte(0);
     for (let i = 1; i < SV.server.soundPrecache.length; i++) {
-      MSG.WriteString(message, SV.server.soundPrecache[i]);
+      message.writeString(SV.server.soundPrecache[i]);
     }
-    MSG.WriteByte(message, 0);
+    message.writeByte(0);
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
       for (const field of SV.server.clientdataFields) {
-        MSG.WriteString(message, field);
+        message.writeString(field);
       }
-      MSG.WriteByte(message, 0);
+      message.writeByte(0);
     }
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
       for (const [classname, { fields }] of Object.entries(SV.server.clientEntityFields)) {
-        MSG.WriteString(message, classname);
+        message.writeString(classname);
         for (const field of fields) {
-          MSG.WriteString(message, field);
+          message.writeString(field);
         }
-        MSG.WriteByte(message, 0);
+        message.writeByte(0);
       }
-      MSG.WriteByte(message, 0);
+      message.writeByte(0);
     }
 
     // sounds on worldspawn defines the cd track
@@ -154,18 +144,18 @@ export class ServerMessages {
 
     // only play cd track automatically if set in worldspawn
     if (typeof cdtrack === 'number') {
-      MSG.WriteByte(message, Protocol.svc.cdtrack);
-      MSG.WriteByte(message, cdtrack);
-      MSG.WriteByte(message, 0); // unused
+      message.writeByte(Protocol.svc.cdtrack);
+      message.writeByte(cdtrack);
+      message.writeByte(0); // unused
     }
 
-    MSG.WriteByte(message, Protocol.svc.setview);
-    MSG.WriteShort(message, client.edict.num);
+    message.writeByte(Protocol.svc.setview);
+    message.writeShort(client.edict.num);
 
     const serverCvars = Array.from(Cvar.Filter((/** @type {Cvar} */ cvar) => (cvar.flags & Cvar.FLAG.SERVER) !== 0));
     if (serverCvars.length > 0) {
-      MSG.WriteByte(client.message, Protocol.svc.cvar);
-      MSG.WriteByte(client.message, serverCvars.length);
+      client.message.writeByte(Protocol.svc.cvar);
+      client.message.writeByte(serverCvars.length);
       for (const serverCvar of serverCvars) {
         this.writeCvar(client.message, serverCvar);
       }
@@ -173,23 +163,23 @@ export class ServerMessages {
 
     // make sure the client knows about the paused state
     if (SV.server.paused) {
-      MSG.WriteByte(client.message, Protocol.svc.setpause);
-      MSG.WriteByte(client.message, 1);
+      client.message.writeByte(Protocol.svc.setpause);
+      client.message.writeByte(1);
     }
 
-    MSG.WriteByte(message, Protocol.svc.signonnum);
-    MSG.WriteByte(message, 1);
+    message.writeByte(Protocol.svc.signonnum);
+    message.writeByte(1);
 
     client.state = ServerClient.STATE.CONNECTED;
   }
 
   writeCvar(msg, cvar) {
     if (cvar.flags & Cvar.FLAG.SECRET) {
-      MSG.WriteString(msg, cvar.name);
-      MSG.WriteString(msg, cvar.string ? 'REDACTED' : '');
+      msg.writeString(cvar.name);
+      msg.writeString(cvar.string ? 'REDACTED' : '');
     } else {
-      MSG.WriteString(msg, cvar.name);
-      MSG.WriteString(msg, cvar.string);
+      msg.writeString(cvar.name);
+      msg.writeString(cvar.string);
     }
   }
 
@@ -200,8 +190,8 @@ export class ServerMessages {
         continue;
       }
 
-      MSG.WriteByte(client.message, Protocol.svc.cvar);
-      MSG.WriteByte(client.message, 1);
+      client.message.writeByte(Protocol.svc.cvar);
+      client.message.writeByte(1);
       this.writeCvar(client.message, cvar);
     }
   }
@@ -276,16 +266,16 @@ export class ServerMessages {
         }
       }
 
-      MSG.WriteByte(msg, Protocol.svc.playerinfo);
-      MSG.WriteByte(msg, i);
-      MSG.WriteShort(msg, pflags);
+      msg.writeByte(Protocol.svc.playerinfo);
+      msg.writeByte(i);
+      msg.writeShort(pflags);
 
-      MSG.WriteCoordVector(msg, playerEntity.origin);
-      MSG.WriteByte(msg, playerEntity.frame);
+      msg.writeCoordVector(playerEntity.origin);
+      msg.writeByte(playerEntity.frame);
 
       if (pflags & Protocol.pf.PF_MSEC) {
         const msec = 1000 * (SV.server.time - cl.local_time);
-        MSG.WriteByte(msg, Math.max(0, Math.min(msec, 255)));
+        msg.writeByte(Math.max(0, Math.min(msec, 255)));
       }
 
       if (pflags & Protocol.pf.PF_COMMAND) {
@@ -298,27 +288,27 @@ export class ServerMessages {
         cmd.buttons = 0;
         cmd.impulse = 0;
 
-        MSG.WriteDeltaUsercmd(msg, this.nullcmd, cmd);
+        msg.writeDeltaUsercmd(this.nullcmd, cmd);
       }
 
       if (pflags & Protocol.pf.PF_VELOCITY) {
-        MSG.WriteCoordVector(msg, playerEntity.velocity);
+        msg.writeCoordVector(playerEntity.velocity);
       }
 
       if (pflags & Protocol.pf.PF_MODEL) {
-        MSG.WriteByte(msg, playerEntity.modelindex);
+        msg.writeByte(playerEntity.modelindex);
       }
 
       if (pflags & Protocol.pf.PF_EFFECTS) {
-        MSG.WriteByte(msg, playerEntity.effects);
+        msg.writeByte(playerEntity.effects);
       }
 
       if (pflags & Protocol.pf.PF_SKINNUM) {
-        MSG.WriteByte(msg, playerEntity.skin);
+        msg.writeByte(playerEntity.skin);
       }
 
       if (pflags & Protocol.pf.PF_WEAPONFRAME) {
-        MSG.WriteByte(msg, playerEntity.weaponframe);
+        msg.writeByte(playerEntity.weaponframe);
       }
 
       changes = true;
@@ -327,6 +317,13 @@ export class ServerMessages {
     return changes;
   }
 
+  /**
+   * Writes delta between two entity states to the message.
+   * @param {SzBuffer} msg The message to write to
+   * @param {import('./EntityState.mjs').EntityState} from The previous entity state
+   * @param {import('./EntityState.mjs').EntityState} to The new entity state
+   * @returns {boolean} true if any data was written, false otherwise
+   */
   writeDeltaEntity(msg, from, to) {
     const EPSILON = 0.01;
 
@@ -396,62 +393,62 @@ export class ServerMessages {
 
     console.assert(to.num > 0, 'valid entity num', to.num);
 
-    MSG.WriteShort(msg, to.num);
-    MSG.WriteShort(msg, bits);
+    msg.writeUint16(to.num);
+    msg.writeUint16(bits);
 
     if (bits & Protocol.u.classname) {
-      MSG.WriteString(msg, to.classname);
+      msg.writeString(to.classname);
     }
 
     if (bits & Protocol.u.free) {
-      MSG.WriteByte(msg, to.free ? 1 : 0);
+      msg.writeByte(to.free ? 1 : 0);
     }
 
     if (bits & Protocol.u.frame) {
-      MSG.WriteByte(msg, to.frame);
+      msg.writeByte(to.frame);
     }
 
     if (bits & Protocol.u.model) {
-      MSG.WriteByte(msg, to.modelindex);
+      msg.writeByte(to.modelindex);
     }
 
     if (bits & Protocol.u.colormap) {
-      MSG.WriteByte(msg, to.colormap);
+      msg.writeByte(to.colormap);
     }
 
     if (bits & Protocol.u.skin) {
-      MSG.WriteByte(msg, to.skin);
+      msg.writeByte(to.skin);
     }
 
     if (bits & Protocol.u.effects) {
-      MSG.WriteByte(msg, to.effects);
+      msg.writeByte(to.effects);
     }
 
     if (bits & Protocol.u.solid) {
-      MSG.WriteByte(msg, to.solid);
+      msg.writeByte(to.solid);
     }
 
     for (let i = 0; i < 3; i++) {
       if (bits & (Protocol.u.origin1 << i)) {
-        MSG.WriteCoord(msg, to.origin[i]);
+        msg.writeCoord(to.origin[i]);
       }
 
       if (bits & (Protocol.u.angle1 << i)) {
-        MSG.WriteAngle(msg, to.angles[i]);
-        MSG.WriteCoord(msg, to.velocity[i]);
+        msg.writeAngle(isFinite(to.angles[i]) ? to.angles[i] : 0);
+        msg.writeCoord(to.velocity[i]);
       }
     }
 
     if (bits & Protocol.u.size) {
-      MSG.WriteCoordVector(msg, to.maxs);
-      MSG.WriteCoordVector(msg, to.mins);
+      msg.writeCoordVector(to.maxs);
+      msg.writeCoordVector(to.mins);
     }
 
     if (bits & Protocol.u.nextthink) {
       if (from.nextthink <= 0) {
         from.nextthink = SV.server.time;
       }
-      MSG.WriteByte(msg, to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0);
+      msg.writeByte(to.nextthink - from.nextthink < 0.250 ? Math.min(255, (to.nextthink - from.nextthink) * 255.0) : 0);
     }
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_ENTITY_EXTENDED)) {
@@ -470,10 +467,10 @@ export class ServerMessages {
           }
         }
 
-        bitsWriter(msg, fieldbits);
+        msg[bitsWriter](fieldbits);
 
         if (fieldbits > 0) {
-          MSG.WriteSerializables(msg, values);
+          msg.writeSerializables(values);
         }
       }
     }
@@ -489,7 +486,7 @@ export class ServerMessages {
 
     const cl = SV.svs.clients[clientEdict.num - 1];
 
-    MSG.WriteByte(msg, Protocol.svc.deltapacketentities);
+    msg.writeByte(Protocol.svc.deltapacketentities);
 
     const visedicts = [];
 
@@ -550,7 +547,7 @@ export class ServerMessages {
       fromState.set(toState);
     }
 
-    MSG.WriteShort(msg, 0);
+    msg.writeShort(0);
 
     return changes > 0;
   }
@@ -559,17 +556,17 @@ export class ServerMessages {
     if ((clientEdict.entity.dmg_take || clientEdict.entity.dmg_save) && clientEdict.entity.dmg_inflictor) {
       const other = clientEdict.entity.dmg_inflictor.edict ? clientEdict.entity.dmg_inflictor.edict : clientEdict.entity.dmg_inflictor;
       const vec = !other.isFree() ? other.entity.origin.copy().add(other.entity.mins.copy().add(other.entity.maxs).multiply(0.5)) : clientEdict.entity.origin;
-      MSG.WriteByte(msg, Protocol.svc.damage);
-      MSG.WriteByte(msg, Math.min(255, clientEdict.entity.dmg_save));
-      MSG.WriteByte(msg, Math.min(255, clientEdict.entity.dmg_take));
-      MSG.WriteCoordVector(msg, vec);
+      msg.writeByte(Protocol.svc.damage);
+      msg.writeByte(Math.min(255, clientEdict.entity.dmg_save));
+      msg.writeByte(Math.min(255, clientEdict.entity.dmg_take));
+      msg.writeCoordVector(vec);
       clientEdict.entity.dmg_take = 0.0;
       clientEdict.entity.dmg_save = 0.0;
     }
 
     if (clientEdict.entity.fixangle) {
-      MSG.WriteByte(msg, Protocol.svc.setangle);
-      MSG.WriteAngleVector(msg, clientEdict.entity.angles);
+      msg.writeByte(Protocol.svc.setangle);
+      msg.writeAngleVector(clientEdict.entity.angles);
       clientEdict.entity.fixangle = false;
     }
 
@@ -620,47 +617,47 @@ export class ServerMessages {
       bits |= Protocol.su.armor;
     }
 
-    MSG.WriteByte(msg, Protocol.svc.clientdata);
-    MSG.WriteShort(msg, bits);
+    msg.writeByte(Protocol.svc.clientdata);
+    msg.writeShort(bits);
     if ((bits & Protocol.su.viewheight) !== 0) {
-      MSG.WriteChar(msg, clientEdict.entity.view_ofs[2]);
+      msg.writeChar(clientEdict.entity.view_ofs[2]);
     }
     if ((bits & Protocol.su.idealpitch) !== 0) {
-      MSG.WriteChar(msg, clientEdict.entity.idealpitch);
+      msg.writeChar(clientEdict.entity.idealpitch);
     }
 
     if ((bits & Protocol.su.punch1) !== 0) {
-      MSG.WriteShort(msg, punchangle[0] * 90);
+      msg.writeShort(punchangle[0] * 90);
     }
     if ((bits & Protocol.su.punch2) !== 0) {
-      MSG.WriteShort(msg, punchangle[1] * 90.0);
+      msg.writeShort(punchangle[1] * 90.0);
     }
     if ((bits & Protocol.su.punch3) !== 0) {
-      MSG.WriteShort(msg, punchangle[2] * 90.0);
+      msg.writeShort(punchangle[2] * 90.0);
     }
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
-      MSG.WriteLong(msg, items);
+      msg.writeLong(items);
       if ((bits & Protocol.su.weaponframe) !== 0) {
-        MSG.WriteByte(msg, clientEdict.entity.weaponframe);
+        msg.writeByte(clientEdict.entity.weaponframe);
       }
       if ((bits & Protocol.su.armor) !== 0) {
-        MSG.WriteByte(msg, clientEdict.entity.armorvalue);
+        msg.writeByte(clientEdict.entity.armorvalue);
       }
-      MSG.WriteByte(msg, SV.ModelIndex(clientEdict.entity.weaponmodel));
-      MSG.WriteShort(msg, clientEdict.entity.health);
-      MSG.WriteByte(msg, clientEdict.entity.currentammo);
-      MSG.WriteByte(msg, clientEdict.entity.ammo_shells);
-      MSG.WriteByte(msg, clientEdict.entity.ammo_nails);
-      MSG.WriteByte(msg, clientEdict.entity.ammo_rockets);
-      MSG.WriteByte(msg, clientEdict.entity.ammo_cells);
+      msg.writeByte(SV.ModelIndex(clientEdict.entity.weaponmodel));
+      msg.writeShort(clientEdict.entity.health);
+      msg.writeByte(clientEdict.entity.currentammo);
+      msg.writeByte(clientEdict.entity.ammo_shells);
+      msg.writeByte(clientEdict.entity.ammo_nails);
+      msg.writeByte(clientEdict.entity.ammo_rockets);
+      msg.writeByte(clientEdict.entity.ammo_cells);
       if (COM.standard_quake === true) {
-        MSG.WriteByte(msg, clientEdict.entity.weapon & 0xff);
+        msg.writeByte(clientEdict.entity.weapon & 0xff);
       } else {
         const weapon = clientEdict.entity.weapon;
         for (let i = 0; i <= 31; i++) {
           if ((weapon & (1 << i)) !== 0) {
-            MSG.WriteByte(msg, i);
+            msg.writeByte(i);
             break;
           }
         }
@@ -689,8 +686,8 @@ export class ServerMessages {
       const bitsWriter = SV.server.clientdataFieldsBitsWriter;
       console.assert(bitsWriter, 'clientdataFieldsBitsWriter must be configured when CAP_CLIENTDATA_DYNAMIC is enabled');
       if (bitsWriter) {
-        bitsWriter(destination, fieldbits);
-        MSG.WriteSerializables(destination, values);
+        destination[bitsWriter](fieldbits);
+        destination.writeSerializables(values);
       }
     }
 
@@ -704,8 +701,8 @@ export class ServerMessages {
    */
   sendClientDatagram(client) {
     const msg = new SzBuffer(16000, 'SV.SendClientDatagram');
-    MSG.WriteByte(msg, Protocol.svc.time);
-    MSG.WriteFloat(msg, SV.server.time);
+    msg.writeByte(Protocol.svc.time);
+    msg.writeFloat(SV.server.time);
 
     let changes = 0;
 
@@ -717,9 +714,9 @@ export class ServerMessages {
           continue;
         }
 
-        MSG.WriteByte(msg, Protocol.svc.updatepings);
-        MSG.WriteByte(msg, i);
-        MSG.WriteShort(msg, Math.max(0, Math.min(Math.round(pingClient.ping * 10), 30000)));
+        msg.writeByte(Protocol.svc.updatepings);
+        msg.writeByte(i);
+        msg.writeShort(Math.max(0, Math.min(Math.round(pingClient.ping * 10), 30000)));
 
         changes |= 1;
       }
@@ -775,9 +772,9 @@ export class ServerMessages {
         if (client.state < ServerClient.STATE.CONNECTED) {
           continue;
         }
-        MSG.WriteByte(client.message, Protocol.svc.updatefrags);
-        MSG.WriteByte(client.message, i);
-        MSG.WriteShort(client.message, frags);
+        client.message.writeByte(Protocol.svc.updatefrags);
+        client.message.writeByte(i);
+        client.message.writeShort(frags);
       }
       currentClient.old_frags = frags;
     }

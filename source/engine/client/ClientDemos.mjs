@@ -1,6 +1,5 @@
 
 import { clientConnectionState } from '../common/Def.mjs';
-import MSG from '../network/MSG.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { HostError } from '../common/Errors.mjs';
@@ -202,8 +201,8 @@ export default class ClientDemos {
     }
 
     NET.message.clear();
-    MSG.WriteByte(NET.message, Protocol.svc.disconnect);
-    MSG.WriteString(NET.message, 'ClientDemos.stopRecording: stopping demo recording');
+    NET.message.writeByte(Protocol.svc.disconnect);
+    NET.message.writeString('ClientDemos.stopRecording: stopping demo recording');
 
     this.writeDemoMessage();
 

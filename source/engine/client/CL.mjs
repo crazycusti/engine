@@ -1,4 +1,3 @@
-import MSG from '../network/MSG.mjs';
 import Q from '../../shared/Q.mjs';
 import * as Def from '../common/Def.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -297,9 +296,9 @@ export default class CL {
         return;
       }
 
-      MSG.WriteByte(CL.cls.message, Protocol.clc.rconcmd);
-      MSG.WriteString(CL.cls.message, password);
-      MSG.WriteString(CL.cls.message, this.args.substring(5));
+      CL.cls.message.writeByte(Protocol.clc.rconcmd);
+      CL.cls.message.writeString(password);
+      CL.cls.message.writeString(this.args.substring(5));
     }
   };
 

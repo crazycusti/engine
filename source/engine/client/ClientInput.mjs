@@ -1,7 +1,7 @@
 import Vector from '../../shared/Vector.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import Q from '../../shared/Q.mjs';
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import { SzBuffer } from '../network/MSG.mjs';
 import Cmd from '../common/Cmd.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { HostError } from '../common/Errors.mjs';
@@ -239,14 +239,14 @@ export default class ClientInput {
     }
 
     const buf = new SzBuffer(16);
-    MSG.WriteByte(buf, Protocol.clc.move);
-    MSG.WriteByte(buf, Math.round(Math.max(100, Host.frametime * 1000.0)));
-    MSG.WriteAngleVector(buf, CL.state.cmd.angles);
-    MSG.WriteShort(buf, CL.state.cmd.forwardmove);
-    MSG.WriteShort(buf, CL.state.cmd.sidemove);
-    MSG.WriteShort(buf, CL.state.cmd.upmove);
-    MSG.WriteByte(buf, CL.state.cmd.buttons);
-    MSG.WriteByte(buf, CL.state.cmd.impulse);
+    buf.writeByte(Protocol.clc.move);
+    buf.writeByte(Math.round(Math.max(100, Host.frametime * 1000.0)));
+    buf.writeAngleVector(CL.state.cmd.angles);
+    buf.writeShort(CL.state.cmd.forwardmove);
+    buf.writeShort(CL.state.cmd.sidemove);
+    buf.writeShort(CL.state.cmd.upmove);
+    buf.writeByte(CL.state.cmd.buttons);
+    buf.writeByte(CL.state.cmd.impulse);
 
     if (CL.cls.demoplayback === true) {
       return;

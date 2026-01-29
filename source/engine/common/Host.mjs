@@ -3,7 +3,6 @@ import * as Protocol from '../network/Protocol.mjs';
 import * as Def from './Def.mjs';
 import Cmd, { ConsoleCommand } from './Cmd.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import MSG from '../network/MSG.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Q from '../../shared/Q.mjs';
 import { ServerClient } from '../server/Client.mjs';
@@ -115,15 +114,15 @@ Host.InitLocal = function() {
 };
 
 Host.SendChatMessageToClient = function(client, name, message, direct = false) {
-  MSG.WriteByte(client.message, Protocol.svc.chatmsg);
-  MSG.WriteString(client.message, name);
-  MSG.WriteString(client.message, message);
-  MSG.WriteByte(client.message, direct ? 1 : 0);
+  client.message.writeByte(Protocol.svc.chatmsg);
+  client.message.writeString(name);
+  client.message.writeString(message);
+  client.message.writeByte(direct ? 1 : 0);
 };
 
 Host.ClientPrint = function(string) { // FIXME: Host.client
-  MSG.WriteByte(Host.client.message, Protocol.svc.print);
-  MSG.WriteString(Host.client.message, string);
+  Host.client.message.writeByte(Protocol.svc.print);
+  Host.client.message.writeString(string);
 };
 
 Host.BroadcastPrint = function(string) {
@@ -132,8 +131,8 @@ Host.BroadcastPrint = function(string) {
     if (client.state !== ServerClient.STATE.SPAWNED) {
       continue;
     }
-    MSG.WriteByte(client.message, Protocol.svc.print);
-    MSG.WriteString(client.message, string);
+    client.message.writeByte(Protocol.svc.print);
+    client.message.writeString(string);
   }
 };
 
@@ -145,8 +144,8 @@ Host.BroadcastPrint = function(string) {
  */
 Host.DropClient = function(client, crash, reason) { // TODO: refactor into ServerClient
   if (NET.CanSendMessage(client.netconnection)) {
-    MSG.WriteByte(client.message, Protocol.svc.disconnect);
-    MSG.WriteString(client.message, reason);
+    client.message.writeByte(Protocol.svc.disconnect);
+    client.message.writeString(reason);
     NET.SendMessage(client.netconnection, client.message);
   }
 
@@ -180,18 +179,18 @@ Host.DropClient = function(client, crash, reason) { // TODO: refactor into Serve
       continue;
     }
     // FIXME: consolidate into a single message
-    MSG.WriteByte(client.message, Protocol.svc.updatename);
-    MSG.WriteByte(client.message, num);
-    MSG.WriteByte(client.message, 0);
-    MSG.WriteByte(client.message, Protocol.svc.updatefrags);
-    MSG.WriteByte(client.message, num);
-    MSG.WriteShort(client.message, 0);
-    MSG.WriteByte(client.message, Protocol.svc.updatecolors);
-    MSG.WriteByte(client.message, num);
-    MSG.WriteByte(client.message, 0);
-    MSG.WriteByte(client.message, Protocol.svc.updatepings);
-    MSG.WriteByte(client.message, num);
-    MSG.WriteShort(client.message, 0);
+    client.message.writeByte(Protocol.svc.updatename);
+    client.message.writeByte(num);
+    client.message.writeByte(0);
+    client.message.writeByte(Protocol.svc.updatefrags);
+    client.message.writeByte(num);
+    client.message.writeShort(0);
+    client.message.writeByte(Protocol.svc.updatecolors);
+    client.message.writeByte(num);
+    client.message.writeByte(0);
+    client.message.writeByte(Protocol.svc.updatepings);
+    client.message.writeByte(num);
+    client.message.writeShort(0);
   }
 };
 
@@ -795,8 +794,8 @@ Host.Changelevel_f = function(mapname) {
     if (client.state < ServerClient.STATE.CONNECTED) {
       continue;
     }
-    MSG.WriteByte(client.message, Protocol.svc.changelevel);
-    MSG.WriteString(client.message, mapname);
+    client.message.writeByte(Protocol.svc.changelevel);
+    client.message.writeString(mapname);
   }
 
   Host.ScheduleForNextFrame(async () => {
@@ -1081,9 +1080,9 @@ Host.Name_f = function(...names) { // signon 2, step 1
 
   this.client.name = newName;
   const msg = SV.server.reliable_datagram;
-  MSG.WriteByte(msg, Protocol.svc.updatename);
-  MSG.WriteByte(msg, this.client.num);
-  MSG.WriteString(msg, newName);
+  msg.writeByte(Protocol.svc.updatename);
+  msg.writeByte(this.client.num);
+  msg.writeString(newName);
 };
 
 Host.Say_f = function(teamonly, message) {
@@ -1198,9 +1197,9 @@ Host.Color_f = function(...argv) { // signon 2, step 2 // FIXME: Host.client
   this.client.colors = playercolor;
   this.client.edict.entity.team = bottom + 1;
   const msg = SV.server.reliable_datagram;
-  MSG.WriteByte(msg, Protocol.svc.updatecolors);
-  MSG.WriteByte(msg, this.client.num);
-  MSG.WriteByte(msg, playercolor);
+  msg.writeByte(Protocol.svc.updatecolors);
+  msg.writeByte(this.client.num);
+  msg.writeByte(playercolor);
 };
 
 Host.Kill_f = function() {
@@ -1229,8 +1228,8 @@ Host.Pause_f = function() {
   }
   SV.server.paused = !SV.server.paused;
   Host.BroadcastPrint(Host.client.name + (SV.server.paused === true ? ' paused the game\n' : ' unpaused the game\n'));
-  MSG.WriteByte(SV.server.reliable_datagram, Protocol.svc.setpause);
-  MSG.WriteByte(SV.server.reliable_datagram, SV.server.paused === true ? 1 : 0);
+  SV.server.reliable_datagram.writeByte(Protocol.svc.setpause);
+  SV.server.reliable_datagram.writeByte(SV.server.paused === true ? 1 : 0);
 };
 
 Host.PreSpawn_f = function() { // signon 1, step 1
@@ -1246,8 +1245,8 @@ Host.PreSpawn_f = function() { // signon 1, step 1
   }
   // CR: SV.server.signon is a special buffer that is used to send the signon messages (make static as well as baseline information)
   client.message.write(new Uint8Array(SV.server.signon.data), SV.server.signon.cursize);
-  MSG.WriteByte(client.message, Protocol.svc.signonnum);
-  MSG.WriteByte(client.message, 2);
+  client.message.writeByte(Protocol.svc.signonnum);
+  client.message.writeByte(2);
 };
 
 Host.Spawn_f = function() { // signon 2, step 3
@@ -1265,8 +1264,8 @@ Host.Spawn_f = function() { // signon 2, step 3
   const message = client.message;
   message.clear();
 
-  MSG.WriteByte(message, Protocol.svc.time);
-  MSG.WriteFloat(message, SV.server.time);
+  message.writeByte(Protocol.svc.time);
+  message.writeFloat(SV.server.time);
 
   const ent = client.edict;
   if (SV.server.loadgame === true) {
@@ -1302,45 +1301,45 @@ Host.Spawn_f = function() { // signon 2, step 3
 
   for (let i = 0; i < SV.svs.maxclients; i++) {
     client = SV.svs.clients[i];
-    MSG.WriteByte(message, Protocol.svc.updatename);
-    MSG.WriteByte(message, i);
-    MSG.WriteString(message, client.name);
-    MSG.WriteByte(message, Protocol.svc.updatefrags);
-    MSG.WriteByte(message, i);
-    MSG.WriteShort(message, client.old_frags);
-    MSG.WriteByte(message, Protocol.svc.updatecolors);
-    MSG.WriteByte(message, i);
-    MSG.WriteByte(message, client.colors);
+    message.writeByte(Protocol.svc.updatename);
+    message.writeByte(i);
+    message.writeString(client.name);
+    message.writeByte(Protocol.svc.updatefrags);
+    message.writeByte(i);
+    message.writeShort(client.old_frags);
+    message.writeByte(Protocol.svc.updatecolors);
+    message.writeByte(i);
+    message.writeByte(client.colors);
   }
 
   for (let i = 0; i < Def.limits.lightstyles; i++) {
-    MSG.WriteByte(message, Protocol.svc.lightstyle);
-    MSG.WriteByte(message, i);
-    MSG.WriteString(message, SV.server.lightstyles[i]);
+    message.writeByte(Protocol.svc.lightstyle);
+    message.writeByte(i);
+    message.writeString(SV.server.lightstyles[i]);
   }
 
   if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_CLIENTDATA_UPDATESTAT)) {
-    MSG.WriteByte(message, Protocol.svc.updatestat);
-    MSG.WriteByte(message, Def.stat.totalsecrets);
-    MSG.WriteLong(message, SV.server.gameAPI.total_secrets);
-    MSG.WriteByte(message, Protocol.svc.updatestat);
-    MSG.WriteByte(message, Def.stat.totalmonsters);
-    MSG.WriteLong(message, SV.server.gameAPI.total_monsters);
-    MSG.WriteByte(message, Protocol.svc.updatestat);
-    MSG.WriteByte(message, Def.stat.secrets);
-    MSG.WriteLong(message, SV.server.gameAPI.found_secrets);
-    MSG.WriteByte(message, Protocol.svc.updatestat);
-    MSG.WriteByte(message, Def.stat.monsters);
-    MSG.WriteLong(message, SV.server.gameAPI.killed_monsters);
+    message.writeByte(Protocol.svc.updatestat);
+    message.writeByte(Def.stat.totalsecrets);
+    message.writeLong(SV.server.gameAPI.total_secrets);
+    message.writeByte(Protocol.svc.updatestat);
+    message.writeByte(Def.stat.totalmonsters);
+    message.writeLong(SV.server.gameAPI.total_monsters);
+    message.writeByte(Protocol.svc.updatestat);
+    message.writeByte(Def.stat.secrets);
+    message.writeLong(SV.server.gameAPI.found_secrets);
+    message.writeByte(Protocol.svc.updatestat);
+    message.writeByte(Def.stat.monsters);
+    message.writeLong(SV.server.gameAPI.killed_monsters);
   }
 
-  MSG.WriteByte(message, Protocol.svc.setangle);
-  MSG.WriteAngleVector(message, ent.entity.angles);
+  message.writeByte(Protocol.svc.setangle);
+  message.writeAngleVector(ent.entity.angles);
 
   SV.messages.writeClientdataToMessage(ent, message);
 
-  MSG.WriteByte(message, Protocol.svc.signonnum);
-  MSG.WriteByte(message, 3);
+  message.writeByte(Protocol.svc.signonnum);
+  message.writeByte(3);
 };
 
 Host.Begin_f = function() {  // signon 3, step 1

@@ -1,5 +1,5 @@
 import Vector from '../../shared/Vector.mjs';
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import { SzBuffer, registerSerializableType } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
 import * as Defs from '../../shared/Defs.mjs';
@@ -13,15 +13,10 @@ import { Visibility } from '../common/model/BSP.mjs';
 /** @typedef {import('../../game/id1/entity/BaseEntity.mjs').default} BaseEntity */
 /** @typedef {import('../../game/id1/entity/Worldspawn.mjs').WorldspawnEntity} WorldspawnEntity */
 
-let { CL, COM, Con, Host, PR, SV } = registry;
+let { CL, COM, Con, Host, NET, PR, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
-  COM = registry.COM;
-  Con = registry.Con;
-  Host = registry.Host;
-  PR = registry.PR;
-  SV = registry.SV;
+  ({ CL, COM, Con, Host, NET, PR, SV } = registry);
 });
 
 /** @typedef {import('./Client.mjs').ServerClient} ServerClient */
@@ -465,16 +460,16 @@ export class ServerEdict {
    */
   makeStatic() {
     const message = SV.server.signon;
-    MSG.WriteByte(message, Protocol.svc.spawnstatic);
-    MSG.WriteString(message, this.entity.classname); // FIXME: compress this, it’s ballooning the signon buffer.
-    MSG.WriteByte(message, SV.ModelIndex(this.entity.model));
-    MSG.WriteByte(message, this.entity.frame || 0);
-    MSG.WriteByte(message, this.entity.colormap || 0);
-    MSG.WriteByte(message, this.entity.skin || 0);
-    MSG.WriteByte(message, this.entity.effects || 0);
-    MSG.WriteByte(message, this.entity.solid || 0);
-    MSG.WriteAngleVector(message, this.entity.angles);
-    MSG.WriteCoordVector(message, this.entity.origin);
+    message.writeByte(Protocol.svc.spawnstatic);
+    message.writeString(this.entity.classname); // FIXME: compress this, it’s ballooning the signon buffer.
+    message.writeByte(SV.ModelIndex(this.entity.model));
+    message.writeByte(this.entity.frame || 0);
+    message.writeByte(this.entity.colormap || 0);
+    message.writeByte(this.entity.skin || 0);
+    message.writeByte(this.entity.effects || 0);
+    message.writeByte(this.entity.solid || 0);
+    message.writeAngleVector(this.entity.angles);
+    message.writeCoordVector(this.entity.origin);
     this.freeEdict();
   }
 
@@ -668,7 +663,7 @@ export class ServerEdict {
   }
 };
 
-MSG.RegisterSerializableType(ServerEdict, {
+registerSerializableType(ServerEdict, {
   /**
    * @param {SzBuffer} sz serialization buffer
    * @param {ServerEdict} object edict to serialize
@@ -683,7 +678,7 @@ MSG.RegisterSerializableType(ServerEdict, {
    */
   // eslint-disable-next-line no-unused-vars
   deserializeOnServer(sz) {
-    const num = MSG.ReadShort();
+    const num = NET.message.readShort();
     console.assert(num >= 0 && num < SV.server.num_edicts, `ServerEdict.deserialize: invalid edict number ${num}`);
     return SV.server.edicts[num];
   },
@@ -694,6 +689,6 @@ MSG.RegisterSerializableType(ServerEdict, {
    */
   // eslint-disable-next-line no-unused-vars
   deserializeOnClient(sz) {
-    return CL.state.clientEntities.getEntity(MSG.ReadShort());
+    return CL.state.clientEntities.getEntity(NET.message.readShort());
   },
 });

@@ -1,4 +1,3 @@
-import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import * as Def from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
@@ -8,11 +7,10 @@ import { PmovePlayer } from '../common/Pmove.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
 import { ClientEdict } from './ClientEntities.mjs';
 
-let { CL, COM } = registry;
+let { CL, COM, NET } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
-  COM = registry.COM;
+  ({ CL, COM, NET } = registry);
 });
 
 /**
@@ -50,41 +48,41 @@ export class ClientPlayerState extends Protocol.EntityState {
   }
 
   readFromMessage() {
-    this.flags = MSG.ReadShort();
-    this.origin.set(MSG.ReadCoordVector());
-    this.frame = MSG.ReadByte();
+    this.flags = NET.message.readShort();
+    this.origin.set(NET.message.readCoordVector());
+    this.frame = NET.message.readByte();
 
     this.stateTime = CL.state.time;
 
     if (this.flags & Protocol.pf.PF_MSEC) {
-      const msec = MSG.ReadByte();
+      const msec = NET.message.readByte();
       this.stateTime -= (msec / 1000.0);
     }
 
     // TODO: stateTime, parsecounttime
 
     if (this.flags & Protocol.pf.PF_COMMAND) {
-      this.command.set(MSG.ReadDeltaUsercmd(CL.nullcmd));
+      this.command.set(NET.message.readDeltaUsercmd(CL.nullcmd));
     }
 
     if (this.flags & Protocol.pf.PF_VELOCITY) {
-      this.velocity.set(MSG.ReadCoordVector());
+      this.velocity.set(NET.message.readCoordVector());
     }
 
     if (this.flags & Protocol.pf.PF_MODEL) {
-      this.modelindex = MSG.ReadByte();
+      this.modelindex = NET.message.readByte();
     }
 
     if (this.flags & Protocol.pf.PF_EFFECTS) {
-      this.effects = MSG.ReadByte();
+      this.effects = NET.message.readByte();
     }
 
     if (this.flags & Protocol.pf.PF_SKINNUM) {
-      this.skin = MSG.ReadByte();
+      this.skin = NET.message.readByte();
     }
 
     if (this.flags & Protocol.pf.PF_WEAPONFRAME) {
-      this.weaponframe = MSG.ReadByte();
+      this.weaponframe = NET.message.readByte();
     }
   }
 };
@@ -102,7 +100,7 @@ export class ClientMessages {
   /** @type {string[]} additional private player fields whose values are getting updated each frame */
   #clientdataFields = [];
 
-  /** @type {MSG.ReadLong|MSG.ReadShort|MSG.ReadByte} shortcut to read the current amount of clientdata field bits */
+  /** @type {'readLong'|'readShort'|'readByte'} shortcut to read the current amount of clientdata field bits */
   #readClientdataFieldsBits = null;
 
   set clientdataFields(fields) {
@@ -112,11 +110,11 @@ export class ClientMessages {
     console.assert(this.#clientdataFields.length <= 32, 'clientdata must not have more than 32 fields');
 
     if (this.#clientdataFields.length <= 8) {
-      this.#readClientdataFieldsBits = MSG.ReadByte;
+      this.#readClientdataFieldsBits = 'readByte';
     } else if (this.#clientdataFields.length <= 16) {
-      this.#readClientdataFieldsBits = MSG.ReadShort;
+      this.#readClientdataFieldsBits = 'readShort';
     } else {
-      this.#readClientdataFieldsBits = MSG.ReadLong;
+      this.#readClientdataFieldsBits = 'readLong';
     }
   }
 
@@ -127,7 +125,7 @@ export class ClientMessages {
     // This is the time of the last message received from the server.
     this.mtime[1] = this.mtime[0];
     // This is the current time we got from the server.
-    this.mtime[0] = MSG.ReadFloat();
+    this.mtime[0] = NET.message.readFloat();
   }
 
   /**
@@ -137,12 +135,12 @@ export class ClientMessages {
   #parseClientGeneral(bits) {
     // Parse the general client data.
 
-    CL.state.viewheight = ((bits & Protocol.su.viewheight) !== 0) ? MSG.ReadChar() : Protocol.default_viewheight;
-    CL.state.idealpitch = ((bits & Protocol.su.idealpitch) !== 0) ? MSG.ReadChar() : 0.0;
+    CL.state.viewheight = ((bits & Protocol.su.viewheight) !== 0) ? NET.message.readChar() : Protocol.default_viewheight;
+    CL.state.idealpitch = ((bits & Protocol.su.idealpitch) !== 0) ? NET.message.readChar() : 0.0;
 
     for (let i = 0; i < 3; i++) {
       if ((bits & (Protocol.su.punch1 << i)) !== 0) {
-        CL.state.punchangle[i] = MSG.ReadShort() / 90.0;
+        CL.state.punchangle[i] = NET.message.readShort() / 90.0;
       } else {
         CL.state.punchangle[i] = 0.0;
       }
@@ -158,7 +156,7 @@ export class ClientMessages {
    * @param {number} bits
    */
   #parseClientLegacy(bits) {
-    const item = MSG.ReadLong();
+    const item = NET.message.readLong();
     if (CL.state.items !== item) {
       for (let j = 0; j < CL.state.item_gettime.length; j++) {
         if ((((item >>> j) & 1) !== 0) && (((CL.state.items >>> j) & 1) === 0)) {
@@ -168,19 +166,19 @@ export class ClientMessages {
       CL.state.items = item;
     }
 
-    CL.state.stats[Def.stat.weaponframe] = ((bits & Protocol.su.weaponframe) !== 0) ? MSG.ReadByte() : 0;
-    CL.state.stats[Def.stat.armor] = ((bits & Protocol.su.armor) !== 0) ? MSG.ReadByte() : 0;
-    CL.state.stats[Def.stat.weapon] = ((bits & Protocol.su.weapon) !== 0) ? MSG.ReadByte() : 0;
-    CL.state.stats[Def.stat.health] = MSG.ReadShort();
-    CL.state.stats[Def.stat.ammo] = MSG.ReadByte();
-    CL.state.stats[Def.stat.shells] = MSG.ReadByte();
-    CL.state.stats[Def.stat.nails] = MSG.ReadByte();
-    CL.state.stats[Def.stat.rockets] = MSG.ReadByte();
-    CL.state.stats[Def.stat.cells] = MSG.ReadByte();
+    CL.state.stats[Def.stat.weaponframe] = ((bits & Protocol.su.weaponframe) !== 0) ? NET.message.readByte() : 0;
+    CL.state.stats[Def.stat.armor] = ((bits & Protocol.su.armor) !== 0) ? NET.message.readByte() : 0;
+    CL.state.stats[Def.stat.weapon] = ((bits & Protocol.su.weapon) !== 0) ? NET.message.readByte() : 0;
+    CL.state.stats[Def.stat.health] = NET.message.readShort();
+    CL.state.stats[Def.stat.ammo] = NET.message.readByte();
+    CL.state.stats[Def.stat.shells] = NET.message.readByte();
+    CL.state.stats[Def.stat.nails] = NET.message.readByte();
+    CL.state.stats[Def.stat.rockets] = NET.message.readByte();
+    CL.state.stats[Def.stat.cells] = NET.message.readByte();
     if (COM.standard_quake === true) {
-      CL.state.stats[Def.stat.activeweapon] = MSG.ReadByte();
+      CL.state.stats[Def.stat.activeweapon] = NET.message.readByte();
     } else {
-      CL.state.stats[Def.stat.activeweapon] = 1 << MSG.ReadByte();
+      CL.state.stats[Def.stat.activeweapon] = 1 << NET.message.readByte();
     }
   }
 
@@ -188,7 +186,7 @@ export class ClientMessages {
    * Client data parsing for QuakeJS based games.
    */
   #parseClientdata() {
-    const fieldbits = this.#readClientdataFieldsBits();
+    const fieldbits = NET.message[this.#readClientdataFieldsBits]();
 
     const fields = [];
     const fieldsToNull = [];
@@ -209,7 +207,7 @@ export class ClientMessages {
     const clientdata = CL.state.gameAPI.clientdata;
 
     while (true) {
-      const dataType = MSG.ReadByte();
+      const dataType = NET.message.readByte();
 
       if (dataType === Protocol.serializableTypes.none) {
         break;
@@ -222,22 +220,22 @@ export class ClientMessages {
 
       switch (dataType) {
         case Protocol.serializableTypes.long:
-          clientdata[field] = MSG.ReadLong();
+          clientdata[field] = NET.message.readLong();
           break;
         case Protocol.serializableTypes.short:
-          clientdata[field] = MSG.ReadShort();
+          clientdata[field] = NET.message.readShort();
           break;
         case Protocol.serializableTypes.byte:
-          clientdata[field] = MSG.ReadByte();
+          clientdata[field] = NET.message.readByte();
           break;
         case Protocol.serializableTypes.float:
-          clientdata[field] = MSG.ReadFloat();
+          clientdata[field] = NET.message.readFloat();
           break;
         case Protocol.serializableTypes.vector:
-          clientdata[field] = MSG.ReadCoordVector();
+          clientdata[field] = NET.message.readCoordVector();
           break;
         case Protocol.serializableTypes.string:
-          clientdata[field] = MSG.ReadString();
+          clientdata[field] = NET.message.readString();
           break;
         case Protocol.serializableTypes.true:
           clientdata[field] = true;
@@ -283,8 +281,8 @@ export class ClientMessages {
   }
 
   parseClientEvent() {
-    const eventCode = MSG.ReadByte();
-    const args = MSG.ReadSerializablesOnClient();
+    const eventCode = NET.message.readByte();
+    const args = NET.message.readSerializablesOnClient();
 
     CL.state.gameAPI.handleClientEvent(eventCode, ...args);
   }
@@ -293,7 +291,7 @@ export class ClientMessages {
    * Parses Protocol.svc.clientdata message.
    */
   parseClient() {
-    const bits = MSG.ReadShort();
+    const bits = NET.message.readShort();
 
     this.#parseClientGeneral(bits);
 
@@ -305,7 +303,7 @@ export class ClientMessages {
   }
 
   parsePlayer() {
-    const num = MSG.ReadByte();
+    const num = NET.message.readByte();
 
     if (num > CL.state.maxclients) {
       throw new HostError('CL.ParsePlayerinfo: num > maxclients');

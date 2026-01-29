@@ -1,7 +1,6 @@
 import Vector from '../../shared/Vector.mjs';
 import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';
-import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerClient } from '../server/Client.mjs';
@@ -206,11 +205,11 @@ export class ServerEngineAPI extends CommonEngineAPI {
     }
 
     const signon = SV.server.signon;
-    MSG.WriteByte(signon, Protocol.svc.spawnstaticsound);
-    MSG.WriteCoordVector(signon, origin);
-    MSG.WriteByte(signon, i);
-    MSG.WriteByte(signon, volume * 255.0);
-    MSG.WriteByte(signon, attenuation * 64.0);
+    signon.writeByte(Protocol.svc.spawnstaticsound);
+    signon.writeCoordVector(origin);
+    signon.writeByte(i);
+    signon.writeByte(volume * 255.0);
+    signon.writeByte(attenuation * 64.0);
 
     return true;
   }
@@ -252,9 +251,9 @@ export class ServerEngineAPI extends CommonEngineAPI {
         continue;
       }
 
-      MSG.WriteByte(client.message, Protocol.svc.lightstyle);
-      MSG.WriteByte(client.message, styleId);
-      MSG.WriteString(client.message, sequenceString);
+      client.message.writeByte(Protocol.svc.lightstyle);
+      client.message.writeByte(styleId);
+      client.message.writeString(sequenceString);
     }
   }
 
@@ -445,9 +444,9 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @deprecated use client events instead
    */
   static DispatchTempEntityEvent(tempEntityId, origin) {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity);
-    MSG.WriteByte(SV.server.datagram, tempEntityId);
-    MSG.WriteCoordVector(SV.server.datagram, origin);
+    SV.server.datagram.writeByte(Protocol.svc.temp_entity);
+    SV.server.datagram.writeByte(tempEntityId);
+    SV.server.datagram.writeCoordVector(origin);
   }
 
   /**
@@ -458,11 +457,11 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @deprecated use client events instead
    */
   static DispatchBeamEvent(beamId, edictId, startOrigin, endOrigin) {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.temp_entity); // FIXME: unhappy about this
-    MSG.WriteByte(SV.server.datagram, beamId);
-    MSG.WriteShort(SV.server.datagram, edictId);
-    MSG.WriteCoordVector(SV.server.datagram, startOrigin);
-    MSG.WriteCoordVector(SV.server.datagram, endOrigin);
+    SV.server.datagram.writeByte(Protocol.svc.temp_entity); // FIXME: unhappy about this
+    SV.server.datagram.writeByte(beamId);
+    SV.server.datagram.writeShort(edictId);
+    SV.server.datagram.writeCoordVector(startOrigin);
+    SV.server.datagram.writeCoordVector(endOrigin);
   }
 
   /**
@@ -470,9 +469,9 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @param {number} track audio track number
    */
   static PlayTrack(track) {
-    MSG.WriteByte(SV.server.datagram, Protocol.svc.cdtrack);
-    MSG.WriteByte(SV.server.datagram, track);
-    MSG.WriteByte(SV.server.datagram, 0); // unused
+    SV.server.datagram.writeByte(Protocol.svc.cdtrack);
+    SV.server.datagram.writeByte(track);
+    SV.server.datagram.writeByte(0); // unused
   }
 
   /**
@@ -485,10 +484,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
   static #DispatchClientEventOnDestination(destination, eventCode, ...args) {
     console.assert(typeof eventCode === 'number', 'eventCode must be a number');
 
-    MSG.WriteByte(destination, Protocol.svc.clientevent);
-    MSG.WriteByte(destination, eventCode);
+    destination.writeByte(Protocol.svc.clientevent);
+    destination.writeByte(eventCode);
 
-    MSG.WriteSerializables(destination, args);
+    destination.writeSerializables(args);
   }
 
   /**

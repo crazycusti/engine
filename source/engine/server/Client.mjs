@@ -1,7 +1,7 @@
 import { enumHelpers } from '../../shared/Q.mjs';
 import { gameCapabilities } from '../../shared/Defs.mjs';
 import Vector from '../../shared/Vector.mjs';
-import MSG, { SzBuffer } from '../network/MSG.mjs';
+import { SzBuffer } from '../network/MSG.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
@@ -185,17 +185,17 @@ export class ServerClient {
   }
 
   consolePrint(/** @type {string} */ message) {
-    MSG.WriteByte(this.message, Protocol.svc.print);
-    MSG.WriteString(this.message, message);
+    this.message.writeByte(Protocol.svc.print);
+    this.message.writeString(message);
   }
 
   centerPrint(/** @type {string} */ message) {
-    MSG.WriteByte(this.message, Protocol.svc.centerprint);
-    MSG.WriteString(this.message, message);
+    this.message.writeByte(Protocol.svc.centerprint);
+    this.message.writeString(message);
   }
 
   sendConsoleCommands(/** @type {string} */ commandline) {
-    MSG.WriteByte(this.message, Protocol.svc.stufftext);
-    MSG.WriteString(this.message, commandline);
+    this.message.writeByte(Protocol.svc.stufftext);
+    this.message.writeString(commandline);
   }
 };

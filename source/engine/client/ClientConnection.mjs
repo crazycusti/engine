@@ -1,4 +1,3 @@
-import MSG from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { HostError } from '../common/Errors.mjs';
 import Cvar from '../common/Cvar.mjs';
@@ -99,8 +98,8 @@ export default class ClientConnection {
       IN.Move();
       ClientInput.SendMove();
 
-      MSG.WriteByte(this.cls.message, Protocol.clc.sync);
-      MSG.WriteFloat(this.cls.message, this.state.clientMessages.mtime[0]);
+      this.cls.message.writeByte(Protocol.clc.sync);
+      this.cls.message.writeFloat(this.state.clientMessages.mtime[0]);
     } else if (!this.cls.isLocalGame && Host.realtime - this.cls.lastcmdsent > 10.0) {
       Con.DPrint('<-- client to server keepalive\n');
     }
@@ -168,7 +167,7 @@ export default class ClientConnection {
       }
       Con.DPrint('Sending clc_disconnect\n');
       this.cls.message.clear();
-      MSG.WriteByte(this.cls.message, Protocol.clc.disconnect);
+      this.cls.message.writeByte(Protocol.clc.disconnect);
       NET.SendUnreliableMessage(this.cls.netcon, this.cls.message);
       this.cls.message.clear();
       NET.Close(this.cls.netcon);
@@ -236,23 +235,23 @@ export default class ClientConnection {
     switch (this.cls.signon) {
       case 1:
         this.setConnectingStep(90, 'Waiting for server data');
-        MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
-        MSG.WriteString(this.cls.message, 'prespawn');
+        this.cls.message.writeByte(Protocol.clc.stringcmd);
+        this.cls.message.writeString('prespawn');
         break;
       case 2:
         eventBus.publish('client.server-info.ready', Object.assign({}, this.cls.serverInfo));
         this.setConnectingStep(95, 'Setting client state');
-        MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
-        MSG.WriteString(this.cls.message, 'name "' + this.identityCvars.name.string + '"\n');
-        MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
-        MSG.WriteString(this.cls.message, 'color ' + (this.identityCvars.color.value >> 4) + ' ' + (this.identityCvars.color.value & 15) + '\n');
-        MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
-        MSG.WriteString(this.cls.message, 'spawn ' + this.cls.spawnparms);
+        this.cls.message.writeByte(Protocol.clc.stringcmd);
+        this.cls.message.writeString('name "' + this.identityCvars.name.string + '"\n');
+        this.cls.message.writeByte(Protocol.clc.stringcmd);
+        this.cls.message.writeString('color ' + (this.identityCvars.color.value >> 4) + ' ' + (this.identityCvars.color.value & 15) + '\n');
+        this.cls.message.writeByte(Protocol.clc.stringcmd);
+        this.cls.message.writeString('spawn ' + this.cls.spawnparms);
         break;
       case 3:
         this.setConnectingStep(100, 'Joining the game!');
-        MSG.WriteByte(this.cls.message, Protocol.clc.stringcmd);
-        MSG.WriteString(this.cls.message, 'begin');
+        this.cls.message.writeByte(Protocol.clc.stringcmd);
+        this.cls.message.writeString('begin');
         break;
       case 4:
         this.setConnectingStep(null, null);

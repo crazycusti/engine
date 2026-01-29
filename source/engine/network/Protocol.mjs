@@ -144,7 +144,7 @@ export const serializableTypes = Object.freeze({
   float: 8,
   short: 9,
   byte: 10,
-  // anything else is a custom type and must be registered with MSG.RegisterSerializableType for more magic
+  // anything else is a custom type and must be registered with registerSerializableType for more magic
 });
 
 export const te = Object.freeze({
