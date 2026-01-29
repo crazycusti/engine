@@ -127,11 +127,9 @@ V.cshift_lava = [255.0, 80.0, 0.0, 150.0];
 
 V.blend = [0.0, 0.0, 0.0, 0.0];
 
-V.ParseDamage = function () { // Client
-  const armor = NET.message.readByte();
-  const blood = NET.message.readByte();
+V.ApplyDamage = function (armor, blood, origin) { // Client (formally known as V.ParseDamage)
   const ent = CL.state.playerentity;
-  const from = NET.message.readCoordVector().subtract(ent.origin);
+  const from = origin.subtract(ent.origin);
 
   eventBus.publish('client.damage', { damageReceived: blood, armorLost: armor, attackOrigin: from.copy() });
 

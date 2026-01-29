@@ -647,7 +647,10 @@ function handleStuffText() {
  * Delegates svc_damage to the view module so it can spawn impacts.
  */
 function handleDamage() {
-  V.ParseDamage();
+  const armor = NET.message.readByte();
+  const blood = NET.message.readByte();
+  const origin = NET.message.readCoordVector();
+  V.ApplyDamage(armor, blood, origin);
 }
 
 /**

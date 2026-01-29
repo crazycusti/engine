@@ -576,4 +576,4 @@ export class SzBuffer {
 
     return serializables;
   }
-}
+};
