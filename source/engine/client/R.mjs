@@ -18,7 +18,6 @@ import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
 import { Node, revealedVisibility } from '../common/model/BSP.mjs';
 import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
-import { BaseMaterial } from './renderer/Materials.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
 
@@ -547,7 +546,7 @@ R.CullBox = function(mins, maxs) {
 
 /**
  * @param {ClientEdict} e edict to calculate light for
- * @returns {[Vector, Vector, Vector]} ambient light, shade light, nearest light origin
+ * @returns {[Vector, Vector, Vector, Vector, Vector]} ambient light, shade light, nearest light origin, dynamic shade light, dynamic light origin
  */
 R._CalculateLightValues = function (e) {
   const [ambientlight, lightOrigin] = R.LightPoint(e.lerp.origin);

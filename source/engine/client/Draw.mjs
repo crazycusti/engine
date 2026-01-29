@@ -339,6 +339,7 @@ export default class Draw {
    * @param {number} y The y position.
    * @param {string} str The string to draw.
    * @param {number} scale The scale factor.
+   * @returns {number} The new x position after drawing the string.
    */
   static StringWhite(x, y, str, scale = 1.0) {
     const program = GL.UseProgram('pic', true);
@@ -350,8 +351,9 @@ export default class Draw {
     }
     for (let i = 0; i < str.length; i++) {
       Draw.Char(x, y, str.charCodeAt(i) + 128, scale);
-      x += 8 * scale;
+      x += Math.floor((Draw.#charsLargeWidthTable[str.charAt(i)] || 32) * scale * 0.25);
     }
+    return x;
   }
 
   /**

@@ -6,6 +6,7 @@ import Vector from '../../shared/Vector.mjs';
 import Cmd from './Cmd.mjs';
 import VID from '../client/VID.mjs';
 import { clientConnectionState } from './Def.mjs';
+import { ClientEngineAPI } from './GameAPIs.mjs';
 
 let { CL, Draw, Host, Key, M, SCR } = registry;
 
@@ -95,12 +96,16 @@ export default class Con {
   static Print(msg, color = new Vector(1.0, 1.0, 1.0)) {
     Con.backscroll = 0;
 
-    let mask = 0;
+    // CR: handle legacy color codes at the start of the message
     if (msg.charCodeAt(0) <= 2) {
-      mask = 128;
-      // if (msg.charCodeAt(0) === 1) {
-      //   S.LocalSound(Con.sfx_talk);
-      // }
+      switch (msg.charCodeAt(0)) {
+        case 1:
+          color.set(ClientEngineAPI.IndexToRGB(47));
+          break;
+        case 2:
+          color.set(ClientEngineAPI.IndexToRGB(95));
+          break;
+      }
       msg = msg.substring(1);
     }
     for (let i = 0; i < msg.length; i++) {
@@ -121,7 +126,7 @@ export default class Con {
         }
         continue;
       }
-      Con.text[Con.current].text += String.fromCharCode(msg.charCodeAt(i) + mask);
+      Con.text[Con.current].text += String.fromCharCode(msg.charCodeAt(i));
     }
   }
 
@@ -167,7 +172,7 @@ export default class Con {
       if ((Host.realtime - Con.text[i].time) > Con.notifytime.value) {
         continue;
       }
-      Draw.String(8, v, Con.text[i].text.substring(0, width), 2.0);
+      Draw.String(8, v, Con.text[i].text.substring(0, width), 2.0, Con.text[i].color);
       v += 16;
     }
 
