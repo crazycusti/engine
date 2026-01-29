@@ -16,9 +16,10 @@ const Mod = {};
 
 export default Mod;
 
-let { COM } = registry;
+let { CL, COM } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
+  CL = registry.CL;
   COM = registry.COM;
 });
 
@@ -66,8 +67,15 @@ Mod.Init = function () {
 };
 
 Mod.ClearAll = function () {
+  const tempEnts = Object.keys(CL.state.clientEntities.tempEntityModels);
+
+  // TODO: should be different stages of freeing: level, game, all
   for (const name of Object.keys(Mod.known)) {
     const mod = Mod.known[name];
+
+    if (tempEnts.includes(name)) {
+      continue; // don’t free temp entity models here (FIXME)
+    }
 
     if (mod.cmds !== null) { // TODO: move responsibility to model.free or the renderer
       gl.deleteBuffer(mod.cmds);
