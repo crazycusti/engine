@@ -301,7 +301,12 @@ export class ServerPhysics {
 
     const trace = SV.collision.move(ent.entity.origin, ent.entity.mins, ent.entity.maxs, end, nomonsters, ent);
 
-    ent.entity.origin = ent.entity.origin.set(trace.endpos);
+    // CR: Only move the entity if the trace made progress. When allsolid is true,
+    // the entity started and remained entirely in solid (e.g. spawned inside a wall),
+    // so we keep it at its current position to prevent falling out of world.
+    if (!trace.allsolid) {
+      ent.entity.origin = ent.entity.origin.set(trace.endpos);
+    }
     SV.area.linkEdict(ent, true);
 
     if (trace.ent) {
@@ -615,6 +620,16 @@ export class ServerPhysics {
 
     ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
     const trace = this.pushEntity(ent, ent.entity.velocity.copy().multiply(Host.frametime));
+
+    // CR: If entity started and stayed entirely in solid (e.g. spawned inside a wall),
+    // stop movement to prevent falling out of world. This commonly happens when items
+    // are dropped by monsters dying near walls.
+    if (trace.allsolid) {
+      ent.entity.velocity = new Vector();
+      ent.entity.avelocity = new Vector();
+      return;
+    }
+
     if (trace.fraction === 1.0 || ent.isFree()) {
       return;
     }
