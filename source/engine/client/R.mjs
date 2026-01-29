@@ -1416,7 +1416,6 @@ R.NewMap = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
   R.NewMapFog();
-
   R.MakeSky();
 };
 
@@ -2344,6 +2343,11 @@ R.DrawSkyBox = function() {
 };
 
 R.MakeSky = function() {
+  // make sure we always free the old skyrenderer
+  if (R.skyrenderer) {
+    R.skyrenderer.shutdown();
+  }
+
   R.skyrenderer = CL.state.worldmodel.newSkyRenderer();
 
   if (!R.skyrenderer) {
