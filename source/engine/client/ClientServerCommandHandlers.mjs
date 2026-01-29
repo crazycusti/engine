@@ -687,7 +687,6 @@ function handleSetView() {
 
 /**
  * Updates lightstyle definitions used for dynamic lighting.
- * @returns {void}
  */
 function handleLightStyle() {
   parseLightstylePacket();
@@ -695,7 +694,6 @@ function handleLightStyle() {
 
 /**
  * Triggers spatialised sounds for the given entity/channel tuple.
- * @returns {void}
  */
 function handleSound() {
   parseStartSoundPacket();

@@ -475,6 +475,14 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   /**
+   * Shows the shareware sell screen to all clients.
+   * Used when completing shareware episode 1.
+   */
+  static ShowSellScreen() {
+    SV.server.reliable_datagram.writeByte(Protocol.svc.sellscreen);
+  }
+
+  /**
    * Dispatches a client event to the specified receiver.
    * NOTE: Events are written to the datagram AFTER an entity update, so referring to an entity that will be removed in the same frame will not work!
    * @param {SzBuffer} destination destination to write the event to, can be SV.server.datagram or a client message buffer
