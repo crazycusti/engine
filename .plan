@@ -60,7 +60,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Random issues
 
-- [_] a not precached resource will cause dropping Promises, game code needs model right away, QuakeC VM broken
+- [X] a not precached resource will cause dropping Promises, game code needs model right away, QuakeC VM broken
 - [_] invoking all these special Host console commands intended to be forwarded from the client or handled on a per client basis are causing issues when invoked outside of that (e.g. exec’ing color, name etc. on a dedicated server)
 - [X] group animated models are not rendered anymore
 
@@ -79,7 +79,7 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] add PHS support to sound subsystem
 - [_] PCX loader
 - [_] colormap.pcx support
-- [_] skybox renderer
+- [X] skybox renderer
 - [_] WAL loader
 - [_] md2 loader and renderer
 - [_] game port

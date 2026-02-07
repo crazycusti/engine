@@ -8,6 +8,7 @@ import { BaseClientEdictHandler } from '../../shared/ClientEdict.mjs';
 import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { SFX } from './Sound.mjs';
 import { Node, revealedVisibility } from '../common/model/BSP.mjs';
+import { BaseModel } from '../common/model/BaseModel.mjs';
 
 let { CL, Con, Mod, PR, R, S } = registry;
 
@@ -92,6 +93,7 @@ export class ClientEdict {
   constructor(num) {
     this.classname = null;
     this.num = num;
+    /** @type {BaseModel} */
     this.model = null;
     this.framePrevious = null;
     this.frameTime = 0.0;
