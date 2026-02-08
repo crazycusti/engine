@@ -13,6 +13,7 @@ Please follow these rules when writing or modifying code.
     - Example: Define `WorldspawnInfo` as `Record<string, string>` instead of just `object`.
     - In case an object is not really defined it, consider defining it.
 5.  **Use specific types from imports**.
+6.  **Use `@type` for variable declarations** when the type cannot be inferred
 
 ## Registry and Global Variables
 
@@ -57,6 +58,74 @@ Use `eventBus` for **business logic events and lifecycle hooks**.
 - **Avoid barrel exports**. Use direct imports instead.
 - Example: Import `BrushModelRenderer` from `./renderer/BrushModelRenderer.mjs`, not `./renderer`.
 
+## General Style Guidelines
+
+- **Use `const` and `let`** instead of `var`.
+- **Use camelCase** for variables and functions, PascalCase for classes.
+- **Use descriptive names** for variables and functions.
+- **Keep functions small** and focused on a single task or a single responsibility.
+- **Use early returns** to reduce nesting and improve readability.
+- **Avoid deep nesting**; refactor into helper functions if necessary.
+- **Never mutate function parameters**; create new variables instead.
+- **Always put code blocks in braces** (`{}`), even for single statements.
+
+### Control Statement Formatting
+
+When using control statements (`if`, `for`, `while`, etc.) with braces, always place the opening brace on the same line as the statement, but put the code block on the following line(s). This improves readability and follows standard formatting conventions.
+
+### Clean up global objects
+
+There are some old-style global objects, try to avoid them, do not replicate them. It’s better to create a class and move methods to it as static members, same applies to variables and properties.
+
+Example:
+
+```javascript
+
+// Avoid this:
+
+const GL = {
+  programs: [],
+  currentProgram: null,
+};
+
+GL.BindProgram = function (program) {
+  GL.currentProgram = program;
+  gl.useProgram(program);
+};
+
+// Better:
+
+class GL {
+  static programs = [];
+  static currentProgram = null;
+
+  static BindProgram(program) {
+    GL.currentProgram = program;
+    gl.useProgram(program);
+  }
+}
+
+// Never this:
+
+function GL_BindProgram(program) {
+  GL.currentProgram = program;
+  gl.useProgram(program);
+}
+
+class GL {
+  static programs = [];
+  static currentProgram = null;
+
+  static BindProgram(program) {
+    GL_BindProgram(program);
+  }
+}
+
+```
+
+- **Never do indirections through functions** for simple operations. It’s better to call the method directly, even if it’s a static method on a class, than to have an extra function that just calls it. Also not the other way around.
+- **Avoid unnecessary global objects**. If you need a namespace, use a class with static members instead of a plain object. This allows for better organization and potential future expansion.
+
 ## Method Parameters
 
 ### Unused Parameters
@@ -76,6 +145,7 @@ Use `eventBus` for **business logic events and lifecycle hooks**.
 ### Use of `null` and `undefined`
 
 - **Prefer `null` over `undefined`** for missing values.
+- Unless `null` already has a different meaning in the context, then use `undefined` for missing values.
 
 ### `null` initializations
 
@@ -125,6 +195,8 @@ Use `eventBus` for **business logic events and lifecycle hooks**.
 - **Use streaming buffers** for dynamic geometry.
 - **Cache expensive calculations**.
 - **Use `for...of` loops** over `forEach`.
+- **Avoid unnecessary array copying**; use in-place modifications when possible.
+- **Use `{}` over `Map` for small key-value pairs** when keys are strings and not dynamically added/removed.
 
 ## Dangling Resources
 

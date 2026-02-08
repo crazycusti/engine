@@ -138,6 +138,17 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-02-08
+
+- added support for PHS by generating it based on the PVS data
+- added support for automatically generating portals and flood areas (super janky right now, even Claude Opus 4.6 couldn’t resolve it)
+- server pushes portal states to client for sound effects
+- there’s a bug breaking the telefrag ending of Quake 1 in both the JS version as well as the QC one
+- a recent Chrome update introduced a memory leak I’m unable to trace:
+  - it is not coming from JS (JavaScript memory stays constant, yet memory footprint increases)
+  - it seem to stop when requestAnimationFrame is not fired
+  - sometimes it is not there, sometimes it’s there (compiled/minified assets?)
+
 ### 2026-01-28
 
 - played around with render targets / framebuffer objects recently, got some ideas

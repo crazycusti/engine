@@ -2189,12 +2189,19 @@ R.MarkLeaves = function() {
   }
   R.visframecount++;
   R.oldviewleaf = R.viewleaf;
-  const vis = (R.novis.value !== 0 || R.viewleaf === null || R.viewleaf.num === 0) ? revealedVisibility : CL.state.worldmodel.getPvsByLeaf(R.viewleaf);
-  for (let i = 0; i < CL.state.worldmodel.leafs.length; i++) {
+  const vis = (R.novis.value !== 0 || R.viewleaf === null || R.viewleaf.num === 0) ? revealedVisibility : (
+    R.novis.value === 2 ?
+      CL.state.worldmodel.getPhsByLeaf(R.viewleaf) :
+      CL.state.worldmodel.getPvsByLeaf(R.viewleaf)
+  );
+  for (let i = 1; i < CL.state.worldmodel.leafs.length; i++) {
     if (!vis.isRevealed(i)) {
       continue;
     }
-    for (let node = CL.state.worldmodel.leafs[i + 1]; node; node = node.parent) {
+    if (CL.areaportals.value > 0 && R.viewleaf && !CL.state.worldmodel.areaPortals.leavesConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
+      continue;
+    }
+    for (let node = CL.state.worldmodel.leafs[i]; node; node = node.parent) {
       if (node.markvisframe === R.visframecount) {
         break;
       }
@@ -2222,11 +2229,14 @@ R.MarkLeaves = function() {
       break;
     }
     const vis = CL.state.worldmodel.getPvsByLeaf(leaf);
-    for (let i = 0; i < CL.state.worldmodel.leafs.length; i++) {
+    for (let i = 1; i < CL.state.worldmodel.leafs.length; i++) {
       if (!vis.isRevealed(i)) {
         continue;
       }
-      for (let node = CL.state.worldmodel.leafs[i + 1]; node; node = node.parent) {
+      if (CL.areaportals.value > 0 && !CL.state.worldmodel.areaPortals.leavesConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
+        continue;
+      }
+      for (let node = CL.state.worldmodel.leafs[i]; node; node = node.parent) {
         if (node.markvisframe === R.visframecount) {
           break;
         }

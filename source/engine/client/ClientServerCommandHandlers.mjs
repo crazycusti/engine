@@ -949,6 +949,15 @@ function handleClientEvent() {
   CL.state.clientMessages.parseClientEvent();
 }
 
+/**
+ * Updates portal state.
+ */
+function handleSetPortalState() {
+  const portalNum = NET.message.readShort();
+  const open = NET.message.readByte() !== 0;
+  CL.state.worldmodel.areaPortals.setPortalState(portalNum, open);
+}
+
 /** @type {Record<number, Function>} */
 const serverCommandHandlers = {
   [Protocol.svc.nop]: handleNop,
@@ -993,6 +1002,7 @@ const serverCommandHandlers = {
   [Protocol.svc.deltapacketentities]: handleDeltaPacketEntities,
   [Protocol.svc.cvar]: handleCvar,
   [Protocol.svc.clientevent]: handleClientEvent,
+  [Protocol.svc.setportalstate]: handleSetPortalState,
 };
 
 /**

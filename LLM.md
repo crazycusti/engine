@@ -22,6 +22,7 @@ Where’s what these tools have worked on in big chunks and my experience:
 | Vite | It was faster to get Claude setting up Vite for me than to read the documentation. It’s pretty much a vanilla setup adjusted for the engine-game-separation though. |
 | Documentation | Some of the documentation has been created/updated/improved using Gemini. |
 | `MSG` into `SzBuffer` refactor | Played around with Claude Opus 4.5 and tasked it to merge the old C-style `MSG` functions into `SzBuffer` and it was 99% on point and it actually due to the asserts a couple of bugs I fixed myself afterwards. |
+| `PHS` and area portals | Tried out Claude Opus 4.6 to backport the ideas of portals and PHS from Quake 2+. It has been a long journey with lots of debugging and manual tweaking. Result: not working lol. |
 
 ## Conclusion
 

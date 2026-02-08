@@ -213,7 +213,7 @@ export class ServerMessages {
         continue;
       }
 
-      if (!ent.isInPVS(pvs)) {
+      if (!ent.isInPXS(pvs)) {
         continue;
       }
 
@@ -232,7 +232,7 @@ export class ServerMessages {
         continue;
       }
 
-      if (!clientEdict.equals(cl.edict) && !clientEdict.isInPVS(pvs)) {
+      if (!clientEdict.equals(cl.edict) && !clientEdict.isInPXS(pvs)) {
         continue;
       }
 

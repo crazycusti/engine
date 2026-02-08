@@ -3,6 +3,7 @@ import Cmd from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { Node } from '../common/model/BSP.mjs';
 
 let { CL, COM, Con, Host } = registry;
 
@@ -180,6 +181,16 @@ class SoundBaseChannel {
       return this;
     }
 
+    if (CL.areaportals.value > 0 && CL.state.worldmodel !== null && S._listenerLeaf !== null) {
+      const channelLeaf = CL.state.worldmodel.getLeafForPoint(this.origin);
+      if (!CL.state.worldmodel.areaPortals.leavesConnected(S._listenerLeaf, channelLeaf)) {
+        // not connected, no sound
+        this.channel_vol = 0;
+        this.updateVol();
+        return this;
+      }
+    }
+
     // Calculate distance from the listener
     const source = new Vector(
       this.origin[0] - this._S._listenerOrigin[0],
@@ -195,12 +206,10 @@ class SoundBaseChannel {
     }
     dist *= this.dist_mult;
 
-    // Dot product with the listener’s right vector
-    const dot = source.dot(this._S._listenerRight);
-
     const adjustedVolume = (1.0 - dist);
 
-    this.pan = dot;
+    // Dot product with the listener’s right vector
+    this.pan = source.dot(this._S._listenerRight);
     this.channel_vol = Math.max(0, adjustedVolume * this.master_vol);
 
     this.updateVol();
@@ -474,6 +483,7 @@ const S = {
   _listenerRight: new Vector(),
   _listenerUp: new Vector(),
   _listenerUnderwater: false,
+  _listenerLeaf: /** @type {Node|null} */ (null),
 
   _started: false,
   /** @type {AudioContext|null} */
@@ -1217,8 +1227,7 @@ const S = {
       return;
     }
 
-    const l = CL.state.worldmodel.getLeafForPoint(this._listenerOrigin);
-    if (!l || this._ambientLevel.value === 0) {
+    if (!this._listenerLeaf || this._ambientLevel.value === 0) {
       // turn off all ambients
 
       for (const ch of this._ambientChannels) {
@@ -1231,7 +1240,7 @@ const S = {
     // ramp up/down volumes
     for (let i = 0; i < this._ambientChannels.length; i++) {
       const ch = this._ambientChannels[i];
-      let vol = this._ambientLevel.value * l.ambient_level[i];
+      let vol = this._ambientLevel.value * this._listenerLeaf.ambient_level[i];
       if (vol < 8.0) {
         vol = 0.0;
       }
@@ -1350,6 +1359,8 @@ const S = {
     this._listenerUp[2] = up[2];
 
     this._listenerUnderwater = underwater;
+
+    this._listenerLeaf = CL.state.worldmodel ? CL.state.worldmodel.getLeafForPoint(origin) : null;
 
     // Bound volume [0..1]
     if (this.volume.value < 0.0) {

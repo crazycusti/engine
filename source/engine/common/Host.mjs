@@ -126,11 +126,7 @@ Host.ClientPrint = function(string) { // FIXME: Host.client
 };
 
 Host.BroadcastPrint = function(string) {
-  for (let i = 0; i < SV.svs.maxclients; i++) {
-    const client = SV.svs.clients[i];
-    if (client.state !== ServerClient.STATE.SPAWNED) {
-      continue;
-    }
+  for (const client of SV.svs.spawnedClients()) {
     client.message.writeByte(Protocol.svc.print);
     client.message.writeString(string);
   }
@@ -1348,6 +1344,16 @@ Host.Begin_f = function() {  // signon 3, step 1
     Con.Print('begin is not valid from the console\n');
     return;
   }
+
+  // Send all portal states before the client is offically spawned and gets updates incrementally
+  const areaPortals = SV.server.worldmodel.areaPortals;
+
+  for (let p = 0; p < areaPortals.numPortals; p++) {
+    this.client.message.writeByte(Protocol.svc.setportalstate);
+    this.client.message.writeShort(p);
+    this.client.message.writeByte(areaPortals.isPortalOpen(p) ? 1 : 0);
+  }
+
   this.client.state = ServerClient.STATE.SPAWNED;
 
   if (SV.server.gameAPI.ClientBegin) {

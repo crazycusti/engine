@@ -118,6 +118,7 @@ export const svc = Object.freeze({
   clientevent: 108,
   gamestateupdate: 109,
   clientstateupdate: 110,
+  setportalstate: 111,
 });
 
 /** Client to Server */

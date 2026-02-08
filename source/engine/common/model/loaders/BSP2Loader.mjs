@@ -95,10 +95,22 @@ export class BSP2Loader extends BSP29Loader {
 
         const val0 = v.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3];
         const val1 = v.dot(new Vector(...tex.vecs[1])) + tex.vecs[1][3];
-        if (val0 < mins[0]) { mins[0] = val0; }
-        if (val0 > maxs[0]) { maxs[0] = val0; }
-        if (val1 < mins[1]) { mins[1] = val1; }
-        if (val1 > maxs[1]) { maxs[1] = val1; }
+
+        if (val0 < mins[0]) {
+          mins[0] = val0;
+        }
+
+        if (val0 > maxs[0]) {
+          maxs[0] = val0;
+        }
+
+        if (val1 < mins[1]) {
+          mins[1] = val1;
+        }
+
+        if (val1 > maxs[1]) {
+          maxs[1] = val1;
+        }
 
         if (j >= 3) {
           verts.push(verts[0], verts[verts.length - 2]);
@@ -222,6 +234,7 @@ export class BSP2Loader extends BSP29Loader {
         num: i,
         contents: view.getInt32(fileofs, true),
         visofs: view.getInt32(fileofs + 4, true),
+        cluster: i > 0 ? i - 1 : -1,
         mins: new Vector(view.getFloat32(fileofs + 8, true), view.getFloat32(fileofs + 12, true), view.getFloat32(fileofs + 16, true)), // float instead of int16
         maxs: new Vector(view.getFloat32(fileofs + 20, true), view.getFloat32(fileofs + 24, true), view.getFloat32(fileofs + 28, true)), // float instead of int16
         firstmarksurface: view.getUint32(fileofs + 32, true), // uint32 instead of uint16

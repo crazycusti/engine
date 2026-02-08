@@ -106,6 +106,7 @@ export default class ClientLifecycle {
     CL.rcon_password = new Cvar('rcon_password', '');
     CL.nopred = new Cvar('cl_nopred', '0', Cvar.FLAG.NONE, 'Enables/disables client-side prediction');
     CL.nohud = new Cvar('cl_nohud', '0', Cvar.FLAG.NONE, 'Disables all HUD elements');
+    CL.areaportals = new Cvar('cl_areaportals', '0', Cvar.FLAG.ARCHIVE, 'Enables/disables client-side area portal culling');
   }
 
   static #registerCommands() {

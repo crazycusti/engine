@@ -286,12 +286,9 @@ export class ServerEdict {
   constructor(num) {
     this.num = num;
     this.free = false;
-    this.area = {
-      ent: this,
-    };
     /** @type {OctreeNode|null} used for fast lookup */
     this.octreeNode = null;
-    /** @type {number[]} used for PVS lookup */
+    /** @type {number[]} used for PXS lookup */
     this.leafnums = [];
     this.freetime = 0.0;
     /** @type {BaseEntity|null} entity managed by the game code */
@@ -414,6 +411,11 @@ export class ServerEdict {
     } else {
       this.setMinMaxSize(Vector.origin, Vector.origin);
     }
+
+    // CR: dear future me, investigate the fun issues with entities with SOLID_BSP and non-brush models, right now it breaks Pmove and a few other things.
+    if (this.entity.solid === Defs.solid.SOLID_BSP) {
+      console.assert(mod && mod.type === 0, 'Edict.setModel: not a brush model for SOLID_BSP');
+    }
   }
 
   /**
@@ -520,10 +522,10 @@ export class ServerEdict {
       return null;
     }
 
-    const l = SV.server.worldmodel.getLeafForPoint(this.entity.origin.copy().add(this.entity.view_ofs)).num - 1;
+    const l = SV.server.worldmodel.getLeafForPoint(this.entity.origin.copy().add(this.entity.view_ofs)).num;
 
-    if (l < 0 || !ServerEdict.#lastcheckpvs.isRevealed(l)) {
-      // back side leaf or leaf is not visible according to PVS
+    if (l === 0 || !ServerEdict.#lastcheckpvs.isRevealed(l)) {
+      // outside leaf (sentinel) or leaf is not visible according to PVS
       return null;
     }
 
@@ -531,12 +533,12 @@ export class ServerEdict {
   }
 
   /**
-   * Checks if this entity is in the given PVS.
-   * @param {Visibility} pvs PVS to check against
+   * Checks if this entity is in the given PHS/PVS.
+   * @param {Visibility} pxs PHS/PVS to check against
    * @returns {boolean} true, when this entity is in the PVS
    */
-  isInPVS(pvs) {
-    return pvs.areRevealed(this.leafnums);
+  isInPXS(pxs) {
+    return pxs.areRevealed(this.leafnums);
   }
 
   /**

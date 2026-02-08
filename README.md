@@ -22,6 +22,7 @@ Added features include but not limited to:
 * Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
 * Static skybox support (like in Half-Life 1 and Quake 2)
+* Automatic area portals infrastructure for dynamic sound and rendering culling (experimental)
 
 Yet, there is still plenty to do.
 

@@ -153,6 +153,10 @@ export class BrushModelRenderer extends ModelRenderer {
 
     gl.uniform1f(program.uHaveDeluxemap, 1.0);
 
+    // wallhack: GL_BLEND is required
+    // gl.enable(gl.BLEND);
+    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
     // Iterate through visible leafs
     for (let i = 0; i < clmodel.leafs.length; i++) {
       const leaf = clmodel.leafs[i];

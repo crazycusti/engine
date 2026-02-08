@@ -244,13 +244,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
       return;
     }
 
-    for (let i = 0; i < SV.svs.maxclients; i++) {
-      const client = SV.svs.clients[i];
-
-      if (client.state !== ServerClient.STATE.SPAWNED) {
-        continue;
-      }
-
+    for (const client of SV.svs.spawnedClients()) {
       client.message.writeByte(Protocol.svc.lightstyle);
       client.message.writeByte(styleId);
       client.message.writeString(sequenceString);
@@ -264,6 +258,56 @@ export class ServerEngineAPI extends CommonEngineAPI {
    */
   static DeterminePointContents(origin) {
     return SV.collision.pointContents(origin);
+  }
+
+  /**
+   * Set an area portal's open/close state.
+   * Call this when a door or platform opens/closes to control sound propagation
+   * and area connectivity. Uses reference counting: multiple entities can hold
+   * the same portal open.
+   * @param {number} portalNum portal index (from the BSP area portals lump)
+   * @param {boolean} open true to open (increment ref count), false to close (decrement)
+   */
+  static SetAreaPortalState(portalNum, open) {
+    if (SV.server.worldmodel === null) {
+      return;
+    }
+
+    SV.server.worldmodel.areaPortals.setPortalState(portalNum, open);
+
+    for (const client of SV.svs.spawnedClients()) {
+      client.message.writeByte(Protocol.svc.setportalstate);
+      client.message.writeShort(portalNum);
+      client.message.writeByte(open ? 1 : 0);
+    }
+  }
+
+  /**
+   * Check if two areas are connected through open portals.
+   * @param {number} area0 first area index
+   * @param {number} area1 second area index
+   * @returns {boolean} true if the areas are connected
+   */
+  static AreasConnected(area0, area1) {
+    if (SV.server.worldmodel === null) {
+      return true;
+    }
+
+    return SV.server.worldmodel.areaPortals.areasConnected(area0, area1);
+  }
+
+  /**
+   * Get the auto-assigned portal number for a brush model.
+   * Returns -1 if the model has no associated portal.
+   * @param {string} modelName brush model name (e.g. "*1")
+   * @returns {number} portal number, or -1 if none
+   */
+  static GetModelPortal(modelName) {
+    if (SV.server.worldmodel === null) {
+      return -1;
+    }
+
+    return SV.server.worldmodel.modelPortalMap[modelName] ?? -1;
   }
 
   static ChangeLevel(mapname) {
@@ -367,13 +411,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
   }
 
   static *GetClients() {
-    for (let i = 0; i < SV.svs.maxclients; i++) {
-      const client = SV.svs.clients[i];
-
-      if (client.state !== ServerClient.STATE.SPAWNED) {
-        continue;
-      }
-
+    for (const client of SV.svs.spawnedClients()) {
       yield client.edict;
     }
   }
@@ -541,6 +579,23 @@ export class ServerEngineAPI extends CommonEngineAPI {
    */
   static async NavigateAsync(start, end) {
     return SV.server.navigation.findPathAsync(start, end);
+  }
+
+  static GetPHS(origin) {
+    return SV.server.worldmodel.getPhsByPoint(origin);
+  }
+
+  static GetPVS(origin) {
+    return SV.server.worldmodel.getPvsByPoint(origin);
+  }
+
+  /**
+   * Get the area index for a world position.
+   * @param {Vector} origin world position
+   * @returns {number} area index (0 = outside/invalid)
+   */
+  static GetAreaForPoint(origin) {
+    return SV.server.worldmodel.getLeafForPoint(origin).area;
   }
 
   static get maxplayers() {

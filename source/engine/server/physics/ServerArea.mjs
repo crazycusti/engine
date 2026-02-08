@@ -175,7 +175,7 @@ export class ServerArea {
         return;
       }
 
-      ent.leafnums[ent.leafnums.length] = node.num - 1;
+      ent.leafnums[ent.leafnums.length] = node.num;
       return;
     }
 

@@ -188,6 +188,14 @@ export default class SV {
     maxclientslimit: 32,
     /** gamestate across maps */
     gamestate: null,
+
+    *spawnedClients() {
+      for (const client of this.clients) {
+        if (client.state === ServerClient.STATE.SPAWNED) {
+          yield client;
+        }
+      }
+    },
   };
 
   // Physics box hull (used for collision detection)

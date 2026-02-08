@@ -2,6 +2,7 @@ import { BaseMaterial } from '../../client/renderer/Materials.mjs';
 import { content } from '../../../shared/Defs.mjs';
 import { BaseModel } from './BaseModel.mjs';
 import { SkyRenderer } from '../../client/renderer/Sky.mjs';
+import { AreaPortals } from './AreaPortals.mjs';
 
 /** @typedef {import('../../../shared/Vector.mjs').default} Vector */
 /** @typedef {import('./BaseModel.mjs').Face} Face */
@@ -33,47 +34,68 @@ import { SkyRenderer } from '../../client/renderer/Sky.mjs';
  * BSPX extended lump data (RGBLIGHTING, LIGHTINGDIR, etc.)
  */
 
-const VISDATA_SIZE = 1024; // CR: might be too little (TODO: dynamic size based on leaf count)
+const VISDATA_SIZE = 1024; // fallback for singleton Visibility instances (no model)
 
 /**
- * Visibility data for PVS/PHS
+ * Visibility data for PVS/PHS.
+ * Stored as cluster-indexed bits. Each bit corresponds to a cluster;
+ * leaf → cluster mapping is resolved via the owning BrushModel.
  */
 export class Visibility {
   #data = new Uint8Array(VISDATA_SIZE);
 
   #model = /** @type {BrushModel} */ (null);
 
+  /** @type {boolean} when set, isRevealed/areRevealed always return true */
+  #unconditionalReveal = false;
+
   constructor(model = null) {
     this.#model = model;
 
-    if (model !== null && model.visdata === null) {
-      this.revealAll();
+    if (model !== null) {
+      const clusterBytes = Math.max((model.numclusters + 7) >> 3, 1);
+      this.#data = new Uint8Array(clusterBytes);
+
+      if (model.visdata === null) {
+        this.revealAll();
+      }
     }
   }
 
   /**
-   * Create a Visibility instance from a BrushModel.
+   * Create a Visibility instance from RLE-compressed cluster PVS data.
    * @param {BrushModel} model map model
-   * @param {number} visofs offset into model visdata
+   * @param {number} visofs byte offset into sourceData
+   * @param {Uint8Array} sourceData compressed vis data (defaults to model.visdata)
    * @returns {Visibility} visibility instance
    */
-  static fromBrushModel(model, visofs) {
+  static fromBrushModel(model, visofs, sourceData = model.visdata) {
     console.assert(model instanceof BrushModel);
 
-    const modelVisSize = (model.leafs.length + 7) >> 3;
-
-    console.assert(modelVisSize <= VISDATA_SIZE);
-
+    const modelVisSize = (model.numclusters + 7) >> 3;
     const visibility = new Visibility(model);
 
-    if (model.visdata !== null) {
+    if (sourceData !== null && visofs >= 0) {
       for (let _out = 0, _in = visofs; _out < modelVisSize;) {
-        if (model.visdata[_in] !== 0) {
-          visibility.#data[_out++] = model.visdata[_in++];
+        // Bounds check to prevent reading past end of sourceData
+        // Note: It's normal for visibility data to end before modelVisSize is filled;
+        // remaining bytes stay zero, which is correct for unvisible clusters.
+        if (_in >= sourceData.length) {
+          break;
+        }
+
+        if (sourceData[_in] !== 0) {
+          visibility.#data[_out++] = sourceData[_in++];
           continue;
         }
 
-        for (let c = model.visdata[_in + 1]; c > 0; c--) {
+        // RLE: 0 byte followed by count of zeros
+        if (_in + 1 >= sourceData.length) {
+          // End of RLE data; remaining output stays zero (unvisible)
+          break;
+        }
+
+        for (let c = sourceData[_in + 1]; c > 0; c--) {
           visibility.#data[_out++] = 0x00;
         }
 
@@ -85,17 +107,18 @@ export class Visibility {
   }
 
   /**
-   * Will reveal all leafs.
+   * Will reveal all clusters.
    * @returns {Visibility} this
    */
   revealAll() {
     this.#data.fill(0xff);
+    this.#unconditionalReveal = true;
 
     return this;
   }
 
   /**
-   * Will hide all leafs.
+   * Will hide all clusters.
    * @returns {Visibility} this
    */
   hideAll() {
@@ -112,8 +135,9 @@ export class Visibility {
   #addToFatPoint(p, node) {
     while (true) {
       if (node.contents < 0) {
-        if (node.contents !== content.CONTENT_SOLID) {
-          const vis = Visibility.fromBrushModel(this.#model, node.visofs);
+        if (node.contents !== content.CONTENT_SOLID && node.cluster >= 0) {
+          const visofs = this.#model.clusterPvsOffsets[node.cluster];
+          const vis = Visibility.fromBrushModel(this.#model, visofs);
 
           for (let i = 0; i < this.#data.length; i++) { // merge visibility from node to ours
             this.#data[i] |= vis.#data[i];
@@ -152,13 +176,33 @@ export class Visibility {
   }
 
   /**
-   * Check if any of the given leafs are revealed.
-   * @param {number[]} leafnums leaf indices
+   * Check if any of the given leaf indices have visible clusters.
+   * @param {number[]} leafIndices leaf array indices (Node.num values)
    * @returns {boolean} whether any of the given leafs are revealed
    */
-  areRevealed(leafnums) {
-    for (let i = 0; i < leafnums.length; i++) {
-      if ((this.#data[leafnums[i] >> 3] & (1 << (leafnums[i] & 7))) !== 0) {
+  areRevealed(leafIndices) {
+    if (this.#unconditionalReveal) {
+      return leafIndices.length > 0;
+    }
+
+    if (this.#model === null) {
+      // Sentinel fallback (hiddenVisibility)
+      for (let i = 0; i < leafIndices.length; i++) {
+        if ((this.#data[leafIndices[i] >> 3] & (1 << (leafIndices[i] & 7))) !== 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    for (let i = 0; i < leafIndices.length; i++) {
+      const cluster = this.#model.leafs[leafIndices[i]].cluster;
+
+      if (cluster < 0) {
+        continue;
+      }
+
+      if ((this.#data[cluster >> 3] & (1 << (cluster & 7))) !== 0) {
         return true;
       }
     }
@@ -167,12 +211,27 @@ export class Visibility {
   }
 
   /**
-   * Check if a given leaf is revealed.
-   * @param {number} leafnum leaf index
+   * Check if a given leaf is revealed via its cluster.
+   * @param {number} leafIndex leaf array index (Node.num)
    * @returns {boolean} whether the given leaf is revealed
    */
-  isRevealed(leafnum) {
-    return (this.#data[leafnum >> 3] & (1 << (leafnum & 7))) !== 0;
+  isRevealed(leafIndex) {
+    if (this.#unconditionalReveal) {
+      return true;
+    }
+
+    if (this.#model === null) {
+      // Sentinel fallback (hiddenVisibility)
+      return (this.#data[leafIndex >> 3] & (1 << (leafIndex & 7))) !== 0;
+    }
+
+    const cluster = this.#model.leafs[leafIndex].cluster;
+
+    if (cluster < 0) {
+      return false;
+    }
+
+    return (this.#data[cluster >> 3] & (1 << (cluster & 7))) !== 0;
   }
 };
 
@@ -375,6 +434,30 @@ export class BrushModel extends BaseModel {
   /** @type {boolean} Whether RGB lighting is used */
   coloredlights = false;
 
+  /** @type {number} Number of visibility clusters */
+  numclusters = 0;
+
+  /** @type {number[]|null} PVS byte offset per cluster into visdata */
+  clusterPvsOffsets = null;
+
+  /** @type {Uint8Array|null} PHS (Potentially Hearable Set) data, cluster-indexed RLE */
+  phsdata = null;
+
+  /** @type {number[]|null} PHS byte offset per cluster into phsdata */
+  clusterPhsOffsets = null;
+
+  /** @type {number} Number of areas for area portals */
+  numAreas = 0;
+
+  /** @type {{ area0: number, area1: number, group?: number }[]} Area portal definitions */
+  portalDefs = [];
+
+  /** @type {AreaPortals} Area portal connectivity manager */
+  areaPortals = new AreaPortals();
+
+  /** @type {Record<string, number>} Maps brush model names (e.g. "*1") to auto-assigned portal numbers */
+  modelPortalMap = {};
+
   /** @type {number[]|null} Leaf brushes, useful for PHS/PVS (optional) */
   leafbrushes = null;
 
@@ -430,11 +513,11 @@ export class BrushModel extends BaseModel {
    * @returns {Visibility} visibility data for the given leaf
    */
   getPvsByLeaf(leaf) {
-    if (leaf === this.leafs[0]) {
+    if (leaf === this.leafs[0] || leaf.cluster < 0 || this.clusterPvsOffsets === null) {
       return hiddenVisibility;
     }
 
-    return Visibility.fromBrushModel(this, leaf.visofs);
+    return Visibility.fromBrushModel(this, this.clusterPvsOffsets[leaf.cluster]);
   }
 
   /**
@@ -443,7 +526,32 @@ export class BrushModel extends BaseModel {
    * @returns {Visibility} visibility data for the leaf containing the point
    */
   getFatPvsByPoint(point) {
-    return Visibility.fromBrushModel(this, this.leafs[0].visofs).addFatPoint(point);
+    const vis = new Visibility(this);
+
+    return vis.addFatPoint(point);
+  }
+
+  /**
+   * Get PHS (Potentially Hearable Set) for a point in the world.
+   * @param {Vector} point point in world
+   * @returns {Visibility} PHS data for the leaf containing the point
+   */
+  getPhsByPoint(point) {
+    return this.getPhsByLeaf(this.getLeafForPoint(point));
+  }
+
+  /**
+   * Get PHS (Potentially Hearable Set) for a given leaf.
+   * Returns a Visibility where isRevealed/areRevealed check hearability.
+   * @param {Node} leaf leaf node
+   * @returns {Visibility} PHS data for the given leaf
+   */
+  getPhsByLeaf(leaf) {
+    if (this.phsdata === null || leaf === this.leafs[0] || leaf.cluster < 0 || this.clusterPhsOffsets === null) {
+      return hiddenVisibility;
+    }
+
+    return Visibility.fromBrushModel(this, this.clusterPhsOffsets[leaf.cluster], this.phsdata);
   }
 
   /**

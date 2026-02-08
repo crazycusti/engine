@@ -255,7 +255,7 @@ export class ClientEdict {
     }
 
     if (node.contents < 0) {
-      this.leafs[this.leafs.length] = node.num - 1;
+      this.leafs[this.leafs.length] = node.num;
       return;
     }
 

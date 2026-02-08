@@ -76,6 +76,7 @@ export default class CL {
   /** @type {Cvar} */ static m_side = null;
   /** @type {Cvar} */ static nopred = null;
   /** @type {Cvar} */ static nohud = null;
+  /** @type {Cvar} */ static areaportals = null;
 
   /** @type {SFX} */ static sfx_talk = null;
   /** @type {Protocol.UserCmd} */ static nullcmd = new Protocol.UserCmd();

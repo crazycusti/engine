@@ -1,5 +1,7 @@
 # QuakeShack AI Assistant Instructions
 
+**Important**: Also consider .github/instructions/**.md for more specific architectural rules and coding conventions.
+
 You are working on QuakeShack, a modern JavaScript port of the Quake 1 engine integrated with Cloudflare services.
 
 ## Project Structure & Architecture
