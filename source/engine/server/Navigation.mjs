@@ -266,7 +266,7 @@ export class Navigation {
 
     this.#initWorker();
     this.#subscribePathResponse();
-    eventBus.publish('nav.load', SV.server.mapname);
+    eventBus.publish('nav.load', SV.server.mapname, SV.server.worldmodel.checksum);
   }
 
   shutdown() {
@@ -289,8 +289,8 @@ export class Navigation {
     Con.Print('Navigation: shutdown complete.\n');
   }
 
-  async load(mapname) {
-    console.assert(this.worldmodel, 'Navigation: worldmodel is required');
+  async load(mapname, expectedChecksum = null) {
+    console.assert(this.worldmodel || expectedChecksum, 'Navigation: worldmodel or expectedChecksum is required');
 
     const filename = `maps/${mapname}.nav`;
 
@@ -339,7 +339,11 @@ export class Navigation {
       throw new CorruptedResourceError(filename, 'wrong map');
     }
 
-    if (checksum !== this.worldmodel.checksum) {
+    if (expectedChecksum !== null) {
+      if (checksum !== expectedChecksum) {
+        throw new NavMeshOutOfDateException(filename, 'outdated map');
+      }
+    } else if (checksum !== this.worldmodel.checksum) {
       throw new NavMeshOutOfDateException(filename, 'outdated map');
     }
 

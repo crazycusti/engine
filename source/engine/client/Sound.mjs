@@ -96,7 +96,13 @@ class SoundBaseChannel {
     /** @type {?SFX} */
     this.sfx = null;
 
-    this.origin = new Vector();
+    if (this.origin) {
+      this.origin[0] = 0;
+      this.origin[1] = 0;
+      this.origin[2] = 0;
+    } else {
+      this.origin = new Vector();
+    }
     this.dist_mult = 0;
     /** @type {?number} */
     this.entnum = null;
@@ -158,6 +164,9 @@ class SoundBaseChannel {
 
   resume() {
     return this;
+  }
+
+  dispose() {
   }
 
   updateVol() {
@@ -310,6 +319,18 @@ class AudioContextChannel extends SoundBaseChannel {
     this._source = this._S._context.createBufferSource();
     this._source.buffer = sc.data;
 
+    this._source.onended = (e) => {
+      // @ts-ignore
+      const node = /** @type {AudioBufferSourceNode} */ (e.target);
+      if (node) {
+        try {
+          // Explicit cleanup of native resources
+          node.disconnect();
+          node.buffer = null;
+        } catch { } // ignore
+      }
+    };
+
     // looping
     if (sc.loopstart !== null) {
       this._source.loop = true;
@@ -347,12 +368,24 @@ class AudioContextChannel extends SoundBaseChannel {
     return this;
   }
 
+  dispose() {
+    this.stop();
+    if (this._effectDry) {
+      this._effectDry.disconnect();
+    }
+    if (this._effectWet) {
+      this._effectWet.disconnect();
+    }
+  }
+
   stop() {
     // Stop regardless of state if we have an active source
     try {
       if (this._source) {
         this._source.stop(0);
         this._source.disconnect(); // Important to disconnect for GC
+        this._source.buffer = null;
+        this._source.onended = null;
       }
     } catch {
       // ignore exceptions from stopping an already stopped source
@@ -1062,9 +1095,10 @@ const S = {
 
     // Static channels
     for (const ch of this._staticChannels) {
-      ch.stop();
+      ch.dispose();
     }
-    // Static channels usually persist.
+    this._staticChannels = [];
+    // Static channels usually persist. -> Not anymore, we clear them to prevent leaks on map change.
   },
 
   _PauseAllSounds() {

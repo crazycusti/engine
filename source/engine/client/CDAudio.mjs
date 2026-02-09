@@ -136,7 +136,7 @@ export default class CDAudio {
 
   static Init() {
     Cmd.AddCommand('cd', CDAudio.CD_f.bind(CDAudio));
-    if (COM.CheckParm('-nocdaudio')) {
+    if (COM.CheckParm('-nocdaudio') || COM.CheckParm('-nosound')) {
       return;
     }
     CDAudio.initialized = CDAudio.enabled = true;

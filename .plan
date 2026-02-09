@@ -138,6 +138,11 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-02-09
+
+- probably found the root of that untracable memory leak: Sounds
+- removed loading of the map from the navigation worker
+
 ### 2026-02-08
 
 - added support for PHS by generating it based on the PVS data
