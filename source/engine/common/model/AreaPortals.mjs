@@ -1,3 +1,5 @@
+import { registry, eventBus } from '../../registry.mjs';
+
 /**
  * Manages area portal state and area connectivity for a BrushModel.
  *
@@ -196,7 +198,7 @@ export class AreaPortals {
    * @param {import('./BSP.mjs').Node} leaf1 second leaf
    * @returns {boolean} true if the leafs' areas are connected
    */
-  leavesConnected(leaf0, leaf1) {
+  leafsConnected(leaf0, leaf1) {
     return this.areasConnected(leaf0.area, leaf1.area);
   }
 
@@ -267,7 +269,10 @@ export class AreaPortals {
 
         for (const edge of neighbors) {
           // Check if portal is blocked (group >= 0 means it's a switchable door)
-          if (edge.group >= 0 && this.#portalOpen[edge.group] <= 0) {
+          // If group is out of bounds, treat it as a closed door
+          const isOpen = !(edge.group >= 0 && (edge.group >= this.#numPortals || this.#portalOpen[edge.group] <= 0));
+
+          if (!isOpen) {
             continue; // Door is effectively closed
           }
 
@@ -279,5 +284,11 @@ export class AreaPortals {
         }
       }
     }
+
+    this.#emitChangeEvent();
+  }
+
+  #emitChangeEvent() {
+    eventBus.publish('areaportals.changed');
   }
 }

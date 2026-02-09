@@ -183,7 +183,7 @@ class SoundBaseChannel {
 
     if (CL.areaportals.value > 0 && CL.state.worldmodel !== null && S._listenerLeaf !== null) {
       const channelLeaf = CL.state.worldmodel.getLeafForPoint(this.origin);
-      if (!CL.state.worldmodel.areaPortals.leavesConnected(S._listenerLeaf, channelLeaf)) {
+      if (!CL.state.worldmodel.areaPortals.leafsConnected(S._listenerLeaf, channelLeaf)) {
         // not connected, no sound
         this.channel_vol = 0;
         this.updateVol();

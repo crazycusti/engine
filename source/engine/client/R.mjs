@@ -45,6 +45,19 @@ eventBus.subscribe('client.disconnected', () => {
   R.ClearAll();
 });
 
+eventBus.subscribe('areaportals.changed', () => {
+  R.oldviewleaf = null;
+});
+
+eventBus.subscribe('cvar.changed', (cvarName) => {
+  switch (cvarName) {
+    case 'r_novis':
+    case 'cl_areaportals':
+      R.oldviewleaf = null;
+      break;
+  }
+});
+
 // light
 
 R.dlightframecount = 0;
@@ -1010,7 +1023,7 @@ R.RenderWorld = function() {
 R.RenderScene = function() {
   R.SetFrustum();
   R.SetupGL();
-  R.MarkLeaves();
+  R.MarkLeafs();
   gl.enable(gl.CULL_FACE);
   R.DrawSkyBox();
   R.DrawViewModel();
@@ -2183,7 +2196,7 @@ R.RecursiveWorldNode = function(node) {
   R.RecursiveWorldNode(node.children[1]);
 };
 
-R.MarkLeaves = function() {
+R.MarkLeafs = function() {
   if ((R.oldviewleaf === R.viewleaf) && (R.novis.value === 0)) {
     return;
   }
@@ -2198,7 +2211,7 @@ R.MarkLeaves = function() {
     if (!vis.isRevealed(i)) {
       continue;
     }
-    if (CL.areaportals.value > 0 && R.viewleaf && !CL.state.worldmodel.areaPortals.leavesConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
+    if (CL.areaportals.value > 0 && R.viewleaf && !CL.state.worldmodel.areaPortals.leafsConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
       continue;
     }
     for (let node = CL.state.worldmodel.leafs[i]; node; node = node.parent) {
@@ -2233,7 +2246,7 @@ R.MarkLeaves = function() {
       if (!vis.isRevealed(i)) {
         continue;
       }
-      if (CL.areaportals.value > 0 && !CL.state.worldmodel.areaPortals.leavesConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
+      if (CL.areaportals.value > 0 && !CL.state.worldmodel.areaPortals.leafsConnected(R.viewleaf, CL.state.worldmodel.leafs[i])) {
         continue;
       }
       for (let node = CL.state.worldmodel.leafs[i]; node; node = node.parent) {

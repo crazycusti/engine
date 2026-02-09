@@ -52,7 +52,7 @@ export class SkyRenderer {
     for (let i = 0; i < this.worldmodel.leafs.length; i++) {
       const leaf = this.worldmodel.leafs[i];
 
-      // Skip leaves that aren't visible or don't have sky surfaces
+      // Skip leafs that aren't visible or don't have sky surfaces
       if (leaf.visframe !== R.visframecount || leaf.skychain === leaf.waterchain) {
         continue;
       }

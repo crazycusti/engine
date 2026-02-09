@@ -92,3 +92,9 @@ Those events are only fired by the server code.
 | Event | Arguments | Description |
 | - | - | - |
 | wad.palette.loaded | | When a palette has been loaded. |
+
+### Map dynamics
+
+| Event | Arguments | Description |
+| - | - | - |
+| areaportals.changed | | Whenever a portal has changed. |

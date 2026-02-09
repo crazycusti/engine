@@ -144,7 +144,7 @@ export class BSP29Loader extends ModelLoader {
     ]);
 
     // CR: unholy yet convenient hack to pass sky texture data to SkyRenderer
-    loadmodel.newSkyRenderer = function() {
+    loadmodel.newSkyRenderer = function () {
       const skyrenderer = new SimpleSkyBox(this);
       skyrenderer.setSkyTextures(front, back, left, right, up, down);
       return skyrenderer;
@@ -231,7 +231,7 @@ export class BSP29Loader extends ModelLoader {
           const skyTexture = new Uint8Array(buf, absofs + view.getUint32(absofs + 24, true), 32768);
 
           // CR: unholy yet convenient hack to pass sky texture data to SkyRenderer
-          loadmodel.newSkyRenderer = function() {
+          loadmodel.newSkyRenderer = function () {
             const skyrenderer = new Quake1Sky(this);
             skyrenderer.setSkyTexture(skyTexture);
             return skyrenderer;
@@ -541,53 +541,22 @@ export class BSP29Loader extends ModelLoader {
   }
 
   /**
-   * Compute area assignments for BSP29/BSP2 leafs from portal entities.
-   *
-   * Portal entities are identified by having a "portal" key and a brush model
-   * reference. The brush model's bounding box defines a splitting plane (thinnest
-   * axis). Each non-solid leaf is classified by which side of each portal plane
-   * its center lies on. Leafs with the same side-signature get the same area.
-   *
-   * Must be called after _loadSubmodels (needs submodel bounding boxes) and
-   * _loadLeafs (needs leaf data).
-   * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
-   */
-  /**
-   * Compute layout of areas and portals for visibility culling.
-   *
-   * Concept:
-   * 1. Portals define infinite splitting planes.
-   * 2. Leaves are classified by their relation to these planes:
-   * - Which geometric side are they on?
-   * - Are they "Near" the portal (in its PHS)?
-   * 3. This creates distinct Areas (sets of leaves with same classification).
-   * 4. Connectivity is deduced from classification differences:
-   * - Change in "Nearness" (Far->Near) = Open Connection (moving freely in space).
-   * - Change in "Side" while "Far" = Open Connection (crossing the ghost plane in void).
-   * - Change in "Side" while "Near" both ways = Controlled Connection (passing through local door).
+   * Compute visibility areas and portals based on door entities and PHS.
+   * This traverses the BSP tree to classify leaves against door planes,
+   * then clusters them based on PVS connectivity.
    * @protected
    * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
    */
   _computeAreas(loadmodel) {
-    // Parse entity lump for portal definitions
+    // 1. Identify Portal Definitions (Doors)
     const portalDefs = this.#parsePortalEntities(loadmodel);
 
-    if (portalDefs.length === 0) {
-      // No portals — single area, everything trivially connected
-      loadmodel.numAreas = 1;
-      loadmodel.areaPortals.init(1, []);
-      return;
-    }
-
-    // For each portal, derive a splitting plane from the submodel bounding box.
-    // The thinnest axis of the bbox is the portal normal; the midpoint is the plane distance.
-    // Multiple defs can share a portalNum (double doors); merge their bboxes first.
-    /** @type {Map<number, { mins: number[], maxs: number[] }>} portalNum → merged bbox */
+    // 2. Build Portal Planes from Door BBoxes
+    // Merge bboxes for shared portalNums (e.g. double doors)
     const mergedBboxes = new Map();
 
     for (const def of portalDefs) {
-      const submodel = loadmodel.submodels[def.modelIndex - 1]; // *N → submodels[N-1]
+      const submodel = loadmodel.submodels[def.modelIndex - 1]; // *N -> submodels[N-1]
 
       if (!submodel) {
         Con.PrintWarning(`BSP29Loader._computeAreas: portal ${def.portalNum} references invalid model *${def.modelIndex}\n`);
@@ -597,15 +566,9 @@ export class BSP29Loader extends ModelLoader {
       const existing = mergedBboxes.get(def.portalNum);
 
       if (existing) {
-        // Expand the merged bbox to include this submodel
-        for (let i = 0; i < 3; i++) {
-          if (submodel.mins[i] < existing.mins[i]) {
-            existing.mins[i] = submodel.mins[i];
-          }
-
-          if (submodel.maxs[i] > existing.maxs[i]) {
-            existing.maxs[i] = submodel.maxs[i];
-          }
+        for (let k = 0; k < 3; k++) {
+          existing.mins[k] = Math.min(existing.mins[k], submodel.mins[k]);
+          existing.maxs[k] = Math.max(existing.maxs[k], submodel.maxs[k]);
         }
       } else {
         mergedBboxes.set(def.portalNum, {
@@ -615,135 +578,139 @@ export class BSP29Loader extends ModelLoader {
       }
     }
 
-    /**
-     * @typedef {object} PortalPlane
-     * @property {number} normal thin axis index (0/1/2)
-     * @property {number} dist splitting plane distance along thin axis
-     * @property {number} portalNum physical portal group number
-     * @property {import('../BSP.mjs').Visibility} backVis PHS from back side of door
-     * @property {import('../BSP.mjs').Visibility} frontVis PHS from front side of door
-     */
-    /** @type {PortalPlane[]} */
-    const portalPlanes = [];
+    const portals = [];
 
     for (const [portalNum, bbox] of mergedBboxes) {
-      const sizeX = bbox.maxs[0] - bbox.mins[0];
-      const sizeY = bbox.maxs[1] - bbox.mins[1];
-      const sizeZ = bbox.maxs[2] - bbox.mins[2];
+      // Determine split plane (thinnest axis)
+      const size = [bbox.maxs[0] - bbox.mins[0], bbox.maxs[1] - bbox.mins[1], bbox.maxs[2] - bbox.mins[2]];
+      let axis = 0;
 
-      // Thinnest axis = the portal plane normal
-      let thinAxis = 0;
-
-      if (sizeY < sizeX) {
-        thinAxis = 1;
+      if (size[1] < size[0]) {
+        axis = 1;
       }
 
-      if (sizeZ < (thinAxis === 0 ? sizeX : sizeY)) {
-        thinAxis = 2;
+      if (size[2] < size[axis]) {
+        axis = 2;
       }
 
-      const dist = (bbox.mins[thinAxis] + bbox.maxs[thinAxis]) * 0.5;
-      const halfThickness = (bbox.maxs[thinAxis] - bbox.mins[thinAxis]) * 0.5;
+      const dist = (bbox.mins[axis] + bbox.maxs[axis]) * 0.5;
+      const thickness = (bbox.maxs[axis] - bbox.mins[axis]) * 0.5;
+      const offset = Math.max(24.0, thickness + 16.0); // Offset for PHS sampling
 
-      // Sample PHS from each side of the door.
-      // Offset well beyond the door bbox + fat PVS ±8 range to ensure "Near"
-      // samples are truly representative of being outside the door mechanism.
-      const offset = Math.max(24.0, halfThickness + 16.0);
-      const cx = (bbox.mins[0] + bbox.maxs[0]) * 0.5;
-      const cy = (bbox.mins[1] + bbox.maxs[1]) * 0.5;
-      const cz = (bbox.mins[2] + bbox.maxs[2]) * 0.5;
+      // Sample PHS points
+      const center = [(bbox.mins[0] + bbox.maxs[0]) * 0.5, (bbox.mins[1] + bbox.maxs[1]) * 0.5, (bbox.mins[2] + bbox.maxs[2]) * 0.5];
+      const backPt = [...center];
+      backPt[axis] -= offset;
+      const frontPt = [...center];
+      frontPt[axis] += offset;
 
-      const backCenter = new Vector(cx, cy, cz);
-      backCenter[thinAxis] = dist - offset;
-
-      const frontCenter = new Vector(cx, cy, cz);
-      frontCenter[thinAxis] = dist + offset;
-
-      const backVis = loadmodel.getPhsByPoint(backCenter);
-      const frontVis = loadmodel.getPhsByPoint(frontCenter);
-
-      Con.DPrint(`  portal ${portalNum}: axis=${thinAxis} dist=${dist} offset=${offset} back=(${backCenter[0]}, ${backCenter[1]}, ${backCenter[2]}) front=(${frontCenter[0]}, ${frontCenter[1]}, ${frontCenter[2]})\n`);
-
-      portalPlanes.push({ normal: thinAxis, dist, portalNum, backVis, frontVis });
+      portals.push({
+        portalNum,
+        axis,
+        dist,
+        backVis: loadmodel.getPhsByPoint(new Vector(...backPt)),
+        frontVis: loadmodel.getPhsByPoint(new Vector(...frontPt)),
+      });
     }
 
-    if (portalPlanes.length === 0) {
-      loadmodel.numAreas = 1;
-      loadmodel.areaPortals.init(1, []);
-      return;
-    }
+    // 3. Traverse BSP Nodes to assign "Side" Signatures
+    // Optimization: If a node is fully on one side of a portal plane, all its children are too.
+    const leafSignatures = new Map(); // leafIndex -> "signature string"
 
-    // Phase 1: Classify each leaf into a signature based on its relationship
-    // to ALL portal planes. We track (Side + Nearness) for each portal.
-    // Leaves with the same signature are *candidates* for the same area,
-    // but may still be spatially disconnected (e.g. two rooms on opposite
-    // ends of the map that happen to share the same portal-plane relationship).
-    /** @type {Map<string, number[]>} signature → leaf indices with that signature */
-    const signatureLeafs = new Map();
+    /**
+     * Recursively classify nodes against portal planes
+     * @param {import('../BSP.mjs').Node} node
+     * @param {number[]} states - Array of 0 (Back), 1 (Front), or -1 (Unknown)
+     */
+    const classifyRecursive = (node, states) => {
+      // Check unknown portals against node bounds
+      const nextStates = states.slice();
 
-    const leafCount = loadmodel.leafs.length;
+      for (let i = 0; i < portals.length; i++) {
+        if (nextStates[i] !== -1) {
+          continue;
+        }
 
-    for (let i = 1; i < leafCount; i++) { // skip leaf 0 (outside sentinel)
-      const leaf = loadmodel.leafs[i];
+        const p = portals[i];
 
-      if (leaf.contents === content.CONTENT_SOLID) {
-        leaf.area = 0; // solid leafs have no area
-        continue;
-      }
-
-      // Compute leaf center
-      const cx = (leaf.mins[0] + leaf.maxs[0]) * 0.5;
-      const cy = (leaf.mins[1] + leaf.maxs[1]) * 0.5;
-      const cz = (leaf.mins[2] + leaf.maxs[2]) * 0.5;
-      const center = [cx, cy, cz];
-
-      let sig = '';
-
-      for (const pp of portalPlanes) {
-        // Geometric Side: 0 (Back/Negative) or 1 (Front/Positive)
-        const side = center[pp.normal] >= pp.dist ? 1 : 0;
-
-        // Nearness: Is this leaf in the PHS of the door side?
-        // Note: PHS is large, but "Not In PHS" definitively means "Far".
-        // "In PHS" means "Potentially Audible/Connected".
-        const isNear = side === 0 ? pp.backVis.isRevealed(i) : pp.frontVis.isRevealed(i);
-
-        // Encode State:
-        // A: Side 0, Far  (Ghost Zone)
-        // B: Side 0, Near (Door Back Approach)
-        // C: Side 1, Near (Door Front Approach)
-        // D: Side 1, Far  (Ghost Zone)
-        if (side === 0) {
-          sig += isNear ? 'B' : 'A';
-        } else {
-          sig += isNear ? 'C' : 'D';
+        if (node.maxs[p.axis] < p.dist) {
+          nextStates[i] = 0;
+        } else if (node.mins[p.axis] > p.dist) {
+          nextStates[i] = 1;
         }
       }
 
-      let leafList = signatureLeafs.get(sig);
+      if (node.contents < 0) {
+        // Leaf Node
+        if (node.contents === content.CONTENT_SOLID) {
+          node.area = 0;
+          return;
+        }
 
-      if (leafList === undefined) {
-        leafList = [];
-        signatureLeafs.set(sig, leafList);
+        const cx = (node.mins[0] + node.maxs[0]) * 0.5;
+        const cy = (node.mins[1] + node.maxs[1]) * 0.5;
+        const cz = (node.mins[2] + node.maxs[2]) * 0.5;
+        const center = [cx, cy, cz];
+
+        let sig = '';
+
+        for (let i = 0; i < portals.length; i++) {
+          let side = nextStates[i];
+
+          if (side === -1) {
+            side = center[portals[i].axis] >= portals[i].dist ? 1 : 0;
+          }
+
+          // Nearness check via PHS
+          const p = portals[i];
+          const isNear = side === 0 ? p.backVis.isRevealed(node.num) : p.frontVis.isRevealed(node.num);
+
+          // Sig Codes: 0=BackFar, 1=BackNear, 2=FrontNear, 3=FrontFar
+          let code = 0;
+
+          if (side === 0) {
+            code = isNear ? 1 : 0;
+          } else {
+            code = isNear ? 2 : 3;
+          }
+
+          sig += code.toString();
+        }
+
+        leafSignatures.set(node.num, sig);
+        return;
       }
 
-      leafList.push(i);
+      // Inner Node
+      if (node.children[0]) {
+        classifyRecursive(node.children[0], nextStates);
+      }
+      if (node.children[1]) {
+        classifyRecursive(node.children[1], nextStates);
+      }
+    };
+
+    // Start traversal from root
+    const initialStates = new Array(portals.length).fill(-1);
+    classifyRecursive(loadmodel.nodes[0], initialStates);
+
+    // 4. Cluster Signatures into Areas (PVS connectivity)
+    const sigGroups = new Map();
+
+    for (const [leafNum, sig] of leafSignatures) {
+      if (!sigGroups.has(sig)) {
+        sigGroups.set(sig, []);
+      }
+      sigGroups.get(sig).push(leafNum);
     }
 
-    // Phase 2: Split each signature group into PVS-connected components.
-    // Two rooms with the same signature that can't see each other (no PVS
-    // path) must be separate areas. We BFS within each group using PVS
-    // reachability to find connected components.
     let nextArea = 1;
-
-    /** @type {{ sig: string, area: number }[]} one entry per area (for connection building) */
+    /** @type {{ sig: string, area: number }[]} */
     const areasList = [];
+    /** @type {Map<number, number[]>} areaID -> leafNum[] */
+    const areaLeafsMap = new Map();
 
-    /** @type {Map<number, number[]>} area → leaf indices belonging to that area */
-    const areaLeafMap = new Map();
-
-    for (const [sig, leafIndices] of signatureLeafs) {
-      /** @type {Set<number>} leaves in this group not yet assigned to an area */
+    for (const [sig, leafIndices] of sigGroups) {
       const visited = new Set();
 
       for (const startLeaf of leafIndices) {
@@ -753,48 +720,34 @@ export class BSP29Loader extends ModelLoader {
 
         const area = nextArea++;
         areasList.push({ sig, area });
+        areaLeafsMap.set(area, []);
 
-        /** @type {number[]} leaf indices in this area */
-        const areaLeafs = [startLeaf];
-
-        // BFS through PVS within this signature group
+        // BFS within this signature group using PVS
         const queue = [startLeaf];
         visited.add(startLeaf);
         loadmodel.leafs[startLeaf].area = area;
+        areaLeafsMap.get(area).push(startLeaf);
 
         while (queue.length > 0) {
           const current = queue.shift();
           const pvs = loadmodel.getPvsByLeaf(loadmodel.leafs[current]);
 
+          // We only need to check leaves in the same signature group
           for (const candidate of leafIndices) {
             if (!visited.has(candidate) && pvs.isRevealed(candidate)) {
               visited.add(candidate);
               loadmodel.leafs[candidate].area = area;
+              areaLeafsMap.get(area).push(candidate);
               queue.push(candidate);
-              areaLeafs.push(candidate);
             }
           }
         }
-
-        areaLeafMap.set(area, areaLeafs);
       }
     }
 
-    const numAreas = nextArea;
-    loadmodel.numAreas = numAreas;
+    loadmodel.numAreas = nextArea;
 
-    // Phase 3: Build connections between areas.
-    // Any pair of areas whose signatures differ only in non-B↔C transitions
-    // gets an open (always-traversable) connection. Pairs with exactly one
-    // B↔C transition get a controlled connection gated on that portal group.
-    // Pairs with the same signature (diffCount === 0) are PVS-disconnected
-    // components — no connection (they're spatially separate rooms).
-    //
-    // Crucially, every candidate connection is verified for PVS adjacency:
-    // at least one leaf in area A must PVS-see at least one leaf in area B.
-    // This prevents phantom connections where two areas have "adjacent"
-    // signatures but are physically separated (e.g. a sealed room vs.
-    // a sky leaf that happens to be in a different PHS nearness zone).
+    // 5. Connect Areas
     /** @type {{ area0: number, area1: number, group: number }[]} */
     const allConnections = [];
 
@@ -803,47 +756,39 @@ export class BSP29Loader extends ModelLoader {
         const { sig: sigA, area: areaA } = areasList[i];
         const { sig: sigB, area: areaB } = areasList[j];
 
-        if (sigA.length !== sigB.length) {
-          continue;
-        }
-
-        // Count total differences and how many are B↔C (door crossing) transitions.
-        // Non-B↔C differences (A↔B, C↔D, A↔D, etc.) represent PHS boundaries or
-        // ghost-zone side changes — spatial artifacts, not physical barriers.
-        // Multiple PHS boundaries can coincide near the same leaves, producing
-        // multi-character differences between areas that are still openly connected.
+        // Differences logic:
+        // 1 -> 2 (BackNear <-> FrontNear) : Door Crossing (Gated)
+        // Others: Open connection (just movement)
         let diffCount = 0;
-        let bcCount = 0;
-        let bcGroup = -1;
+        let doorCount = 0;
+        let doorGroup = -1;
 
         for (let k = 0; k < sigA.length; k++) {
           if (sigA[k] !== sigB[k]) {
             diffCount++;
+            const s1 = parseInt(sigA[k]);
+            const s2 = parseInt(sigB[k]);
 
-            const [s1, s2] = sigA[k] < sigB[k] ? [sigA[k], sigB[k]] : [sigB[k], sigA[k]];
-
-            if (s1 + s2 === 'BC') {
-              bcCount++;
-              bcGroup = portalPlanes[k].portalNum;
+            // Check if transition is BackNear(1) <-> FrontNear(2)
+            if ((s1 === 1 && s2 === 2) || (s1 === 2 && s2 === 1)) {
+              doorCount++;
+              doorGroup = portals[k].portalNum;
             }
           }
         }
 
         if (diffCount === 0) {
-          continue; // same signature but PVS-disconnected — no connection
+          continue;
         }
 
-        // Verify PVS adjacency: at least one leaf in areaA must see
-        // at least one leaf in areaB. Without this, two areas with
-        // "adjacent" signatures but separated by solid geometry (floors,
-        // walls) would get false connections.
-        const leafsA = areaLeafMap.get(areaA);
-        const leafsB = areaLeafMap.get(areaB);
+        // PVS Adjacency Check
+        const leafsA = areaLeafsMap.get(areaA);
+        const leafsB = areaLeafsMap.get(areaB);
         let pvsAdjacent = false;
 
+        // Check A seeing B (optimization: only check first few or scan until hit)
         for (let li = 0; li < leafsA.length && !pvsAdjacent; li++) {
           const pvs = loadmodel.getPvsByLeaf(loadmodel.leafs[leafsA[li]]);
-
           for (let lj = 0; lj < leafsB.length; lj++) {
             if (pvs.isRevealed(leafsB[lj])) {
               pvsAdjacent = true;
@@ -853,41 +798,29 @@ export class BSP29Loader extends ModelLoader {
         }
 
         if (!pvsAdjacent) {
-          continue; // areas are not physically adjacent
+          continue;
         }
 
-        if (bcCount === 0) {
-          // All differences are non-door transitions (PHS boundaries, ghost-zone
-          // side flips). These never represent physical barriers — connect freely.
+        if (doorCount === 1) {
+          allConnections.push({ area0: areaA, area1: areaB, group: doorGroup });
+        } else if (doorCount === 0) {
           allConnections.push({ area0: areaA, area1: areaB, group: -1 });
-        } else if (bcCount === 1) {
-          // Exactly one door crossing — controlled by that portal's group.
-          // Additional non-BC differences are coincidental PHS boundary changes
-          // that happen to straddle the same leaves.
-          allConnections.push({ area0: areaA, area1: areaB, group: bcGroup });
         }
-        // bcCount > 1: would require multiple doors open simultaneously.
-        // Rely on intermediate areas to provide step-by-step connections.
       }
     }
 
-    // Count Groups
-    let maxGroupNum = -1;
+    let maxGroup = 0;
     for (const c of allConnections) {
-      if (c.group > maxGroupNum) {
-        maxGroupNum = c.group;
+      if (c.group > maxGroup) {
+        maxGroup = c.group;
       }
     }
-    const numGroups = maxGroupNum + 1;
+    const numGroups = maxGroup + 1;
 
     loadmodel.portalDefs = allConnections;
-    loadmodel.areaPortals.init(numAreas, allConnections, numGroups);
+    loadmodel.areaPortals.init(loadmodel.numAreas, allConnections, numGroups);
 
-    // Diagnostics
-    Con.DPrint(`_computeAreas: ${numAreas} areas, ${allConnections.length} connections, ${numGroups} groups\n`);
-    for (const { sig, area } of areasList) {
-      Con.DPrint(`  Area ${area}: ${sig}\n`);
-    }
+    Con.DPrint(`_computeAreas: Computed ${loadmodel.numAreas} areas, ${allConnections.length} connections, ${numGroups} groups\n`);
   }
 
   /** @type {Set<string>} Classnames that are auto-assigned portal numbers */
@@ -971,11 +904,12 @@ export class BSP29Loader extends ModelLoader {
         continue;
       }
 
-      // Auto-assign portal numbers to door entities
-      if (ent.classname && BSP29Loader.doorClassnames.has(ent.classname)) {
-        Con.DPrint(`...detected portal ${ent.classname} with model ${ent.model}\n`);
-        autoAssignDoors.push({ modelIndex, model: ent.model });
-      }
+      // CR: temporarily disabled due to funny bugs
+      // // Auto-assign portal numbers to door entities
+      // if (ent.classname && BSP29Loader.doorClassnames.has(ent.classname)) {
+      //   Con.DPrint(`...detected portal ${ent.classname} with model ${ent.model}\n`);
+      //   autoAssignDoors.push({ modelIndex, model: ent.model });
+      // }
     }
 
     // Auto-assign portal numbers starting after the highest explicit one.
@@ -1792,149 +1726,149 @@ export class BSP29Loader extends ModelLoader {
       );
       offset += 12;
 
-    // ivec3_t size
-    const size = [
-      view.getInt32(offset, true),
-      view.getInt32(offset + 4, true),
-      view.getInt32(offset + 8, true),
-    ];
-    offset += 12;
-
-    // vec3_t mins
-    const mins = new Vector(
-      view.getFloat32(offset, true),
-      view.getFloat32(offset + 4, true),
-      view.getFloat32(offset + 8, true),
-    );
-    offset += 12;
-
-    // byte numstyles (WARNING: misaligns the rest of the data)
-    const numstyles = view.getUint8(offset);
-    offset += 1;
-
-    // uint32_t rootnode
-    const rootnode = view.getUint32(offset, true);
-    offset += 4;
-
-    // uint32_t numnodes
-    const numnodes = view.getUint32(offset, true);
-    offset += 4;
-
-    // Check if we have enough data for nodes (each node is 44 bytes: 3*4 for mid + 8*4 for children)
-    if (offset + (numnodes * 44) > endOffset) {
-      Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE nodes data truncated\n');
-      return;
-    }
-
-    // Parse nodes
-    const nodes = [];
-    for (let i = 0; i < numnodes; i++) {
-      const mid = [
-        view.getUint32(offset, true),
-        view.getUint32(offset + 4, true),
-        view.getUint32(offset + 8, true),
+      // ivec3_t size
+      const size = [
+        view.getInt32(offset, true),
+        view.getInt32(offset + 4, true),
+        view.getInt32(offset + 8, true),
       ];
       offset += 12;
 
-      const child = [];
-      for (let j = 0; j < 8; j++) {
-        child[j] = view.getUint32(offset, true);
-        offset += 4;
-      }
+      // vec3_t mins
+      const mins = new Vector(
+        view.getFloat32(offset, true),
+        view.getFloat32(offset + 4, true),
+        view.getFloat32(offset + 8, true),
+      );
+      offset += 12;
 
-      nodes[i] = { mid, child };
-    }
+      // byte numstyles (WARNING: misaligns the rest of the data)
+      const numstyles = view.getUint8(offset);
+      offset += 1;
 
-    // uint32_t numleafs
-    if (offset + 4 > endOffset) {
-      Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE numleafs missing\n');
-      return;
-    }
-    const numleafs = view.getUint32(offset, true);
-    offset += 4;
+      // uint32_t rootnode
+      const rootnode = view.getUint32(offset, true);
+      offset += 4;
 
-    // Parse leafs
-    const leafs = [];
-    for (let i = 0; i < numleafs; i++) {
-      // Check bounds for leaf header (mins + size = 24 bytes)
-      if (offset + 24 > endOffset) {
-        Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} header truncated\n`);
+      // uint32_t numnodes
+      const numnodes = view.getUint32(offset, true);
+      offset += 4;
+
+      // Check if we have enough data for nodes (each node is 44 bytes: 3*4 for mid + 8*4 for children)
+      if (offset + (numnodes * 44) > endOffset) {
+        Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE nodes data truncated\n');
         return;
       }
 
-      const leafMins = [
-        view.getInt32(offset, true),
-        view.getInt32(offset + 4, true),
-        view.getInt32(offset + 8, true),
-      ];
-      offset += 12;
+      // Parse nodes
+      const nodes = [];
+      for (let i = 0; i < numnodes; i++) {
+        const mid = [
+          view.getUint32(offset, true),
+          view.getUint32(offset + 4, true),
+          view.getUint32(offset + 8, true),
+        ];
+        offset += 12;
 
-      const leafSize = [
-        view.getInt32(offset, true),
-        view.getInt32(offset + 4, true),
-        view.getInt32(offset + 8, true),
-      ];
-      offset += 12;
+        const child = [];
+        for (let j = 0; j < 8; j++) {
+          child[j] = view.getUint32(offset, true);
+          offset += 4;
+        }
 
-      // Parse per-point data
-      const totalPoints = leafSize[0] * leafSize[1] * leafSize[2];
-      const points = [];
+        nodes[i] = { mid, child };
+      }
 
-      for (let p = 0; p < totalPoints; p++) {
-        // Check bounds for stylecount byte
-        if (offset >= endOffset) {
-          Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} truncated\n`);
+      // uint32_t numleafs
+      if (offset + 4 > endOffset) {
+        Con.DPrint('BSP29Loader: LIGHTGRID_OCTREE numleafs missing\n');
+        return;
+      }
+      const numleafs = view.getUint32(offset, true);
+      offset += 4;
+
+      // Parse leafs
+      const leafs = [];
+      for (let i = 0; i < numleafs; i++) {
+        // Check bounds for leaf header (mins + size = 24 bytes)
+        if (offset + 24 > endOffset) {
+          Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} header truncated\n`);
           return;
         }
 
-        const stylecount = view.getUint8(offset);
-        offset += 1;
+        const leafMins = [
+          view.getInt32(offset, true),
+          view.getInt32(offset + 4, true),
+          view.getInt32(offset + 8, true),
+        ];
+        offset += 12;
 
-        // Skip points with no data (stylecount = 0xff means missing)
-        if (stylecount === 0xff) {
-          points.push({ stylecount, styles: [] });
-          continue;
-        }
+        const leafSize = [
+          view.getInt32(offset, true),
+          view.getInt32(offset + 4, true),
+          view.getInt32(offset + 8, true),
+        ];
+        offset += 12;
 
-        const styles = [];
-        for (let s = 0; s < stylecount; s++) {
-          // Check bounds for style data (1 byte stylenum + 3 bytes rgb = 4 bytes)
-          if (offset + 3 >= endOffset) {
-            Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} style ${s} truncated\n`);
+        // Parse per-point data
+        const totalPoints = leafSize[0] * leafSize[1] * leafSize[2];
+        const points = [];
+
+        for (let p = 0; p < totalPoints; p++) {
+          // Check bounds for stylecount byte
+          if (offset >= endOffset) {
+            Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} truncated\n`);
             return;
           }
 
-          const stylenum = view.getUint8(offset);
-
+          const stylecount = view.getUint8(offset);
           offset += 1;
 
-          const rgb = [
-            view.getUint8(offset),
-            view.getUint8(offset + 1),
-            view.getUint8(offset + 2),
-          ];
-          offset += 3;
+          // Skip points with no data (stylecount = 0xff means missing)
+          if (stylecount === 0xff) {
+            points.push({ stylecount, styles: [] });
+            continue;
+          }
 
-          styles.push({ stylenum, rgb });
+          const styles = [];
+          for (let s = 0; s < stylecount; s++) {
+            // Check bounds for style data (1 byte stylenum + 3 bytes rgb = 4 bytes)
+            if (offset + 3 >= endOffset) {
+              Con.DPrint(`BSP29Loader: LIGHTGRID_OCTREE leaf ${i} point ${p} style ${s} truncated\n`);
+              return;
+            }
+
+            const stylenum = view.getUint8(offset);
+
+            offset += 1;
+
+            const rgb = [
+              view.getUint8(offset),
+              view.getUint8(offset + 1),
+              view.getUint8(offset + 2),
+            ];
+            offset += 3;
+
+            styles.push({ stylenum, rgb });
+          }
+
+          points.push({ stylecount, styles });
         }
 
-        points.push({ stylecount, styles });
+        leafs.push({ mins: leafMins, size: leafSize, points });
       }
 
-      leafs.push({ mins: leafMins, size: leafSize, points });
-    }
+      loadmodel.lightgrid = {
+        step,
+        size,
+        mins,
+        numstyles,
+        rootnode,
+        nodes,
+        leafs,
+      };
 
-    loadmodel.lightgrid = {
-      step,
-      size,
-      mins,
-      numstyles,
-      rootnode,
-      nodes,
-      leafs,
-    };
-
-    Con.DPrint(`BSP29Loader: loaded LIGHTGRID_OCTREE with ${numnodes} nodes and ${numleafs} leafs\n`);
+      Con.DPrint(`BSP29Loader: loaded LIGHTGRID_OCTREE with ${numnodes} nodes and ${numleafs} leafs\n`);
     } catch (error) {
       Con.DPrint(`BSP29Loader: error loading LIGHTGRID_OCTREE: ${error.message}\n`);
       loadmodel.lightgrid = null;
