@@ -133,6 +133,8 @@ export default class ClientConnection {
   }
 
   clearState() {
+    S.StopAllSounds();
+
     if (!SV.server.active) {
       Con.DPrint('Clearing memory\n');
       Mod.ClearAll();
