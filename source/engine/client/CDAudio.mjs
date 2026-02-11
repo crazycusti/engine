@@ -145,7 +145,7 @@ export default class CDAudio {
     CDAudio.#eventListeners.push(eventBus.subscribe('client.paused', () => CDAudio.Pause()));
     CDAudio.#eventListeners.push(eventBus.subscribe('client.unpaused', () => CDAudio.Resume()));
     CDAudio.#eventListeners.push(eventBus.subscribe('client.disconnected', () => CDAudio.Stop()));
-    Con.Print('CD Audio Initialized\n');
+    Con.DPrint('CD Audio Initialized\n');
   }
 
   static Shutdown() {

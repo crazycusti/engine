@@ -2,7 +2,8 @@ import Vector from '../../../../shared/Vector.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
 import { BSP29Loader } from './BSP29Loader.mjs';
 import { Face } from '../BaseModel.mjs';
-import { Node } from '../BSP.mjs';
+import { BrushModel, Node } from '../BSP.mjs';
+import { materialFlags } from '../../../client/renderer/Materials.mjs';
 
 /**
  * Loader for BSP2 format (.bsp)
@@ -42,7 +43,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load faces from BSP lump (BSP2 version with 32-bit indices)
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If faces lump size is not a multiple of 28
    */
@@ -122,9 +123,9 @@ export class BSP2Loader extends BSP29Loader {
       out.texturemins = [Math.floor(mins[0] / lmscale) * lmscale, Math.floor(mins[1] / lmscale) * lmscale];
       out.extents = [Math.ceil(maxs[0] / lmscale) * lmscale - out.texturemins[0], Math.ceil(maxs[1] / lmscale) * lmscale - out.texturemins[1]];
 
-      if (loadmodel.textures[tex.texture].turbulent === true) {
+      if (loadmodel.textures[tex.texture].flags & materialFlags.MF_TURBULENT) {
         out.turbulent = true;
-      } else if (loadmodel.textures[tex.texture].sky === true) {
+      } else if (loadmodel.textures[tex.texture].flags & materialFlags.MF_SKY) {
         out.sky = true;
       }
 
@@ -147,7 +148,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load BSP tree nodes from BSP lump (BSP2 version with 32-bit children indices)
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If nodes lump is empty or incorrectly sized
    */
@@ -210,7 +211,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load BSP leaf nodes from BSP lump (BSP2 version with 32-bit indices)
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {Error} If leafs lump size is not a multiple of 44
    */
@@ -254,7 +255,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load marksurfaces from BSP lump (BSP2 version with 32-bit indices)
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If marksurfaces lump size is not a multiple of 4
    */
@@ -281,7 +282,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load collision clipnodes and initialize physics hulls (BSP2 version with 32-bit children)
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    */
   _loadClipnodes(loadmodel, buf) {
@@ -330,7 +331,7 @@ export class BSP2Loader extends BSP29Loader {
   /**
    * Load edges from BSP lump
    * @protected
-   * @param {import('../BSP.mjs').BrushModel} loadmodel - The model being loaded
+   * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
    * @throws {CorruptedResourceError} If edge lump size is not a multiple of 4
    */

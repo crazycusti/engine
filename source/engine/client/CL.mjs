@@ -12,7 +12,7 @@ import VID from './VID.mjs';
 import { clientRuntimeState, clientStaticState } from './ClientState.mjs';
 import ClientConnection from './ClientConnection.mjs';
 import ClientLifecycle from './ClientLifecycle.mjs';
-import { materialFlags, PBRMaterial, QuakeMaterial } from './renderer/Materials.mjs';
+// import { materialFlags, PBRMaterial, QuakeMaterial } from './renderer/Materials.mjs';
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
 let { Con, Draw, Host, R, S, Sbar } = registry;
@@ -51,7 +51,7 @@ export default class CL {
   static {
     this.#connection = new ClientConnection({ clientDemos: this.#clientDemos });
     this.cls.bindClientDemos(this.#clientDemos);
-    this.svc_strings = Object.keys(Protocol.svc);
+    this.svc_strings = Object.entries(Protocol.svc);
   }
 
   /** @type {Cvar} */ static nolerp = null;

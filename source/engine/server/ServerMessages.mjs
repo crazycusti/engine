@@ -4,6 +4,7 @@ import * as Defs from '../../shared/Defs.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerClient } from './Client.mjs';
+import { ServerEntityState } from './ServerEntityState.mjs';
 
 let { COM, Con, Host, NET, PR, SV } = registry;
 
@@ -353,7 +354,7 @@ export class ServerMessages {
       bits |= Protocol.u.skin;
     }
 
-    if (from.effects !== to.effects) {
+    if (from.alpha !== to.alpha || from.effects !== to.effects) {
       bits |= Protocol.u.effects;
     }
 
@@ -422,6 +423,7 @@ export class ServerMessages {
 
     if (bits & Protocol.u.effects) {
       msg.writeByte(to.effects);
+      msg.writeByte(Math.floor(to.alpha * 255.0));
     }
 
     if (bits & Protocol.u.solid) {
@@ -496,7 +498,7 @@ export class ServerMessages {
         break;
       }
 
-      const toState = new SV.EntityState(ent.num);
+      const toState = new ServerEntityState(ent.num);
       toState.classname = ent.entity.classname;
       toState.modelindex = ent.entity.model ? ent.entity.modelindex : 0;
       toState.frame = ent.entity.frame;
@@ -507,6 +509,7 @@ export class ServerMessages {
       toState.angles.set(ent.entity.angles);
       toState.velocity.set(ent.entity.velocity);
       toState.effects = ent.entity.effects;
+      toState.alpha = ent.entity.alpha;
       toState.free = false;
       toState.maxs.set(ent.entity.maxs);
       toState.mins.set(ent.entity.mins);
@@ -540,7 +543,7 @@ export class ServerMessages {
       }
 
       const fromState = cl.getEntityState(ent.num);
-      const toState = new SV.EntityState(ent.num);
+      const toState = new ServerEntityState(ent.num);
       toState.freeEdict();
 
       changes |= this.writeDeltaEntity(msg, fromState, toState) ? 1 : 0;

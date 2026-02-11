@@ -8,11 +8,15 @@ class Con {
   }
 
   static PrintError(message) {
-    WorkerFramework.Publish('worker.con.print', message);
+    WorkerFramework.Publish('worker.con.print.error', message);
   }
 
   static PrintWarning(message) {
-    WorkerFramework.Publish('worker.con.print', message);
+    WorkerFramework.Publish('worker.con.print.warning', message);
+  }
+
+  static PrintSuccess(message) {
+    WorkerFramework.Publish('worker.con.print.success', message);
   }
 
   static DPrint(message) {
@@ -22,7 +26,7 @@ class Con {
 
 class WorkerSys extends Sys {
   static Print(message) {
-    WorkerFramework.Publish('worker.con.print', message);
+    console.log(message);
   }
 
   static FloatTime() {
@@ -92,7 +96,7 @@ export default class WorkerFramework {
       COM.game = comParams[2];
     });
 
-    console.log('Worker Framework initialized.');
+    console.debug('Worker Framework initialized.');
   }
 
   static Publish(event, ...data) {

@@ -69,7 +69,7 @@ export default class ClientInput {
     } else if (b.down[1] === 0) {
       b.down[1] = k;
     } else {
-      Con.Print('Three keys down for a button!\n');
+      Con.DPrint('Three keys down for a button!\n');
       return;
     }
 
@@ -256,7 +256,7 @@ export default class ClientInput {
     }
     CL.state.lastcmd.set(CL.state.cmd);
     if (NET.SendUnreliableMessage(CL.cls.netcon, buf) === -1) {
-      Con.Print('CL.SendMove: lost server connection\n');
+      Con.DPrint('CL.SendMove: lost server connection\n');
       throw new HostError('lost server connection');
     }
   }

@@ -134,7 +134,7 @@ export default class Cmd {
       }
 
       if (slot.content !== null) {
-        Con.Print('execing ' + slot.filename + '\n');
+        Con.DPrint('execing ' + slot.filename + '\n');
         Cmd.text += slot.content;
       } else {
         Con.PrintWarning('couldn\'t exec ' + slot.filename + '\n');

@@ -258,7 +258,7 @@ export class Navigation {
   }
 
   init() {
-    Con.Print('Navigation: initializing navigation graph...\n');
+    Con.DPrint('Navigation: initializing navigation graph...\n');
 
     if (Navigation.nav_build_process?.value) {
       this.build();
@@ -286,7 +286,7 @@ export class Navigation {
       this.#pathResponseEventListener = null;
     }
 
-    Con.Print('Navigation: shutdown complete.\n');
+    Con.DPrint('Navigation: shutdown complete.\n');
   }
 
   async load(mapname, expectedChecksum = null) {
@@ -1453,14 +1453,14 @@ export class Navigation {
     this.graph.octree = null;
     this.graph.nodes.length = 0;
 
-    Con.Print('Navigation: node graph out of date, rebuilding...\n');
+    Con.PrintWarning('Navigation: node graph out of date, rebuilding...\n');
 
     this.#extractWalkableSurfaces();
     this.#buildNavigationGraph();
     this.#buildSpecialConnections();
     this.#buildOctree();
 
-    Con.Print('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes.\n');
+    Con.DPrint('Navigation: node graph built with ' + this.graph.nodes.length + ' nodes.\n');
 
     this.save()
       .then(() => {

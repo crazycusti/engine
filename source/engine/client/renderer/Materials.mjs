@@ -84,7 +84,7 @@ export class QuakeMaterial extends BaseMaterial {
 
   bindTo(program) {
     gl.uniform1i(program.uPerformDotLighting, 0);
-    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
 
     if (program.tTextureA !== undefined && program.tTextureB !== undefined) {
       this.#textures[this.#frame].bind(program.tTextureA);
@@ -168,8 +168,8 @@ export class PBRMaterial extends BaseMaterial {
       gl.uniform1i(program.uPerformDotLighting, 1);
     }
 
-    if (program.uAlpha !== undefined) {
-      gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    if (program.uInterpolation !== undefined) {
+      gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
     }
 
     if (program.tTexture !== undefined) {

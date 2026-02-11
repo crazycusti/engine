@@ -8,6 +8,16 @@ eventBus.subscribe('registry.frozen', () => {
   ({ CL, R } = registry);
 });
 
+let gl = /** @type {WebGL2RenderingContext} */ (null);
+
+eventBus.subscribe('gl.ready', () => {
+  gl = GL.gl;
+});
+
+eventBus.subscribe('gl.shutdown', () => {
+  gl = null;
+});
+
 /**
  * Renderer for Sprite SPR models (2D billboards like explosions, particles).
  * Handles both camera-facing and oriented billboards using dynamic geometry.
@@ -51,6 +61,9 @@ export class SpriteModelRenderer extends ModelRenderer {
     const e = entity;
     const program = GL.UseProgram('sprite', true);
 
+    // Prepare uniforms
+    gl.uniform1f(program.uAlpha, entity.alpha);
+
     // Select frame
     let num = e.frame;
     if ((num >= model.numframes) || (num < 0)) {
@@ -78,6 +91,8 @@ export class SpriteModelRenderer extends ModelRenderer {
       frame = frame.frames[i];
     }
 
+    // TODO: set uInterpolation, frames
+
     // Bind texture
     GL.Bind(program.tTexture, frame.texturenum, true);
 
@@ -99,6 +114,8 @@ export class SpriteModelRenderer extends ModelRenderer {
     const y1 = frame.origin[1];
     const x2 = x1 + frame.width;
     const y2 = y1 + frame.height;
+
+    // TODO: use precomputed Vertex Array
 
     // Write 6 vertices (2 triangles) to stream buffer
     GL.StreamGetSpace(6);

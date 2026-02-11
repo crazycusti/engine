@@ -71,7 +71,7 @@ export default class Con {
   }
 
   static Init() {
-    Con.Print('Console initialized.\n');
+    Con.DPrint('Console initialized.\n');
 
     Con.notifytime = new Cvar('con_notifytime', '3', Cvar.FLAG.ARCHIVE, 'How long to display console messages.');
 
@@ -131,7 +131,7 @@ export default class Con {
   }
 
   static DPrint(msg) {
-    if (Host.developer.value === 0) {
+    if (!Host.developer?.value) {
       return;
     }
 

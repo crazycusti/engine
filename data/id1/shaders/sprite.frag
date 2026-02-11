@@ -1,5 +1,6 @@
 precision mediump float;
 
+uniform float uAlpha;
 uniform float uGamma;
 uniform sampler2D tTexture;
 
@@ -13,7 +14,7 @@ void main(void) {
   gl_FragColor.g = pow(gl_FragColor.g, uGamma);
   gl_FragColor.b = pow(gl_FragColor.b, uGamma);
   if (gl_FragColor.a < 0.25) discard;
-  gl_FragColor.a = gl_FragColor.a * .7;
+  gl_FragColor.a = gl_FragColor.a * uAlpha;
   // apply fog
   vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
   gl_FragColor = vec4(finalRgb, gl_FragColor.a);

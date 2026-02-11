@@ -9,6 +9,7 @@ uniform vec3 uTop;
 uniform vec3 uBottom;
 uniform sampler2D tTexture;
 uniform sampler2D tPlayer;
+uniform float uAlpha;
 
 varying vec2 vTexCoord;
 varying float vLightDot;
@@ -29,6 +30,6 @@ void main(void) {
   gl_FragColor.b = pow(gl_FragColor.b, uGamma);
   // apply fog
   vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
-  gl_FragColor = vec4(finalRgb, gl_FragColor.a);
+  gl_FragColor = vec4(finalRgb, gl_FragColor.a * uAlpha);
 }
 

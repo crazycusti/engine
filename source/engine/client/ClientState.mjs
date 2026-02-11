@@ -45,6 +45,8 @@ class ClientStaticState {
   lastcmdsent = 0;
   isLocalGame = false;
   movearound = null;
+  /** @type {boolean} will enable the legacy network protocol (15) for old demos */
+  legacy_demo = false;
   /** @type {import('./ClientDemos.mjs').default|null} */
   #clientDemos = null;
   /** @type {ClientRuntimeState|null} */
@@ -99,6 +101,7 @@ class ClientStaticState {
     this.message.clear();
     this.serverInfo = {};
     this.lastcmdsent = 0;
+    this.legacy_demo = false;
     if (this.movearound) {
       clearInterval(this.movearound);
       this.movearound = null;
@@ -149,7 +152,6 @@ class ClientRuntimeState {
   laststop = 0.0;
   intermission = 0;
   completed_time = 0;
-  mtime = [0.0, 0.0];
   time = 0.0;
   latency = 0.0;
   last_received_message = 0.0;
@@ -223,7 +225,6 @@ class ClientRuntimeState {
     this.laststop = 0.0;
     this.intermission = 0;
     this.completed_time = 0;
-    this.mtime.fill(0.0);
     this.time = 0.0;
     this.last_received_message = 0.0;
     this.viewentity = 0;

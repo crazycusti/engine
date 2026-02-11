@@ -8,6 +8,8 @@ import { ClientEngineAPI } from '../common/GameAPIs.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ScoreSlot } from './ClientState.mjs';
 
+import { legacyServerCommandHandlers, handleLegacyEntityUpdate } from './LegacyServerCommands.mjs';
+
 /** @typedef {typeof import('./CL.mjs').default} ClientLayer */
 /** @typedef {import('./ClientMessages.mjs').ClientMessages} ClientMessages */
 
@@ -82,7 +84,6 @@ function parseServerData() {
 
   // parsePmovevars(CL);
 
-  Con.Print('\n\n\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f\n\n');
   Con.Print('\x02' + CL.state.levelname + '\n\n');
 
   CL.SetConnectingStep(15, 'Received server info');
@@ -194,10 +195,10 @@ function parseServerData() {
     CL.state.model_precache.push(...models);
     CL.state.sound_precache.push(...sounds);
 
-  CL.connection.processingServerDataState = 2;
+    CL.connection.processingServerDataState = 2;
     CL.state.worldmodel = CL.state.model_precache[1];
     CL.pmove.setWorldmodel(CL.state.worldmodel);
-  const ent = CL.state.clientEntities.getEntity(0);
+    const ent = CL.state.clientEntities.getEntity(0);
     ent.classname = 'worldspawn';
     ent.loadHandler();
     ent.model = CL.state.worldmodel;
@@ -277,6 +278,7 @@ function parseStaticEntity() {
   ent.colormap = NET.message.readByte();
   ent.skinnum = NET.message.readByte();
   ent.effects = NET.message.readByte();
+  ent.alpha = NET.message.readByte() / 255.0;
   ent.solid = NET.message.readByte();
   ent.angles.set(NET.message.readAngleVector());
   ent.setOrigin(NET.message.readCoordVector());
@@ -352,7 +354,7 @@ function parseBeam(model) {
     beam.end = end.copy();
     return;
   }
-  Con.Print('beam list overflow!\n');
+  Con.PrintWarning('beam list overflow!\n');
 }
 
 /**
@@ -405,7 +407,7 @@ function parseTemporaryEntity() {
       dl.die = CL.state.time + 0.5;
       dl.decay = 300.0;
       S.StartSound(-1, 0, sounds.explosion, pos, 1.0, 1.0);
-      }
+    }
       return;
     case Protocol.te.tarexplosion:
       R.BlobExplosion(pos);
@@ -427,7 +429,7 @@ function parseTemporaryEntity() {
       dl.die = CL.state.time + 0.5;
       dl.decay = 300.0;
       S.StartSound(-1, 0, sounds.explosion, pos, 1.0, 1.0);
-      }
+    }
       return;
   }
 
@@ -486,6 +488,7 @@ function parsePacketEntities() {
 
     if (bits & Protocol.u.effects) {
       clent.effects = NET.message.readByte();
+      clent.alpha = NET.message.readByte() / 255.0;
     }
 
     if (bits & Protocol.u.solid) {
@@ -580,7 +583,7 @@ function parsePacketEntities() {
 /**
  * Handles svc_nop – intentionally does nothing.
  */
-function handleNop() {}
+function handleNop() { }
 
 /**
  * Handles svc_time by forwarding to the high-level parser.
@@ -657,8 +660,15 @@ function handleDamage() {
  * Parses svc_serverdata and reinitialises renderer state.
  */
 function handleServerData() {
-  parseServerData();
   SCR.recalc_refdef = true;
+
+  // peak into the serverdata message to detect legacy demos and route to the old handlers if needed
+  if (new DataView(NET.message.data).getUint32(1, true) === 15) {
+    legacyServerCommandHandlers[Protocol.svc.serverdata]();
+    return;
+  }
+
+  parseServerData();
 }
 
 /**
@@ -1010,9 +1020,7 @@ const serverCommandHandlers = {
  */
 export function parseServerMessage() {
   if (CL.shownet.value === 1) {
-    Con.Print(NET.message.cursize + ' ');
-  } else if (CL.shownet.value === 2) {
-    Con.Print('------------------\n');
+    Con.Print('NET: ' + NET.message.cursize + ' bytes\n');
   }
 
   CL.state.onground = false;
@@ -1030,6 +1038,8 @@ export function parseServerMessage() {
     NET.message.beginReading();
   }
 
+  const messages = /** @type {string[]} */ ([]);
+
   while (CL.cls.state > Def.clientConnectionState.disconnected) {
     if (CL.connection.processingServerDataState > 0) {
       break;
@@ -1046,12 +1056,24 @@ export function parseServerMessage() {
       break;
     }
 
-    CL.connection.lastServerMessages.push(CL.svc_strings[cmd]);
+    // legacy demo playback: high bit of command byte indicates an entity delta
+    if (CL.cls.legacy_demo && (cmd & 0x80)) {
+      handleLegacyEntityUpdate(cmd & 0x7F);
+      continue;
+    }
+
+    const command = CL.svc_strings.find(([, value]) => value === cmd)[0];
+
+    if (CL.shownet.value === 2) {
+      messages.push(command);
+    }
+
+    CL.connection.lastServerMessages.push(command);
     if (CL.connection.lastServerMessages.length > 10) {
       CL.connection.lastServerMessages.shift();
     }
 
-    const handler = serverCommandHandlers[cmd];
+    const handler = (CL.cls.legacy_demo && legacyServerCommandHandlers[cmd]) ? legacyServerCommandHandlers[cmd] : serverCommandHandlers[cmd];
 
     if (handler) {
       handler();
@@ -1071,4 +1093,29 @@ export function parseServerMessage() {
   }
 
   CL.state.clientEntities.setSolidEntities(CL.pmove);
+
+  if (CL.shownet.value === 2) {
+    Con.Print('NET: (' + NET.message.cursize + ') ' + messages.join(', ') + '\n');
+  }
 }
+
+export {
+  handleNop,
+  handleTime,
+  handlePrint,
+  handleCenterPrint,
+  handleStuffText,
+  handleSetView,
+  handleLightStyle,
+  handleStopSound,
+  handleUpdateName,
+  handleUpdateFrags,
+  handleUpdateColors,
+  handleSetPause,
+  handleSignonNum,
+  handleCdTrack,
+  handleIntermission,
+  handleFinale,
+  handleCutscene,
+  handleSellScreen,
+};

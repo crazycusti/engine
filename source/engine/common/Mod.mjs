@@ -67,7 +67,13 @@ Mod.Init = function () {
 };
 
 Mod.ClearAll = function () {
-  const tempEnts = Object.keys(CL.state.clientEntities.tempEntityModels);
+  const tempEnts = (() => {
+    if (registry.isDedicatedServer) {
+      return [];
+    }
+
+    return Object.keys(CL.state.clientEntities.tempEntityModels);
+  })();
 
   // TODO: should be different stages of freeing: level, game, all
   for (const name of Object.keys(Mod.known)) {

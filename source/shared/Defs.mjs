@@ -111,6 +111,7 @@ export const moveTypes = Object.freeze({
 
 /**
  * entity effects
+ * NOTE: this is uint8
  * @readonly
  * @enum {number}
  */

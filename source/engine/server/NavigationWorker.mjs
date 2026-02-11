@@ -11,12 +11,12 @@ const { Con } = registry;
 const navigation = new Navigation();
 
 eventBus.subscribe('nav.load', async (mapname, checksum) => {
-  Con.Print('Navigation: loading navigation graph...\n');
+  Con.DPrint('Navigation: loading navigation graph...\n');
 
   try {
     await navigation.load(mapname, checksum);
 
-    Con.Print('Navigation: navigation graph loaded on worker thread!\n');
+    Con.DPrint('Navigation: navigation graph loaded on worker thread!\n');
   } catch (e) {
     // unusable navmesh, trigger a rebuild
     if (e instanceof NavMeshOutOfDateException) {

@@ -85,7 +85,7 @@ export class ClientBeam {
  * Optionally there can be a ClientEdictHandler for each entity handling
  * more complex logic that is not part of a client-server session.
  */
-export class ClientEdict {
+export class ClientEdict { // TODO: extends Protocol.EntityState
   /** @type {BaseClientEdictHandler} */
   #handler = null;
 
@@ -101,6 +101,8 @@ export class ClientEdict {
     this.skinnum = 0;
     this.colormap = 0;
     this.effects = 0;
+    /** @type {number} alpha value for rendering */
+    this.alpha = 1.0;
     this.solid = 0;
     this.originPrevious = new Vector(Infinity, Infinity, Infinity);
     this.originTime = 0.0;
@@ -131,6 +133,10 @@ export class ClientEdict {
     this.mins = new Vector();
     /** @type {Record<string, import('../../shared/GameInterfaces').SerializableType>} entity fields pushed by the server */
     this.extended = {};
+    /** server time when this entity was last updated (legacy demo playback only) */
+    this.msgtime = 0.0;
+    /** force-link flag: snap to current position, no interpolation (legacy demo playback only) */
+    this.forcelink = false;
 
     /** @type {ClientEdict} */
     const that = this;
@@ -204,6 +210,7 @@ export class ClientEdict {
     this.skinnum = 0;
     this.colormap = 0;
     this.effects = 0;
+    this.alpha = 1.0;
     this.solid = 0;
     this.origin.setTo(Infinity, Infinity, Infinity);
     this.angles.setTo(Infinity, Infinity, Infinity);
@@ -226,6 +233,8 @@ export class ClientEdict {
     this.velocityTime = 0.0;
     this.velocityPrevious.setTo(Infinity, Infinity, Infinity);
     this.nextthink = -1;
+    this.msgtime = 0.0;
+    this.forcelink = false;
     // make sure we delete the field, not just replace the holding object
     for (const key of Object.keys(this.extended)) {
       delete this.extended[key];
@@ -698,6 +707,9 @@ export default class ClientEntities {
     // reset all visible entities
     this.num_visedicts = 0;
 
+    const isLegacy = CL.cls.legacy_demo === true;
+    const mtime0 = CL.state.clientMessages.mtime[0];
+
     for (let i = 1; i < this.entities.length; i++) {
       const clent = this.entities[i];
 
@@ -711,10 +723,13 @@ export default class ClientEntities {
         continue;
       }
 
-      // apply prediction for non-player entities
-      // if (clent.classname !== 'player') {
-        clent.updatePosition(clent.num !== CL.state.viewentity);
-      // }
+      // legacy demo playback: no update anymore, consider it gone
+      if (isLegacy && clent.msgtime !== mtime0) {
+        clent.model = null;
+        continue;
+      }
+
+      clent.updatePosition(clent.num !== CL.state.viewentity);
 
       // if the entity is not visible, skip it
       if (!clent.model || (clent.effects & effect.EF_NODRAW)) {

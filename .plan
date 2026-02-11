@@ -135,13 +135,26 @@ Grouped by sections and then sorted by priority (more or less).
 - https://sepia.imageonline.co/
 - https://quakewiki.org/wiki/QuakeC_tutorials
 - https://github.com/khreathor/mdl-for-blender mdl support
+- https://www.quake-info-pool.net/home.htm list of all known Q1 bugs
 
 ## Log
+
+### 2026-02-11
+
+- added alpha on entities for semi-transparent rendering of things
+  - although func_detail_fence are rendered on top of func_wall semi-transparent brushes
+- cleaned out a bunch of verbose console messages
+- version bump, because it’s overdue lol
+- need to implement _wateralpha, _lavaalpha etc.
 
 ### 2026-02-09
 
 - probably found the root of that untracable memory leak: Sounds
 - removed loading of the map from the navigation worker
+- bringing back demos using Claude Opus 4.6 and intervention by implementing Protocol 15 just enough to get it working
+  - bobbing missing
+  - damage missing?
+  - interpolation missing
 
 ### 2026-02-08
 

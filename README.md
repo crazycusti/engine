@@ -14,20 +14,22 @@ Added features include but not limited to:
 * Smooth animations using lerping.
 * Somewhat optimized network code.
 * Navigation mesh for smarter NPC behavior.
-* Limited multithreading support.
+* Multithreading support.
 * Limited BSPX support:
   * `LIGHTINGDIR`: used for per-pixel lighting on supported materials.
   * `RGBLIGHTING`: used for colorful lightmaps.
   * `LIGHTGRID_OCTREE`: used for smoothly lighting dynamically moving objects.
 * Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
-* Static skybox support (like in Half-Life 1 and Quake 2)
-* Automatic area portals infrastructure for dynamic sound and rendering culling (experimental)
+* Static skybox support, like in Half-Life 1 and Quake 2.
+* Automatic area portals infrastructure for dynamic sound and rendering culling, though experimental.
+* Semi-transparent model (through `alpha` entity key) support.
 
 Yet, there is still plenty to do.
 
 Some features on the roadmap:
 
+* Semi-transparent turbolent (water, lava, slime) support.
 * Proper WAD3 support when maps refer them, loading them from external WAD, if not compiled in.
 * Better network code with client-side predicition.
 * More flexible rendering subsystem, making it easier to reuse model rendering etc.

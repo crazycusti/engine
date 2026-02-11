@@ -499,7 +499,7 @@ Host.Init = async function() {
 
   // eslint-disable-next-line require-atomic-updates
   Host.initialized = true;
-  Sys.Print('========Quake Initialized=========\n');
+  Sys.Print('========Host Initialized=========\n');
 
   eventBus.publish('host.ready');
 };

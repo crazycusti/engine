@@ -12,8 +12,11 @@ export const u = Object.freeze({
   origin2: 1 << 2,
   origin3: 1 << 3,
 
+  /** used to smuggle velocity[0] */
   angle1: 1 << 4,
+  /** used to smuggle velocity[1] */
   angle2: 1 << 5,
+  /** used to smuggle velocity[2] */
   angle3: 1 << 6,
 
   nextthink: 1 << 7,
@@ -23,6 +26,7 @@ export const u = Object.freeze({
   model: 1 << 10,
   colormap: 1 << 11,
   skin: 1 << 12,
+  /** used to smuggle alpha as well */
   effects: 1 << 13,
   solid: 1 << 14,
   size: 1 << 15,
@@ -217,6 +221,7 @@ export class EntityState { // entity_state_t
     this.colormap = 0;
     this.skinnum = 0;
     this.effects = 0;
+    this.alpha = 1.0;
 
     this.origin = new Vector();
     this.angles = new Vector();

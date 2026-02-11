@@ -285,7 +285,7 @@ SCR.DrawConsole = function() {
     Con.DrawConsole(SCR.con_current);
     return;
   }
-  if ((Key.dest.value === Key.dest.game) || (Key.dest.value === Key.dest.message)) {
+  if ((Key.dest.value === Key.dest.game || Key.dest.value === Key.dest.message) && CL.cls.signon === 4) {
     Con.DrawNotify();
   }
 };

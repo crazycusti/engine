@@ -252,7 +252,7 @@ export class BrushModelComponent {
 };
 
 /**
- * BSP tree node
+ * BSP tree node aka. BSP leaf
  */
 export class Node extends BrushModelComponent {
   /** @type {number} node index in the nodes array */

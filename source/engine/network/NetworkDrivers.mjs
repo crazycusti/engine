@@ -1131,8 +1131,8 @@ export class WebRTCDriver extends BaseDriver {
     this.hostToken = message.hostToken; // Store host token
     this.creatingSession = false; // Session creation complete
 
-    Con.Print(`WebRTCDriver: Session created: ${this.sessionId}\n`);
-    Con.Print(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
+    Con.DPrint(`WebRTCDriver: Session created: ${this.sessionId}\n`);
+    Con.DPrint(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
 
     // Find the socket for this session and update it
     // For host sessions created via Listen(), we need to find any socket with isHost=true
@@ -1185,8 +1185,8 @@ export class WebRTCDriver extends BaseDriver {
     this.peerId = message.peerId;
     this.isHost = message.isHost;
 
-    Con.Print(`WebRTCDriver: Joined session: ${this.sessionId}\n`);
-    Con.Print(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
+    Con.DPrint(`WebRTCDriver: Joined session: ${this.sessionId}\n`);
+    Con.DPrint(`WebRTCDriver: Your peer ID: ${this.peerId}\n`);
     Con.DPrint(`WebRTCDriver: Peers in session: ${message.peerCount}\n`);
 
     // Find the socket for this session and mark it as connected

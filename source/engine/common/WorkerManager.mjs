@@ -37,6 +37,18 @@ export default class WorkerManager {
           Con.Print(data[0]);
           break;
 
+        case 'worker.con.print.success':
+          Con.PrintSuccess(data[0]);
+          break;
+
+        case 'worker.con.print.warning':
+          Con.PrintWarning(data[0]);
+          break;
+
+        case 'worker.con.print.error':
+          Con.PrintError(data[0]);
+          break;
+
         case 'worker.con.dprint':
           Con.DPrint(data[0]);
           break;

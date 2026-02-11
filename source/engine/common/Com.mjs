@@ -369,7 +369,7 @@ export default class COM {
     /** @type {SearchPath} */
     const search = { filename: dir, pack: [] };
     this.searchpaths[this.searchpaths.length] = search;
-    Con.Print(`Added game directory: ${dir}\n`);
+    Con.DPrint(`Added game directory: ${dir}\n`);
   };
 
   static async InitFilesystem() {

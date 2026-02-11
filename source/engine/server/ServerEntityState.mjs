@@ -13,6 +13,7 @@ export class ServerEntityState {
     this.colormap = 0;
     this.skin = 0;
     this.effects = 0;
+    this.alpha = 1;
     this.solid = 0;
     this.free = false;
     this.classname = null;
@@ -37,6 +38,7 @@ export class ServerEntityState {
     this.colormap = other.colormap;
     this.skin = other.skin;
     this.effects = other.effects;
+    this.alpha = other.alpha;
     this.solid = other.solid;
     this.free = other.free;
     this.classname = other.classname;
@@ -61,6 +63,7 @@ export class ServerEntityState {
     this.colormap = 0;
     this.skin = 0;
     this.effects = 0;
+    this.alpha = 1;
     this.solid = 0;
     this.classname = null;
   }

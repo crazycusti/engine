@@ -5,7 +5,7 @@ uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform vec3 uLightVec;
 uniform vec3 uDynamicLightVec;
-uniform float uAlpha;
+uniform float uInterpolation;
 
 attribute vec3 aPositionA;
 attribute vec3 aPositionB;
@@ -20,7 +20,7 @@ varying float vFog;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
-  vec3 lerpPos = mix(aPositionA, aPositionB, uAlpha);
+  vec3 lerpPos = mix(aPositionA, aPositionB, uInterpolation);
   vec3 worldPos = uAngles * lerpPos + uOrigin;
   vec3 position = uViewAngles * (worldPos - uViewOrigin);
 

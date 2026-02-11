@@ -33,6 +33,11 @@ export default class ClientDemos {
   td_lastframe = -1;
   forcetrack = -1;
 
+  /** @type {number|null} Host.realtime when gameplay (signon 4) first began */
+  demoBaseRealtime = null;
+  /** @type {number} server time (clientMessages.mtime[0]) at demoBaseRealtime */
+  demoBaseServertime = 0;
+
   writeDemoMessage() {
     const len = this.demoofs + 16 + NET.message.cursize;
 
@@ -64,8 +69,20 @@ export default class ClientDemos {
         if (Host.framecount === (this.td_startframe + 1)) {
           this.td_starttime = Host.realtime;
         }
-      } else if (CL.state.time <= CL.state.mtime[0]) {
-        return 0;
+      } else {
+        // keep track of time when the first frame with time kicks in
+        // we need to make sure we stick to the timeline
+        if (this.demoBaseRealtime === null) {
+          this.demoBaseRealtime = Host.realtime;
+          this.demoBaseServertime = CL.state.clientMessages.mtime[0];
+        }
+
+        const elapsed = Host.realtime - this.demoBaseRealtime;
+        const demoTime = this.demoBaseServertime + elapsed;
+
+        if (demoTime <= CL.state.clientMessages.mtime[0]) {
+          return 0;
+        }
       }
     }
 
@@ -147,6 +164,9 @@ export default class ClientDemos {
 
     this.demoofs = i + 1;
 
+    this.demoBaseRealtime = null;
+    this.demoBaseServertime = 0;
+
     if (timedemo) {
       this.timedemo = true;
       this.td_startframe = Host.framecount;
@@ -161,6 +181,8 @@ export default class ClientDemos {
 
     this.demoplayback = false;
     this.demofile = null;
+    this.demoBaseRealtime = null;
+    this.demoBaseServertime = 0;
     CL.cls.state = clientConnectionState.disconnected;
 
     if (this.timedemo) {

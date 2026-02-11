@@ -3,11 +3,12 @@ import Cmd from './Cmd.mjs';
 import Q from '../../shared/Q.mjs';
 import { cvarFlags } from '../../shared/Defs.mjs';
 
-let { CL, Con } = registry;
+let { CL, Con, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   CL = registry.CL;
   Con = registry.Con;
+  SV = registry.SV;
 });
 
 /**
@@ -243,7 +244,7 @@ export default class Cvar {
       return true;
     }
 
-    if ((v.flags & Cvar.FLAG.CHEAT) && !registry.isDedicatedServer && CL.cls.serverInfo?.sv_cheats !== '1') {
+    if ((v.flags & Cvar.FLAG.CHEAT) && SV.server.active && CL.cls.serverInfo?.sv_cheats !== '1') {
       Con.Print('Cheats are not enabled on this server.\n');
       return true;
     }

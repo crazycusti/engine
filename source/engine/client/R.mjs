@@ -15,15 +15,15 @@ import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
 import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
-import { Node, revealedVisibility } from '../common/model/BSP.mjs';
+import { BrushModel, Node, revealedVisibility } from '../common/model/BSP.mjs';
 import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
 
-let { CL, Host, Mod, NET, SCR, SV, Sys, V } = registry;
+let { CL, Host, Mod, SCR, SV, Sys, V } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  ({ CL, Host, Mod, NET, SCR, SV, Sys, V } = registry);
+  ({ CL, Host, Mod, SCR, SV, Sys, V } = registry);
 });
 
 /** @type {WebGL2RenderingContext} */
@@ -274,15 +274,15 @@ R.RecursiveLightPoint = function(node, start, end) {
     const haveRGB = CL.state.worldmodel.lightdata_rgb !== null;
     const lightdata = haveRGB ? CL.state.worldmodel.lightdata_rgb : CL.state.worldmodel.lightdata;
     const channels = haveRGB ? 3 : 1;
-    const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+    const uInterpolation = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
 
     for (let k = 0; k < channels; k++) {
       let lightmap = surf.lightofs + dt * smax + ds;
 
       for (let maps = 0; maps < surf.styles.length; maps++) {
         const scale = (
-          R.lightstylevalue_a[surf.styles[maps]] * (1 - uAlpha) +
-          R.lightstylevalue_b[surf.styles[maps]] * uAlpha
+          R.lightstylevalue_a[surf.styles[maps]] * (1 - uInterpolation) +
+          R.lightstylevalue_b[surf.styles[maps]] * uInterpolation
         ) * 22.0;
 
         r3[k] += lightdata[lightmap * channels + k] * scale;
@@ -485,7 +485,7 @@ R.LightPointFromGrid = function(pos) {
 
   // Accumulate weighted RGB values
   const r3 = new Vector(0, 0, 0);
-  const uAlpha = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
+  const uInterpolation = R.interpolation.value ? (CL.state.time % .2) / .2 : 0;
 
   for (let i = 0; i < samples.length; i++) {
     const sample = samples[i];
@@ -497,8 +497,8 @@ R.LightPointFromGrid = function(pos) {
 
       // Apply lightstyle animation
       const scale = (
-        R.lightstylevalue_a[stylenum] * (1 - uAlpha) +
-        R.lightstylevalue_b[stylenum] * uAlpha
+        R.lightstylevalue_a[stylenum] * (1 - uInterpolation) +
+        R.lightstylevalue_b[stylenum] * uInterpolation
       ) / 12.0; // Normalize from 0-25 range to multiplier
 
       r3[0] += style.rgb[0] * scale * weight;
@@ -640,7 +640,7 @@ R.DrawEntitiesOnList = function() {
   const entitiesByType = new Map();
 
   for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-    if (entity.model === null) {
+    if (entity.model === null || entity.alpha === 0.0) {
       continue;
     }
 
@@ -658,12 +658,13 @@ R.DrawEntitiesOnList = function() {
     }
 
     const renderer = modelRendererRegistry.getRenderer(modelType);
-    if (!renderer) {
-      continue;
-    }
 
     renderer.setupRenderState(0);
     for (const entity of entities) {
+      if (entity.alpha < 1.0) {
+        continue; // Transparent entities are drawn in pass 2
+      }
+
       renderer.render(entity.model, entity, 0);
     }
     renderer.cleanupRenderState(0);
@@ -674,16 +675,15 @@ R.DrawEntitiesOnList = function() {
   const spriteEntities = entitiesByType.get(Mod.type.sprite);
   if (spriteEntities) {
     const renderer = modelRendererRegistry.getRenderer(Mod.type.sprite);
-    if (renderer) {
-      gl.enable(gl.BLEND);
-      renderer.setupRenderState(1);
-      for (const entity of spriteEntities) {
-        renderer.render(entity.model, entity, 1);
-      }
-      renderer.cleanupRenderState(1);
-      GL.StreamFlush();
-      gl.disable(gl.BLEND);
+
+    gl.enable(gl.BLEND);
+    renderer.setupRenderState(1);
+    for (const entity of spriteEntities) {
+      renderer.render(entity.model, entity, 1);
     }
+    renderer.cleanupRenderState(1);
+    GL.StreamFlush();
+    gl.disable(gl.BLEND);
   }
 };
 
@@ -698,7 +698,7 @@ R.DrawTransparentEntitiesOnList = function() {
   // Group entities by model type
   const entitiesByType = new Map();
   for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-    if (!entity || !entity.model) {
+    if (entity.model === null || entity.alpha === 0 || entity.alpha === 1.0) {
       continue;
     }
 
@@ -709,18 +709,109 @@ R.DrawTransparentEntitiesOnList = function() {
     entitiesByType.get(modelType).push(entity);
   }
 
-  // Pass 2: Transparent brush models only
-  const brushEntities = entitiesByType.get(Mod.type.brush);
-  if (brushEntities) {
-    const renderer = modelRendererRegistry.getRenderer(Mod.type.brush);
+  // Pass 2: Transparent models only
+
+  for (const [modelType, entities] of entitiesByType) {
+    if (modelType === Mod.type.sprite) {
+      continue; // Sprites are drawn in pass 1
+    }
+
+    const renderer = modelRendererRegistry.getRenderer(modelType);
 
     renderer.setupRenderState(2);
-    for (const entity of brushEntities) {
+    for (const entity of entities) {
+      if (entity.alpha === 1.0) {
+        continue; // Opaque entities are drawn in pass 0
+      }
+
       renderer.render(entity.model, entity, 2);
     }
     renderer.cleanupRenderState(2);
+    GL.StreamFlush();
+
   }
-  GL.StreamFlush();
+};
+
+/**
+ * Render all transparent geometry (world brush surfaces + entities) in
+ * back-to-front sorted order with depth writes disabled.
+ * This ensures transparent surfaces blend correctly regardless of type.
+ * @param {ClientEdict} worldEntity The world entity (entity 0)
+ */
+R._renderTransparentsSorted = function(worldEntity) {
+  const worldmodel = /** @type {BrushModel} */ (worldEntity.model);
+
+  const vieworg = R.refdef.vieworg;
+  /** @type {Array<{dist: number, kind: number, data: Node|ClientEdict}>} */
+  const items = [];
+
+  // Collect world transparent leaves with distances
+  const brushRenderer = /** @type {BrushModelRenderer} */ (modelRendererRegistry.getRenderer(Mod.type.brush));
+  if (worldEntity && worldEntity.model) {
+    const worldLeaves = brushRenderer.getWorldTransparentLeaves(worldmodel, vieworg);
+    for (let i = 0; i < worldLeaves.length; i++) {
+      items.push({ dist: worldLeaves[i].dist, kind: 0, data: worldLeaves[i].leaf });
+    }
+  }
+
+  // Collect transparent entities with distances
+  if (R.drawentities.value !== 0) {
+    for (const entity of CL.state.clientEntities.getVisibleEntities()) {
+      if (entity.model === null || entity.alpha === 0 || entity.alpha === 1.0) {
+        continue;
+      }
+      if (entity.model.type === Mod.type.sprite) {
+        continue; // Sprites are handled in pass 1
+      }
+      const dx = entity.origin[0] - vieworg[0];
+      const dy = entity.origin[1] - vieworg[1];
+      const dz = entity.origin[2] - vieworg[2];
+      const dist = Math.hypot(dx, dy, dz);
+      items.push({ dist, kind: 1, data: entity });
+    }
+  }
+
+  if (items.length === 0) {
+    return;
+  }
+
+  // Sort back-to-front (farthest first)
+  items.sort((a, b) => b.dist - a.dist);
+
+  // Render in sorted order with depth writes disabled
+  gl.depthMask(false);
+  let worldPassActive = false;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (item.kind === 0) {
+      // World transparent leaf
+      if (!worldPassActive) {
+        brushRenderer.beginWorldTransparentPass(worldmodel);
+        worldPassActive = true;
+      }
+      brushRenderer.renderWorldTransparentLeaf(worldmodel, item.data);
+    } else {
+      // Transparent entity — end world pass if active (shader switch)
+      if (worldPassActive) {
+        brushRenderer.endWorldTransparentPass();
+        GL.StreamFlush();
+        worldPassActive = false;
+      }
+      const entity = /** @type {ClientEdict} */ (item.data);
+      const renderer = modelRendererRegistry.getRenderer(entity.model.type);
+      renderer.render(entity.model, entity, 2);
+      GL.StreamFlush();
+    }
+  }
+
+  if (worldPassActive) {
+    brushRenderer.endWorldTransparentPass();
+    GL.StreamFlush();
+  }
+
+  gl.depthMask(true);
 };
 
 R.DrawViewModel = function() {
@@ -789,8 +880,7 @@ R.PolyBlend = function() {
   }
   GL.UseProgram('fill', true);
   const vrect = R.refdef.vrect;
-  GL.StreamDrawColoredQuad(vrect.x, vrect.y, vrect.width, vrect.height,
-      V.blend[0], V.blend[1], V.blend[2], V.blend[3] * 255.0);
+  GL.StreamDrawColoredQuad(vrect.x, vrect.y, vrect.width, vrect.height, V.blend[0], V.blend[1], V.blend[2], V.blend[3] * 255.0);
 };
 
 R.SetFrustum = function() {
@@ -1008,15 +1098,11 @@ R.RenderWorld = function() {
   R.DrawDecals();
   R.DrawParticles();
 
-  // Pass 2: Transparent brush surfaces (after all opaque geometry)
+  // Pass 2: All transparent geometry, sorted back-to-front with depthMask(false).
+  // Without sorting, whichever draws last appears on top. By sorting farthest-first
+  // and disabling depth writes, nearer transparent surfaces blend over farther ones.
   gl.enable(gl.CULL_FACE);
-  if (worldEntity && worldEntity.model) {
-    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    brushRenderer.render(worldEntity.model, worldEntity, 2);
-  }
-
-  // Draw transparent entities
-  R.DrawTransparentEntitiesOnList();
+  R._renderTransparentsSorted(worldEntity);
   gl.disable(gl.CULL_FACE);
 };
 
@@ -1223,7 +1309,7 @@ R.InitShaders = async function() {
   // rendering alias models
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
@@ -1244,7 +1330,7 @@ R.InitShaders = async function() {
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -1262,7 +1348,7 @@ R.InitShaders = async function() {
 
     // rendering the player model (similar to alias model but with custom colors)
     GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
         [
           ['aPositionA', gl.FLOAT, 3],
           ['aPositionB', gl.FLOAT, 3],
@@ -1273,7 +1359,7 @@ R.InitShaders = async function() {
 
     // for rendering sprites (usually effects)
     GL.CreateProgram('sprite',
-      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams'],
+      ['uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma', 'uFogColor', 'uFogParams', 'uInterpolation', 'uAlpha'],
         [['aPosition', gl.FLOAT, 3], ['aTexCoord', gl.FLOAT, 2]],
         ['tTexture']),
 
@@ -1861,6 +1947,8 @@ R.DrawDecals = function() {
   const program = GL.UseProgram('decal');
   gl.depthMask(false);
   gl.enable(gl.BLEND);
+
+  gl.uniform1f(program.uAlpha, 1.0);
 
   let currentTexture = null;
 

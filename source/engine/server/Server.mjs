@@ -72,7 +72,7 @@ const ALLOWED_CLIENT_COMMANDS = [
   'ban',
 ];
 
-export class ServerEntityState {
+export class ServerEntityState { // TODO: extends Protocol.EntityState
   constructor(num = null) {
     this.num = num;
     this.flags = 0;
@@ -83,6 +83,7 @@ export class ServerEntityState {
     this.colormap = 0;
     this.skin = 0;
     this.effects = 0;
+    this.alpha = 1.0;
     this.solid = 0;
     this.free = false;
     this.classname = null;
@@ -177,6 +178,7 @@ export default class SV {
     soundPrecache: [],
     /** @type {string[]} */
     modelPrecache: [],
+    active: false,
   };
 
   /** server static, state across maps */
@@ -210,9 +212,6 @@ export default class SV {
   static movement = new ServerMovement();
   static area = new ServerArea();
   static collision = new ServerCollision();
-
-  // Entity state class
-  static EntityState = ServerEntityState;
 
   // Cvars (initialized in Init())
   static maxvelocity = null;
@@ -525,15 +524,15 @@ export default class SV {
 
     SV.server.eventBus.unsubscribeAll();
 
-    if (isCrashShutdown) {
-      Con.Print('Server shut down due to a crash!\n');
-      return;
-    }
-
     // reset all static server state
     SV.svs.changelevelIssued = false;
 
-    Con.Print('Server shut down.\n');
+    if (isCrashShutdown) {
+      Con.PrintWarning('Server shut down due to a crash!\n');
+      return;
+    }
+
+    Con.DPrint('Server shut down.\n');
 
     // TODO: send event
   }
@@ -1028,7 +1027,7 @@ export default class SV {
         return true;
 
       default:
-        Con.Print(`SV.ReadClientMessage: unknown command ${cmd}\n`);
+        Con.DPrint(`SV.ReadClientMessage: unknown command ${cmd} from ${client.netconnection.address}\n`);
         return false;
     }
   }

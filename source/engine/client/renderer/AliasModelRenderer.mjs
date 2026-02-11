@@ -47,10 +47,9 @@ export class AliasModelRenderer extends ModelRenderer {
    * Handles frustum culling, frame interpolation, skinning, and player color translation.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to render
    * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
-   * @param {number} _pass Rendering pass (0=opaque, 1=transparent)
+   * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    */
-  // eslint-disable-next-line no-unused-vars
-  render(model, entity, _pass = 0) {
+  render(model, entity, pass = 0) {
     const clmodel = model;
     const e = entity;
 
@@ -112,8 +111,9 @@ export class AliasModelRenderer extends ModelRenderer {
     const { frameA, frameB, targettime } = this._selectFrames(clmodel, e);
 
     // Setup interpolation
-    gl.uniform1f(program.uAlpha, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
     gl.uniform1f(program.uTime, Host.realtime);
+    gl.uniform1f(program.uAlpha, e.alpha);
 
     // Bind vertex buffer and setup attributes
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
@@ -129,8 +129,17 @@ export class AliasModelRenderer extends ModelRenderer {
       skin.playertexture.bind(program.tPlayer);
     }
 
+    if (pass === 2) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    }
+
     // Draw the model
     gl.drawArrays(gl.TRIANGLES, 0, clmodel._num_tris * 3);
+
+    if (pass === 2) {
+      gl.disable(gl.BLEND);
+    }
   }
 
   /**

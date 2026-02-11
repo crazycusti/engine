@@ -469,6 +469,7 @@ export class ServerEdict {
     message.writeByte(this.entity.colormap || 0);
     message.writeByte(this.entity.skin || 0);
     message.writeByte(this.entity.effects || 0);
+    message.writeByte(Math.floor(this.entity.alpha * 255.0));
     message.writeByte(this.entity.solid || 0);
     message.writeAngleVector(this.entity.angles);
     message.writeCoordVector(this.entity.origin);

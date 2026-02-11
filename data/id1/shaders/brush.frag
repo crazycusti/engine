@@ -1,6 +1,7 @@
 precision mediump float;
 
 uniform float uGamma;
+uniform float uInterpolation;
 uniform float uAlpha;
 
 uniform sampler2D tTextureA;
@@ -41,7 +42,7 @@ void main(void) {
   vec4 luminance = texture2D(tLuminance, vTexCoord.xy);
 
   // interpolation
-  vec4 texture = mix(textureA, textureB, uAlpha);
+  vec4 texture = mix(textureA, textureB, uInterpolation);
 
   // Pre-calculate lightstyle constant
   const float LIGHTSTYLE_SCALE = 43.828125;
@@ -59,7 +60,7 @@ void main(void) {
     texture2D(tLightStyleB, vec2(vLightStyle.z, 0.0)).a,
     texture2D(tLightStyleB, vec2(vLightStyle.w, 0.0)).a
   );
-  vec4 lightstyle = mix(lightstyleA, lightstyleB, uAlpha) * LIGHTSTYLE_SCALE;
+  vec4 lightstyle = mix(lightstyleA, lightstyleB, uInterpolation) * LIGHTSTYLE_SCALE;
 
   // Pre-calculate shared texture coordinates
   float lightmapW = vTexCoord.w * 0.25; // divide once instead of three times
@@ -164,5 +165,5 @@ void main(void) {
   // Apply fog
   finalColor = mix(uFogColor, finalColor, vFog);
 
-  gl_FragColor = vec4(finalColor, texture.a);
+  gl_FragColor = vec4(finalColor, texture.a * uAlpha);
 }

@@ -661,7 +661,7 @@ const S = {
       this._underwaterFilter.output.connect(this._context.destination);
       this._started = true;
     } catch (err) {
-      Con.Print(`S.Init: failed to initialize AudioContext (${err.message}). Sound disabled.\n`);
+      Con.PrintWarning(`S.Init: failed to initialize AudioContext (${err.message}). Sound disabled.\n`);
       this._started = false;
     }
 
@@ -706,7 +706,7 @@ const S = {
     this._eventListeners.push(eventBus.subscribe('client.paused', () => this._PauseAllSounds()));
     this._eventListeners.push(eventBus.subscribe('client.unpaused', () => this._ResumeAllSounds()));
 
-    Con.Print('Sound subsystem initialized.\n');
+    Con.DPrint('Sound subsystem initialized.\n');
   },
 
   Shutdown() {

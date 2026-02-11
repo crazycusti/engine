@@ -5,6 +5,7 @@ import { SzBuffer } from '../network/MSG.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { eventBus, registry } from '../registry.mjs';
+import { ServerEntityState } from './Server.mjs';
 
 let { SV } = registry;
 
@@ -137,7 +138,7 @@ export class ServerClient {
     const key = num.toString();
 
     if (!this._entityStates.has(key)) {
-      this._entityStates.set(key, new SV.EntityState(num));
+      this._entityStates.set(key, new ServerEntityState(num));
     }
 
     return this._entityStates.get(key);

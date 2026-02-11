@@ -75,7 +75,7 @@ export default class ClientConnection {
       }
 
       if (NET.message.cursize === 1 && (new Uint8Array(NET.message.data, 0, 1))[0] === Protocol.svc.nop) {
-        Con.Print('<-- server to client keepalive\n');
+        Con.DPrint('<-- server to client keepalive\n');
       } else {
         break;
       }
@@ -294,10 +294,6 @@ export default class ClientConnection {
       if (this.cls.state !== Def.clientConnectionState.connected) {
         break;
       }
-    }
-
-    if (CL.shownet.value !== 0) {
-      Con.Print('\n');
     }
   }
 

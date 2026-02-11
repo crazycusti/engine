@@ -3,6 +3,8 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 import { materialFlags } from './Materials.mjs';
+import { BrushModel, Node } from '../../common/model/BSP.mjs';
+import { ClientEdict } from '../ClientEntities.mjs';
 
 let { CL, Host, R } = registry;
 
@@ -56,8 +58,8 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Render a single brush model entity.
    * Handles frustum culling, transforms, lighting, and both opaque and turbulent surfaces.
-   * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to render
-   * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
+   * @param {BrushModel} model The brush model to render
+   * @param {ClientEdict} entity The entity being rendered
    * @param {number} pass Rendering pass (0=opaque, 1=transparent)
    */
   render(model, entity, pass = 0) {
@@ -127,7 +129,7 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Render the world (entity 0) opaque surfaces.
    * World uses leafs structure instead of chains.
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
+   * @param {BrushModel} clmodel The world model
    */
   renderWorld(clmodel) {
     const worldspawn = CL.state.clientEntities.getEntity(0);
@@ -139,6 +141,7 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
+    gl.uniform1f(program.uAlpha, 1.0);
 
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
 
@@ -212,98 +215,150 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Render the world (entity 0) transparent surfaces with alpha blending.
    * World uses leafs structure instead of chains.
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
+   * @param {BrushModel} clmodel The world model
    */
   renderWorldTransparent(clmodel) {
-    const worldspawn = CL.state.clientEntities.getEntity(0);
+    this.beginWorldTransparentPass(clmodel);
+    for (let i = 0; i < clmodel.leafs.length; i++) {
+      const leaf = clmodel.leafs[i];
+      if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
+        continue;
+      }
+      if (R.CullBox(leaf.mins, leaf.maxs)) {
+        continue;
+      }
+      this.renderWorldTransparentLeaf(clmodel, leaf);
+    }
+    this.endWorldTransparentPass();
+  }
 
+  /**
+   * Collect visible world leafs that contain transparent surfaces, with
+   * squared distance from the given viewpoint for back-to-front sorting.
+   * @param {BrushModel} clmodel The world model
+   * @param {Float32Array|number[]} vieworg Camera position [x, y, z]
+   * @returns {{leaf: Node, dist: number}[]} Transparent leaf items sorted by distance (farthest first)
+   */
+  getWorldTransparentLeaves(clmodel, vieworg) {
+    const items = [];
+    for (let i = 0; i < clmodel.leafs.length; i++) {
+      const leaf = clmodel.leafs[i];
+      if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
+        continue;
+      }
+      if (R.CullBox(leaf.mins, leaf.maxs)) {
+        continue;
+      }
+      // Check if this leaf has any transparent surfaces
+      let hasTransparent = false;
+      for (let j = 0; j < leaf.skychain; j++) {
+        if (clmodel.textures[leaf.cmds[j][0]].flags & materialFlags.MF_TRANSPARENT) {
+          hasTransparent = true;
+          break;
+        }
+      }
+      if (!hasTransparent) {
+        continue;
+      }
+      const cx = (leaf.mins[0] + leaf.maxs[0]) * 0.5;
+      const cy = (leaf.mins[1] + leaf.maxs[1]) * 0.5;
+      const cz = (leaf.mins[2] + leaf.maxs[2]) * 0.5;
+      const dx = cx - vieworg[0];
+      const dy = cy - vieworg[1];
+      const dz = cz - vieworg[2];
+      const dist = Math.hypot(dx, dy, dz);
+      items.push({ leaf, dist });
+    }
+    return items;
+  }
+
+  /**
+   * Setup GL state for world transparent leaf rendering.
+   * Call once before one or more `renderWorldTransparentLeaf` calls.
+   * @param {BrushModel} clmodel The world model
+   */
+  beginWorldTransparentPass(clmodel) {
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
     R.c_brush_vbos++;
 
+    /** @type {object} */
     const program = GL.UseProgram('brush');
+    this._worldTransparentProgram = program;
+    this._worldTransparentModel = clmodel;
+
     gl.uniform3f(program.uAmbientLight, 1.0, 1.0, 1.0);
     gl.uniform3f(program.uShadeLight, 0.0, 0.0, 0.0);
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
-
+    gl.uniform1f(program.uAlpha, 1.0);
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
+    gl.uniform1f(program.uHaveDeluxemap, 1.0);
 
-    // Setup vertex attributes
     this._setupBrushVertexAttributes(program, 0);
-
-    // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, true);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
     GL.Bind(program.tDeluxemap, R.deluxemap_texture);
 
-    gl.uniform1f(program.uHaveDeluxemap, 1.0);
-
-    // Enable blending and disable depth writing for transparent surfaces
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
+  }
 
-    // Iterate through visible leafs
-    for (let i = 0; i < clmodel.leafs.length; i++) {
-      const leaf = clmodel.leafs[i];
+  /**
+   * Render a single leaf’s transparent surfaces.
+   * Must be called between `beginWorldTransparentPass` and `endWorldTransparentPass`.
+   * @param {BrushModel} clmodel The world model
+   * @param {Node} leaf The BSP leaf to render
+   */
+  renderWorldTransparentLeaf(clmodel, leaf) {
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+    const program = this._worldTransparentProgram;
 
-      if (leaf.visframe !== R.visframecount || leaf.skychain === 0) {
+    const lightVector = new Vector(0, 0, 0);
+    let lightRadius = 0;
+    for (const l of CL.state.clientEntities.dlights) {
+      if (l.die < CL.state.time || l.radius === 0.0) {
         continue;
       }
-
-      if (R.CullBox(leaf.mins, leaf.maxs)) {
-        continue;
-      }
-
-      const lightVector = new Vector(0, 0, 0);
-      let lightRadius = 0;
-
-      // naive approach of getting the next best light
-      for (const l of CL.state.clientEntities.dlights) {
-        if (l.die < CL.state.time || l.radius === 0.0) {
-          continue;
-        }
-
-        lightVector.set(l.origin);
-        lightRadius = l.radius;
-      }
-
-      gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
-
-      for (let j = 0; j < leaf.skychain; j++) {
-        const cmds = leaf.cmds[j];
-        const material = clmodel.textures[cmds[0]];
-
-        // Skip requested
-        if (material.flags & materialFlags.MF_SKIP) {
-          continue;
-        }
-
-        // Only render transparent surfaces in this pass
-        if (!(material.flags & materialFlags.MF_TRANSPARENT)) {
-          continue;
-        }
-
-        R.c_brush_verts += cmds[2];
-        R.c_brush_tris += cmds[2] / 3;
-
-        material.emit(worldspawn);
-        material.bindTo(program);
-
-        gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
-        R.c_brush_draws++;
-      }
+      lightVector.set(l.origin);
+      lightRadius = l.radius;
     }
+    gl.uniform4fv(program.uLightVec, [...lightVector, lightRadius]);
 
-    // Restore depth writing and disable blending
-    gl.depthMask(true);
+    for (let j = 0; j < leaf.skychain; j++) {
+      const cmds = leaf.cmds[j];
+      const material = clmodel.textures[cmds[0]];
+
+      if (material.flags & materialFlags.MF_SKIP) {
+        continue;
+      }
+      if (!(material.flags & materialFlags.MF_TRANSPARENT)) {
+        continue;
+      }
+
+      R.c_brush_verts += cmds[2];
+      R.c_brush_tris += cmds[2] / 3;
+
+      material.emit(worldspawn);
+      material.bindTo(program);
+
+      gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
+      R.c_brush_draws++;
+    }
+  }
+
+  /**
+   * Cleanup GL state after world transparent leaf rendering.
+   */
+  endWorldTransparentPass() {
     gl.disable(gl.BLEND);
+    this._worldTransparentProgram = null;
+    this._worldTransparentModel = null;
   }
 
   /**
    * Render the world (entity 0) turbulent surfaces.
    * World uses leafs structure instead of chains.
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The world model
+   * @param {BrushModel} clmodel The world model
    */
   renderWorldTurbolents(clmodel) {
     const worldspawn = CL.state.clientEntities.getEntity(0);
@@ -316,6 +371,7 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
     gl.uniform1f(program.uTime, Host.realtime);
+    gl.uniform1f(program.uAlpha, 1.0);
 
     // Setup vertex attributes
     this._setupBrushVertexAttributes(program, clmodel.waterchain);
@@ -350,7 +406,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Configures lightmaps, dynamic lights, light styles, and deluxemaps.
    * @private
    * @param {WebGLProgram} program The shader program (brush or turbulent)
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
+   * @param {BrushModel} clmodel The brush model
    * @param {boolean} isWorld Whether this is the world entity (affects deluxemap/dlight settings)
    */
   _setupBrushShaderCommon(program, clmodel, isWorld) {
@@ -393,8 +449,8 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Render opaque (non-turbulent) brush surfaces
    * @private
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
-   * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
+   * @param {BrushModel} clmodel The brush model
+   * @param {ClientEdict} e The entity
    * @param {number[]} viewMatrix Rotation matrix for entity orientation
    */
   _renderOpaqueSurfaces(clmodel, e, viewMatrix) {
@@ -424,7 +480,8 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushVertexAttributes(program, 0);
 
     // Setup uniforms
-    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    gl.uniform1f(program.uAlpha, 1.0);
 
     // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, false);
@@ -476,8 +533,8 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Render transparent brush surfaces with alpha blending
    * @private
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
-   * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
+   * @param {BrushModel} clmodel The brush model
+   * @param {ClientEdict} e The entity
    * @param {number[]} viewMatrix Rotation matrix for entity orientation
    */
   _renderTransparentSurfaces(clmodel, e, viewMatrix) {
@@ -507,7 +564,8 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushVertexAttributes(program, 0);
 
     // Setup uniforms
-    gl.uniform1f(program.uAlpha, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
+    gl.uniform1f(program.uAlpha, e.alpha);
 
     // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, false);
@@ -517,14 +575,13 @@ export class BrushModelRenderer extends ModelRenderer {
 
     gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
 
-    // Enable blending and disable depth writing for transparent surfaces
+    // Enable blending for transparent surfaces (depth writes stay ON so
+    // the Z-buffer correctly orders transparent geometry against each other)
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
 
     // Render each texture chain (only transparent ones)
     if (!clmodel.chains || clmodel.chains.length === 0) {
-      gl.depthMask(true);
       gl.disable(gl.BLEND);
       return;
     }
@@ -539,7 +596,7 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       // Only render transparent surfaces in this pass
-      if ((material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)) {
+      if (e.alpha === 1.0 && ((material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT))) {
         continue;
       }
 
@@ -567,16 +624,14 @@ export class BrushModelRenderer extends ModelRenderer {
       R.c_brush_draws++;
     }
 
-    // Restore depth writing and disable blending
-    gl.depthMask(true);
     gl.disable(gl.BLEND);
   }
 
   /**
    * Render turbulent (water, slime, lava, teleport) brush surfaces
    * @private
-   * @param {import('../../common/model/BSP.mjs').BrushModel} clmodel The brush model
-   * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
+   * @param {BrushModel} clmodel The brush model
+   * @param {ClientEdict} e The entity
    * @param {number[]} viewMatrix Rotation matrix for entity orientation
    */
   _renderTurbulentSurfaces(clmodel, e, viewMatrix) {
@@ -585,6 +640,7 @@ export class BrushModelRenderer extends ModelRenderer {
     const program = GL.UseProgram('turbulent');
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
     gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
+    gl.uniform1f(program.uAlpha, 1.0);
     gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
 
     // Bind common textures
@@ -637,7 +693,7 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Prepare brush model for rendering (build display lists, upload to GPU).
    * Handles both world models (using leafs) and entity models (using chains).
-   * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to prepare
+   * @param {BrushModel} model The brush model to prepare
    * @param {boolean} [isWorldModel] True if this is the actual world map (model index 1)
    */
   prepareModel(model, isWorldModel = false) {
@@ -666,7 +722,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Build display lists for regular brush entities (doors, platforms, etc).
    * Uses chains structure to group surfaces by texture.
    * @private
-   * @param {import('../../common/model/BSP.mjs').BrushModel} m The brush model
+   * @param {BrushModel} m The brush model
    */
   _buildBrushModelDisplayLists(m) {
     const cmds = [];
@@ -767,7 +823,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * Build display lists for the world model.
    * Uses leafs structure for visibility-based rendering.
    * @private
-   * @param {import('../../common/model/BSP.mjs').BrushModel} m The world model
+   * @param {BrushModel} m The world model
    */
   _buildWorldModelDisplayLists(m) {
     if (m.cmds !== null) {
@@ -936,7 +992,7 @@ export class BrushModelRenderer extends ModelRenderer {
   /**
    * Free GPU resources for this brush model.
    * Uses global `gl` from registry.
-   * @param {import('../../common/model/BSP.mjs').BrushModel} model The brush model to cleanup
+   * @param {BrushModel} model The brush model to cleanup
    */
   cleanupModel(model) {
     if (model.cmds) {
