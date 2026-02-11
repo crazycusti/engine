@@ -6,6 +6,7 @@ uniform vec3 uShadeLight;
 uniform vec3 uDynamicShadeLight;
 uniform float uTime;
 uniform sampler2D tTexture;
+uniform float uAlpha;
 
 varying vec2 vTexCoord;
 varying float vLightDot;
@@ -19,7 +20,7 @@ void main(void){
     texture.r * mix(1.0, vLightDot * uShadeLight.r + uAmbientLight.r + vDynamicLightDot * uDynamicShadeLight.r, texture.a),
     texture.g * mix(1.0, vLightDot * uShadeLight.g + uAmbientLight.g + vDynamicLightDot * uDynamicShadeLight.g, texture.a),
     texture.b * mix(1.0, vLightDot * uShadeLight.b + uAmbientLight.b + vDynamicLightDot * uDynamicShadeLight.b, texture.a),
-    1.0
+    uAlpha
   );
   gl_FragColor.r = pow(gl_FragColor.r, uGamma);
   gl_FragColor.g = pow(gl_FragColor.g, uGamma);
