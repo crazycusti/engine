@@ -32,9 +32,6 @@ export default class COM {
   static standard_quake = true;
   static modified = false;
 
-  /** @type {Function} */
-  static LittleLong = null; // set in COM.Init
-
   /** @type {Cvar} */
   static registered = null;
 
@@ -193,20 +190,6 @@ export default class COM {
   }
 
   static async Init() {
-    const swaptest = new ArrayBuffer(2);
-    const swaptestview = new Uint8Array(swaptest);
-    swaptestview[0] = 1;
-    swaptestview[1] = 0;
-    if ((new Uint16Array(swaptest))[0] === 1) { // CR: I’m pretty sure this is not useful in JavaScript at all
-      this.LittleLong = (function (l) {
-        return l;
-      });
-    } else {
-      this.LittleLong = (function (l) {
-        return (l >>> 24) + ((l & 0xff0000) >>> 8) + (((l & 0xff00) << 8) >>> 0) + ((l << 24) >>> 0);
-      });
-    }
-
     this.abortController = new AbortController();
 
     this.registered = new Cvar('registered', '0', Cvar.FLAG.READONLY, 'Set to 1, when not playing shareware.');

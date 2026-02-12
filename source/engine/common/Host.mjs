@@ -437,7 +437,7 @@ Host.HandleCrash = function(e) {
     return;
   }
   inHandleCrash = true;
-  Con.PrintError(e.name + ': ' + e.message + '\n');
+  Con.PrintError((e.name ?? e.constructor.name) + ': ' + e.message + '\n');
   eventBus.publish('host.crash', e);
   Sys.Quit();
 };

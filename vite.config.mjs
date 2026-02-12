@@ -27,7 +27,8 @@ function gameModulePreloadPlugin() {
           (chunk) =>
             chunk.type === 'chunk' &&
             chunk.facadeModuleId?.includes('/game/') &&
-            chunk.facadeModuleId?.endsWith('/main.mjs')
+            chunk.facadeModuleId?.endsWith('/main.mjs') &&
+            chunk.facadeModuleId?.endsWith('Worker.mjs'),
         );
 
         if (gameModuleChunks.length === 0) {
@@ -91,6 +92,15 @@ export default defineConfig(({ mode }) => ({
     minify: mode === 'production' ? 'esbuild' : false,
     reportCompressedSize: true,
     target: 'es2022',
+  },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'libs/worker-[name]-[hash].js',
+        chunkFileNames: 'libs/worker-[name]-[hash].js',
+      },
+    },
   },
   plugins: [
     gameModulePreloadPlugin(),

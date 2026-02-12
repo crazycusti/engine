@@ -66,6 +66,8 @@ class NodeWorker extends BaseWorker {
       console.error(`NodeWorker ${this.name} error: ${e.message}`);
 
       void this.shutdown();
+
+      Host.HandleCrash(e);
     });
   }
 
@@ -236,12 +238,17 @@ export default class Sys {
 
     const __dirname = import.meta.dirname + '/../..';
 
+    const distHeaders = (res) => {
+      res.set('Cross-Origin-Opener-Policy', 'same-origin');
+      res.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    };
+
     if (basepath !== '') {
-      app.use(basepath, express.static(join(__dirname + '/..', 'dist')));
+      app.use(basepath, express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
       app.use(basepath + '/data', express.static(join(__dirname + '/..', 'data')));
       app.use(basepath + '/source', express.static(join(__dirname + '/..', 'source')));
     } else {
-      app.use(express.static(join(__dirname + '/..', 'dist')));
+      app.use(express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
       app.use('/data', express.static(join(__dirname + '/..', 'data')));
       app.use('/source', express.static(join(__dirname + '/..', 'source')));
     }

@@ -295,7 +295,7 @@ class Sound {
       Sound._masterGain = Sound._context.createGain();
       Sound._underwaterFilter = Sound._context.createBiquadFilter();
       Sound._underwaterFilter.type = 'lowpass';
-      Sound._underwaterFilter.frequency.value = 22050;
+      Sound._underwaterFilter.frequency.value = 11025;
       Sound._underwaterFilter.Q.value = 0.7;
       Sound._masterGain.connect(Sound._underwaterFilter);
       Sound._underwaterFilter.connect(Sound._context.destination);
@@ -707,7 +707,7 @@ class Sound {
 
     // Underwater muffling via single lowpass toggle
     if (Sound._underwaterFilter) {
-      Sound._underwaterFilter.frequency.value = underwater ? 800 : 22050;
+      Sound._underwaterFilter.frequency.value = underwater ? 800 : 11025;
     }
 
     Sound._updateAmbientSounds();

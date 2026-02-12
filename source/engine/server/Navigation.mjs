@@ -1,4 +1,4 @@
-import sampleBSpline from '../../shared/BSpline.mjs';
+// import sampleBSpline from '../../shared/BSpline.mjs';
 import * as Def from '../../shared/Defs.mjs';
 import { Octree } from '../../shared/Octree.mjs';
 import Vector from '../../shared/Vector.mjs';
@@ -13,7 +13,8 @@ import { BaseWorker } from '../common/Sys.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
-/** @typedef {import('./Edict.mjs').ServerEntity} ServerEntity */
+
+/** @typedef {import('./Edict.mjs').BaseEntity} ServerEntity */
 
 let { CL, COM, Con, R, SV } = registry;
 

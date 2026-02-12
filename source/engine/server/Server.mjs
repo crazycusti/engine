@@ -30,8 +30,6 @@ eventBus.subscribe('registry.frozen', () => {
   PR = registry.PR;
 });
 
-/** @typedef {import('./Client.mjs').ServerClient} ServerClient */
-
 /**
  * @typedef {{
       fraction: number;
@@ -853,7 +851,11 @@ export default class SV {
    */
   static #setupClientDataFields() {
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_DYNAMIC)) {
+      console.assert('clientdataFields' in SV.server.edicts[1].entity, 'CAP_CLIENTDATA_DYNAMIC requires clientdataFields on PlayerEntity');
+
       const fields = SV.server.edicts[1].entity.clientdataFields;
+
+      console.assert(fields instanceof Array, 'clientdataFields must be an array');
 
       // Configure clientdata fields
       SV.server.clientdataFields.length = 0;

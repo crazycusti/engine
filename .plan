@@ -76,7 +76,8 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] BSP38 loader
 - [_] port physics code from Quake 2 (there are a bunch of fixes)
   - [_] fixing physics (walking over entities etc.)
-- [_] add PHS support to sound subsystem
+  - [_] rotating brushes
+- [_] add PHS support to sound subsystem and area portals
 - [_] PCX loader
 - [_] colormap.pcx support
 - [X] skybox renderer
@@ -112,6 +113,13 @@ Grouped by sections and then sorted by priority (more or less).
 - look into things like https://github.com/schteppe/cannon.js and https://github.com/kripken/ammo.js
 - play around with skybox support etc.
 - add IQM support
+
+### Proper multi-threading support
+
+- share resources across workers
+  - use SharedArrayBuffer to share data of files
+- communicate between components purely through messages
+- split server into its own worker
 
 ## Resources
 

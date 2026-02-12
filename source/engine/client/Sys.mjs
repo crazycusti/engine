@@ -4,6 +4,7 @@ import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
 import { BaseWorker } from '../common/Sys.mjs';
+import { SysError } from '../common/Errors.mjs';
 
 let { COM, Host, Key } = registry;
 
@@ -15,7 +16,7 @@ eventBus.subscribe('registry.frozen', () => {
 
 eventBus.subscribe('host.crash', (error) => {
   console.error(error);
-  document.getElementById('error').textContent = error.name + ': ' + error.message;
+  document.getElementById('error').textContent = (error.name ?? error.constructor.name) + ': ' + error.message;
   COM.Shutdown(); // abort all pending IO operations
 });
 
@@ -175,6 +176,17 @@ const eventHandlers = {
   },
 };
 
+/**
+ * Add new worker scripts here when creating additional workers.
+ * @type {Record<string, (name: string) => Worker>}
+ */
+const workerFactories = {
+  'server/DummyWorker.mjs': (name) =>
+    new Worker(new URL('../server/DummyWorker.mjs', import.meta.url), { name, type: 'module' }),
+  'server/NavigationWorker.mjs': (name) =>
+    new Worker(new URL('../server/NavigationWorker.mjs', import.meta.url), { name, type: 'module' }),
+};
+
 class WebWorker extends BaseWorker {
   #worker = /** @type {Worker} */ (null);
 
@@ -185,15 +197,25 @@ class WebWorker extends BaseWorker {
   }
 
   #initWorker() {
-    this.#worker = new Worker(`./source/engine/${this.name}`, {
-      name: this.name,
-      type: 'module',
-    });
+    const factory = workerFactories[this.name];
+
+    console.assert(factory, `No worker factory found for script "${this.name}". Make sure it's registered in workerFactories.`);
+
+    try {
+      this.#worker = factory(this.name);
+    } catch (e) {
+      console.error(`WebWorker ${this.name} failed to initialize:`, e);
+      throw new SysError(`WebWorker ${this.name}: failed to construct Worker: ${e.message}`);
+    }
 
     this.#worker.addEventListener('error', (e) => {
-      console.error(`WebWorker ${this.name} error: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
+      const detail = e?.message || e?.filename || '(no details)';
+
+      console.error(`WebWorker ${this.name} error: ${detail}`, e);
 
       void this.shutdown();
+
+      Host.HandleCrash(e);
     });
   }
 

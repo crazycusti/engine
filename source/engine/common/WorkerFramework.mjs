@@ -1,8 +1,9 @@
 import { eventBus, registry } from '../registry.mjs';
 import Mod from './Mod.mjs';
 import Sys from './Sys.mjs';
+import COM from './Com.mjs';
 
-class Con {
+class WorkerConsole {
   static Print(message) {
     WorkerFramework.Publish('worker.con.print', message);
   }
@@ -34,6 +35,10 @@ class WorkerSys extends Sys {
   }
 }
 
+class WorkerCOM extends COM {
+  // TODO: implement the COM stuff here for workers to share files etc.
+}
+
 /**
  * Worker Framework
  *
@@ -50,7 +55,7 @@ export default class WorkerFramework {
   static #InitRegistry(COM) {
     registry.isDedicatedServer = true;
     registry.isInsideWorker = true;
-    registry.Con = Con;
+    registry.Con = WorkerConsole;
     registry.Sys = WorkerSys;
     registry.COM = COM;
     registry.Mod = Mod;
@@ -68,9 +73,14 @@ export default class WorkerFramework {
     const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
 
     if (isNode) {
-      const { parentPort } = await import('node:worker_threads');
+      // Paths constructed at runtime so Vite's worker bundler cannot
+      // statically resolve them (it ignores @vite-ignore in its
+      // separate Rollup pass). These modules are Node.js-only.
+      const workerThreadsId = ['node', 'worker_threads'].join(':');
+      const { parentPort } = await import(/* @vite-ignore */ workerThreadsId);
       this.port = parentPort;
-      const comModule = await import('../server/Com.mjs');
+      const serverComId = ['..', 'server', 'Com.mjs'].join('/');
+      const comModule = await import(/* @vite-ignore */ serverComId);
       COM = comModule.default;
 
       this.port.on('message', ({ event, args }) => {
@@ -78,8 +88,7 @@ export default class WorkerFramework {
       });
     } else {
       this.port = self;
-      const comModule = await import('./Com.mjs');
-      COM = comModule.default;
+      COM = WorkerCOM;
 
       this.port.addEventListener('message', (e) => {
         const { event, args } = e.data;
