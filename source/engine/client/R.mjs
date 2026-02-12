@@ -688,51 +688,6 @@ R.DrawEntitiesOnList = function() {
 };
 
 /**
- * Render transparent brush entities with alpha blending (pass 2)
- */
-R.DrawTransparentEntitiesOnList = function() {
-  if (R.drawentities.value === 0) {
-    return;
-  }
-
-  // Group entities by model type
-  const entitiesByType = new Map();
-  for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-    if (entity.model === null || entity.alpha === 0 || entity.alpha === 1.0) {
-      continue;
-    }
-
-    const modelType = entity.model.type;
-    if (!entitiesByType.has(modelType)) {
-      entitiesByType.set(modelType, []);
-    }
-    entitiesByType.get(modelType).push(entity);
-  }
-
-  // Pass 2: Transparent models only
-
-  for (const [modelType, entities] of entitiesByType) {
-    if (modelType === Mod.type.sprite) {
-      continue; // Sprites are drawn in pass 1
-    }
-
-    const renderer = modelRendererRegistry.getRenderer(modelType);
-
-    renderer.setupRenderState(2);
-    for (const entity of entities) {
-      if (entity.alpha === 1.0) {
-        continue; // Opaque entities are drawn in pass 0
-      }
-
-      renderer.render(entity.model, entity, 2);
-    }
-    renderer.cleanupRenderState(2);
-    GL.StreamFlush();
-
-  }
-};
-
-/**
  * Render all transparent geometry (world brush surfaces + entities) in
  * back-to-front sorted order with depth writes disabled.
  * This ensures transparent surfaces blend correctly regardless of type.
@@ -757,7 +712,7 @@ R._renderTransparentsSorted = function(worldEntity) {
   // Collect transparent entities with distances
   if (R.drawentities.value !== 0) {
     for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-      if (entity.model === null || entity.alpha === 0 || entity.alpha === 1.0) {
+      if (entity.model === null || entity.alpha === 0) {
         continue;
       }
       if (entity.model.type === Mod.type.sprite) {
@@ -791,7 +746,7 @@ R._renderTransparentsSorted = function(worldEntity) {
         brushRenderer.beginWorldTransparentPass(worldmodel);
         worldPassActive = true;
       }
-      brushRenderer.renderWorldTransparentLeaf(worldmodel, item.data);
+      brushRenderer.renderWorldTransparentLeaf(worldmodel, /** @type {Node} */ (item.data));
     } else {
       // Transparent entity — end world pass if active (shader switch)
       if (worldPassActive) {

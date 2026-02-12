@@ -219,9 +219,11 @@ export class BSP29Loader extends ModelLoader {
       const name = Q.memstr(new Uint8Array(buf, absofs, 16));
       const cleanName = name.replace(/^\+[0-9a-j]/, ''); // no anim prefix
 
-      const tx = materials[cleanName] || new QuakeMaterial(name, view.getUint32(absofs + 16, true), view.getUint32(absofs + 20, true));
+      if (!materials[cleanName]) {
+        materials[cleanName] = new QuakeMaterial(name, view.getUint32(absofs + 16, true), view.getUint32(absofs + 20, true));
+      }
 
-      materials[cleanName] = tx;
+      const tx = materials[cleanName];
 
       let glt = null;
 

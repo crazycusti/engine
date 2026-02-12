@@ -309,13 +309,15 @@ export class ClientMessages {
       throw new HostError('CL.ParsePlayerinfo: num > maxclients');
     }
 
-    const state = this.playerstates[num] || new ClientPlayerState(CL.pmove.newPlayerMove());
+    if (!this.playerstates[num]) {
+      this.playerstates[num] = new ClientPlayerState(CL.pmove.newPlayerMove());
+    }
+
+    const state = this.playerstates[num];
 
     state.number = num;
     state.readFromMessage();
     state.angles.set(state.command.angles);
-
-    this.playerstates[num] = state;
   }
 
   clear() {

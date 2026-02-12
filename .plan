@@ -139,6 +139,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+
 ### 2026-02-11
 
 - added alpha on entities for semi-transparent rendering of things
@@ -146,6 +147,7 @@ Grouped by sections and then sorted by priority (more or less).
 - cleaned out a bunch of verbose console messages
 - version bump, because it’s overdue lol
 - need to implement _wateralpha, _lavaalpha etc.
+- nastiest bug ever: make sure to free Web Audio resources, otherwise things explode
 
 ### 2026-02-09
 

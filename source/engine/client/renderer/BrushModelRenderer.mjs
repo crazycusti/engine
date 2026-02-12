@@ -596,7 +596,9 @@ export class BrushModelRenderer extends ModelRenderer {
       }
 
       // Only render transparent surfaces in this pass
-      if (e.alpha === 1.0 && ((material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT))) {
+      if (e.alpha === 1.0 && (
+          (material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)
+        )) {
         continue;
       }
 
