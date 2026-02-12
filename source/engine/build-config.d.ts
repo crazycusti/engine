@@ -16,9 +16,9 @@ export interface BuildConfig {
 /**
  * Runtime URL functions that can be passed to the engine
  */
-export interface URLFunctions {
-  /** Function that returns the signaling server URL */
-  signalingURL?: () => string;
-  /** Function that returns CDN URL for a file */
-  cdnURL?: (filename: string, gameDir: string) => string;
+export interface URLs {
+  /** Signaling server URL */
+  signalingURL?: string;
+  /** CDN URL for a file */
+  cdnURL?: string;
 };

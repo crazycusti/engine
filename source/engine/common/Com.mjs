@@ -259,8 +259,12 @@ export default class COM {
       gameDir = this.GetGamedir();
     }
 
-    if (registry.urlFns && typeof registry.urlFns.cdnURL === 'function') {
-      return registry.urlFns.cdnURL(filename, gameDir);
+    const cdnURLPatternValue = registry.urls?.cdnURL;
+
+    if (cdnURLPatternValue) {
+      return cdnURLPatternValue
+        .replace('{filename}', filename)
+        .replace('{gameDir}', gameDir);
     }
 
     return `${location.protocol}//${location.host}/qfs/${filename}`;

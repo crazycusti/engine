@@ -11,18 +11,26 @@ eventBus.subscribe('registry.frozen', () => {
 
 export default class WorkerManager {
   static Init() {
-    eventBus.subscribe('com.ready', () => {
-      // console.log('WorkerManager: Spawning dummy worker for initialization test.');
+    // eventBus.subscribe('com.ready', () => {
+    //   console.log('WorkerManager: Spawning dummy worker for initialization test.');
 
-      // const worker = this.SpawnWorker('server/DummyWorker.mjs', ['worker.test', 'worker.busy', 'worker.error']);
+    //   const worker = this.SpawnWorker('server/DummyWorker.mjs', ['worker.test', 'worker.busy', 'worker.error']);
 
-      // void worker.shutdown();
-    });
+    //   const sab = new SharedArrayBuffer(4);
+
+    //   new Uint8Array(sab)[0] = 42;
+
+    //   setTimeout(() => {
+    //     eventBus.publish('worker.test', sab);
+    //   }, 1000);
+
+    //   // void worker.shutdown();
+    // });
   }
 
   /**
    * Spawns a worker thread and sets up event forwarding.
-   * @param {string} script Path to worker script
+   * @param {string} script Path to worker script (MUST BE REGISTERED IN client/Sys.mjs, see workerFactories!)
    * @param {string[]} events list of events the worker wants to subscribe to
    * @returns {BaseWorker} worker thread wrapper
    */
@@ -86,6 +94,7 @@ export default class WorkerManager {
       event: 'worker.framework.init',
       args: [
         [COM.searchpaths, COM.gamedir, COM.game], // COM
+        registry.urls, // urls
       ],
     });
 

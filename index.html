@@ -62,8 +62,8 @@
 			import('./source/engine/main-browser.mjs').then((module) => {
 				// Build configuration, these variables are replaced at build time
 				// NOTE: These are bare identifiers that get replaced by Vite’s define
-				const signalingURLValue = __BUILD_SIGNALING_URL__;
-				const cdnURLPatternValue = __BUILD_CDN_URL_PATTERN__;
+				const signalingURL = __BUILD_SIGNALING_URL__;
+				const cdnURL = __BUILD_CDN_URL_PATTERN__;
 
 				/** @type {BuildConfig} */
 				const buildConfig = {
@@ -72,16 +72,6 @@
 					commitHash: __BUILD_COMMIT_HASH__,
 					gameDir: __BUILD_GAME_DIR__,
 				};
-
-				const cdnURL = cdnURLPatternValue
-					? (filename, gameDir) => {
-						return cdnURLPatternValue
-							.replace('{filename}', filename)
-							.replace('{gameDir}', gameDir);
-					}
-					: null;
-
-				const signalingURL = signalingURLValue ? () => signalingURLValue : null;
 
 				return module.default.Launch({
 					signalingURL,

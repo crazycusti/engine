@@ -659,8 +659,8 @@ export class WebRTCDriver extends BaseDriver {
     // Try to connect to local signaling server first, fallback to same host
     this.signalingUrl = `${protocol}//${location.hostname}:8787/signaling`;
 
-    if (registry.urlFns && typeof registry.urlFns.signalingURL === 'function') {
-      this.signalingUrl = registry.urlFns.signalingURL();
+    if (registry.urls && typeof registry.urls.signalingURL === 'function') {
+      this.signalingUrl = registry.urls.signalingURL();
     }
 
     this.initialized = true;

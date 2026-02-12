@@ -17,7 +17,7 @@ import type _Sbar from './client/Sbar.mjs';
 import type _S from './client/Sound.mjs';
 import type _M from './client/Menu.mjs';
 import type _IN from './client/IN.mjs';
-import { BuildConfig, URLFunctions } from './build-config';
+import { BuildConfig, URLs } from './build-config';
 
 type Con = typeof _Con;
 type Com = typeof _Com;
@@ -63,8 +63,8 @@ interface Registry {
   M: M | null;
 
   WebSocket: WebSocket | null;
-  urlFns: URLFunctions | null;
 
+  urls: URLs | null;
   buildConfig: BuildConfig | null;
 };
 

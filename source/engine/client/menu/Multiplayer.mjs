@@ -76,7 +76,7 @@ export default class MultiplayerMainMenu extends MenuPage {
 
   activate() {
     super.activate();
-    if (registry.urlFns?.signalingURL) {
+    if (registry.urls?.signalingURL) {
       void this.refreshSessions();
     }
   }
@@ -101,7 +101,7 @@ export default class MultiplayerMainMenu extends MenuPage {
     this.items.push(new Label({ label: 'Finding sessions...' }));
 
     try {
-      const signalingUrl = new URL(registry.urlFns.signalingURL());
+      const signalingUrl = new URL(registry.urls.signalingURL);
       const protocol = signalingUrl.protocol === 'wss:' ? 'https:' : 'http:';
       const url = `${protocol}//${signalingUrl.host}/list-servers`;
 

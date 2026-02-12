@@ -21,14 +21,14 @@ import IN from './client/IN.mjs';
 
 export default class EngineLauncher {
   /**
-   * @param {typeof registry.urlFns} urlFns URL builder functions
+   * @param {typeof registry.urls} urls URL builder functions
    * @param {typeof registry.buildConfig} buildConfig build information from Vite
    * @returns {Promise<import("./registry.mjs").registry>} engine registry
    */
-  static async Launch(urlFns, buildConfig) {
+  static async Launch(urls, buildConfig) {
     console.log('Launching engine in browser mode...');
 
-    registry.urlFns = urlFns;
+    registry.urls = urls;
     registry.buildConfig = buildConfig;
 
     // set some global flags

@@ -60,6 +60,8 @@ export default class WorkerFramework {
     registry.COM = COM;
     registry.Mod = Mod;
 
+    registry.urls = {}; // will be set later
+
     eventBus.publish('registry.frozen');
   }
 
@@ -99,10 +101,12 @@ export default class WorkerFramework {
     this.#InitRegistry(COM);
     this.#InitModules();
 
-    eventBus.subscribe('worker.framework.init', (comParams) => {
+    eventBus.subscribe('worker.framework.init', (comParams, urls) => {
       COM.searchpaths = comParams[0];
       COM.gamedir = comParams[1];
       COM.game = comParams[2];
+
+      Object.assign(registry.urls, urls);
     });
 
     console.debug('Worker Framework initialized.');
