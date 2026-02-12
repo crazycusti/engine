@@ -142,8 +142,8 @@ export class CommonEngineAPI {
     return new Cvar(name, value, flags | Cvar.FLAG.GAME, description);
   }
 
-  static ConsolePrint(msg) {
-    Con.Print(msg);
+  static ConsolePrint(msg, color = new Vector(1.0, 1.0, 1.0)) {
+    Con.Print(msg, color);
   }
 
   static ConsoleWarning(msg) {

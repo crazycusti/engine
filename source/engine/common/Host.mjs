@@ -485,7 +485,7 @@ Host.Init = async function() {
     await R.Init();
     await M.Init();
     await CL.Init();
-    await SCR.Init();
+    SCR.Init();
     CDAudio.Init();
 
     if (!CL.gameCapabilities.includes(gameCapabilities.CAP_HUD_INCLUDES_SBAR)) {

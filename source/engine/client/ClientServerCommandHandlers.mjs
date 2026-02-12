@@ -309,7 +309,9 @@ function parseServerCvars() {
     CL.cls.serverInfo[name] = value;
 
     if (CL.cls.signon === 4) {
-      Con.Print(`"${name}" changed to "${value}"\n`);
+      if (CL.state.maxclients > 1) { // don’t bother printing cvar changes in single player
+        Con.Print(`"${name}" changed to "${value}"\n`);
+      }
       eventBus.publish('client.server-info.updated', name, value);
     }
 
@@ -629,7 +631,7 @@ function handlePrint() {
 function handleCenterPrint() {
   const string = NET.message.readString();
   SCR.CenterPrint(string);
-  Con.Print(string + '\n');
+  Con.Print('\x03' + string + '\n'); // TODO: have a better system for this
 }
 
 /**

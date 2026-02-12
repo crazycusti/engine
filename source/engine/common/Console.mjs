@@ -94,10 +94,12 @@ export default class Con {
   }
 
   static Print(msg, color = new Vector(1.0, 1.0, 1.0)) {
+    let doNotNotify = false;
+
     Con.backscroll = 0;
 
     // CR: handle legacy color codes at the start of the message
-    if (msg.charCodeAt(0) <= 2) {
+    if (msg.charCodeAt(0) <= 3) {
       switch (msg.charCodeAt(0)) {
         case 1:
           color.set(ClientEngineAPI.IndexToRGB(47));
@@ -105,12 +107,15 @@ export default class Con {
         case 2:
           color.set(ClientEngineAPI.IndexToRGB(95));
           break;
+        case 3: // QuakeShack only
+          doNotNotify = true;
+          break;
       }
       msg = msg.substring(1);
     }
     for (let i = 0; i < msg.length; i++) {
       if (!Con.text[Con.current]) {
-        Con.text[Con.current] = { text: '', time: Host.realtime || 0, color };
+        Con.text[Con.current] = { text: '', time: Host.realtime || 0, color, doNotNotify };
       }
       if (msg.charCodeAt(i) === 10) {
         const line = Con.text[Con.current].text;
@@ -164,14 +169,18 @@ export default class Con {
 
   static DrawNotify() {
     const width = (VID.width / 16) - 2;
-    let i = Con.text.length - 4; let v = 0;
+
+    let i = Con.text.length - 4, v = 0;
+
     if (i < 0) {
       i = 0;
     }
+
     for (; i < Con.text.length; i++) {
-      if ((Host.realtime - Con.text[i].time) > Con.notifytime.value) {
+      if (Con.text[i].doNotNotify || (Host.realtime - Con.text[i].time) > Con.notifytime.value) {
         continue;
       }
+
       Draw.String(8, v, Con.text[i].text.substring(0, width), 2.0, Con.text[i].color);
       v += 16;
     }
