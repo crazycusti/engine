@@ -95,10 +95,12 @@ You can deploy the built frontend code to a CDN such as Cloudflare and skip the 
 You can set a custom URL to serve the assets like this:
 
 ```sh
-VITE_CDN_URL_PATTERN="https://cdn.example.net/{gameDir}/{filename}"
+VITE_CDN_URL_PATTERN="https://cdn{shard}.example.net/{gameDir}/{filename}"
 ```
 
 However, it’s not necessary to provide a different URL, per default it will try to load files from `/qfs/{filename}`. You can skip the `{gameDir}` part, if you only want to serve one mod or the original game (`id1`).
+
+Also `{shard}` is not required, but highly recommended to speed up fetching assets.
 
 Next run `npm run build:production` to build for production.
 
