@@ -263,6 +263,7 @@ export default class COM {
 
     if (cdnURLPatternValue) {
       return cdnURLPatternValue
+        .replace('{shard}', Math.floor(Math.random() * 4 + 1).toFixed(0))
         .replace('{filename}', filename)
         .replace('{gameDir}', gameDir);
     }
