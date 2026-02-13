@@ -321,8 +321,8 @@ export class ServerMessages {
   /**
    * Writes delta between two entity states to the message.
    * @param {SzBuffer} msg The message to write to
-   * @param {import('./EntityState.mjs').EntityState} from The previous entity state
-   * @param {import('./EntityState.mjs').EntityState} to The new entity state
+   * @param {ServerEntityState} from The previous entity state
+   * @param {ServerEntityState} to The new entity state
    * @returns {boolean} true if any data was written, false otherwise
    */
   writeDeltaEntity(msg, from, to) {

@@ -196,14 +196,26 @@ NET.Init = function() {
   }
 
   if (!registry.isDedicatedServer) {
-    eventBus.subscribe('server.spawned', () => {
-      setTimeout(() => {
-        if (!NET.listening) {
-          return;
-        }
+    const Key = registry.Key; // client code path
 
-        Con.PrintSuccess('Server is now listening for connections!\nType in "invite" to get a shareable link.\n');
-      }, 3000);
+    eventBus.subscribe('server.spawned', async () => {
+      await Q.sleep(3000); // Wait a bit to let the server start up and print the listen address
+
+      if (!NET.listening) {
+        return;
+      }
+
+      Con.PrintSuccess('Online multiplayer game has been created!\n');
+
+      await Q.sleep(2000);
+
+      const key = Key.BindingToString('invite');
+
+      if (key) {
+        Con.Print(`Press "${key}" to invite others.\n`);
+      } else {
+        Con.Print('Use "invite" command to print the invite message.\n');
+      }
     });
   }
 

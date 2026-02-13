@@ -197,6 +197,16 @@ Key.Message = function(key) {
   Key.chat_buffer = Key.chat_buffer + String.fromCharCode(key);
 };
 
+Key.BindingToString = function(binding) {
+  const keynum = Key.bindings.indexOf(binding);
+
+  if (keynum === -1) {
+    return null;
+  }
+
+  return Key.KeynumToString(keynum);
+};
+
 Key.StringToKeynum = function(str) {
   if (str.length === 1) {
     return str.charCodeAt(0);

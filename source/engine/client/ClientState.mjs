@@ -156,7 +156,7 @@ class ClientRuntimeState {
   latency = 0.0;
   last_received_message = 0.0;
   viewentity = 0;
-  /** @type {ClientEdict|null} */
+  /** @type {ClientEdict|null} view model reference (TODO: rename to viewmodel) */
   viewent = null;
   cdtrack = 0;
   looptrack = 0;

@@ -206,9 +206,9 @@ SCR.SizeDown_f = function() {
 
 SCR.disableCrosshair = false;
 
-SCR.Init = async function() {
+SCR.Init = function() {
   SCR.fov = new Cvar('fov', '90', Cvar.FLAG.CHEAT); // TODO: move to R?
-  SCR.viewsize = new Cvar('viewsize', '100', Cvar.FLAG.ARCHIVE);
+  SCR.viewsize = new Cvar('viewsize', '120', Cvar.FLAG.ARCHIVE);
   SCR.conspeed = new Cvar('scr_conspeed', '300');
   SCR.showturtle = new Cvar('showturtle', '0');
   SCR.showpause = new Cvar('showpause', '1');

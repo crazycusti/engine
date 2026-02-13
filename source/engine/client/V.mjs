@@ -394,6 +394,17 @@ V.CalcRefdef = function () { // TODO: Client
     view.frame = CL.state.stats[Def.stat.weaponframe];
   }
 
+  // allow lerping viewmodel by heuristic
+  if (view.frame > 0) {
+    view.nextthink = ent.nextthink;
+    view.framePrevious = view.frame - 1;
+    view.frameTime = ent.frameTime;
+  } else {
+    view.nextthink = -1;
+    view.framePrevious = null;
+    view.frameTime = 0.0;
+  }
+
   R.refdef.viewangles.add(CL.state.punchangle);
 
   if ((CL.state.onground === true) && ((ent/*lerp*/.origin[2] - V.oldz) > 0.0)) {
