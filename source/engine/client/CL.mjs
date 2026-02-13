@@ -15,14 +15,13 @@ import ClientLifecycle from './ClientLifecycle.mjs';
 // import { materialFlags, PBRMaterial, QuakeMaterial } from './renderer/Materials.mjs';
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
-let { Con, Draw, Host, R, S, Sbar } = registry;
+let { Con, Draw, Host, S, Sbar } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   Con = registry.Con;
   Draw = registry.Draw;
   Host = registry.Host;
   S = registry.S;
-  R = registry.R;
   Sbar = registry.Sbar;
 });
 
@@ -107,6 +106,14 @@ export default class CL {
   };
 
   static async Init() {
+    eventBus.subscribe('server.spawning', () => {
+      CL.SetConnectingStep(1, 'Spawning server');
+    });
+
+    eventBus.subscribe('server.spawned', () => {
+      CL.SetConnectingStep(3, 'Spawning server');
+    });
+
     return ClientLifecycle.init();
   }
 
@@ -304,7 +311,7 @@ export default class CL {
   };
 
   static Draw() { // public, called by SCR.js // FIXME: maybe put that into M?, called by SCR
-    if (this.cls.connecting !== null && this.cls.state !== Def.clientConnectionState.disconnected && !this.cls.changelevel) {
+    if (this.cls.connecting !== null /* && this.cls.state !== Def.clientConnectionState.disconnected */ && !this.cls.changelevel) {
       const x0 = 32, y0 = 32;
       Draw.BlackScreen();
       Draw.String(x0, y0, 'Connecting', 2.0);

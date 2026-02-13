@@ -195,19 +195,29 @@ NET.Init = function() {
     Cmd.AddCommand('invite', InviteCommand);
   }
 
-  if (!registry.isDedicatedServer) {
+  if (!registry.isDedicatedServer) { // TODO: move this to the client code path, nothing to do with networking
     const Key = registry.Key; // client code path
 
     eventBus.subscribe('server.spawned', async () => {
-      await Q.sleep(3000); // Wait a bit to let the server start up and print the listen address
+      await Q.sleep(5000);
 
       if (!NET.listening) {
         return;
       }
 
       Con.PrintSuccess('Online multiplayer game has been created!\n');
+    });
 
-      await Q.sleep(2000);
+    eventBus.subscribe('client.signon', async (signon) => {
+      if (signon !== 4) {
+        return;
+      }
+
+      await Q.sleep(5000);
+
+      if (!NET.listening) {
+        return;
+      }
 
       const key = Key.BindingToString('invite');
 

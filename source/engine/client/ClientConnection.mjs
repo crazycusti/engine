@@ -9,10 +9,9 @@ import * as Def from '../common/Def.mjs';
 import { QSocket } from '../network/NetworkDrivers.mjs';
 import { parseServerMessage as parseServerCommandMessage } from './ClientServerCommandHandlers.mjs';
 
-let { CL, Con, Host, IN, Mod, NET, SCR, S, SV } = registry;
+let { Con, Host, IN, Mod, NET, SCR, S, SV } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
-  CL = registry.CL;
   Con = registry.Con;
   Host = registry.Host;
   IN = registry.IN;
