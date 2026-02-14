@@ -5,6 +5,7 @@ import GL from '../GL.mjs';
 import { materialFlags } from './Materials.mjs';
 import { BrushModel, Node } from '../../common/model/BSP.mjs';
 import { ClientEdict } from '../ClientEntities.mjs';
+import Mesh from './Mesh.mjs';
 
 let { CL, Host, R } = registry;
 
@@ -813,7 +814,7 @@ export class BrushModelRenderer extends ModelRenderer {
     }
 
     // Calculate tangents and bitangents for PBR normal mapping
-    R.CalculateTangentBitangents(cmds, cutoff);
+    Mesh.CalculateTangentBitangents(cmds, cutoff);
 
     // Upload to GPU
     m.cmds = gl.createBuffer();
@@ -951,7 +952,7 @@ export class BrushModelRenderer extends ModelRenderer {
     }
 
     // Calculate tangents and bitangents for PBR normal mapping
-    R.CalculateTangentBitangents(cmds, cutoff);
+    Mesh.CalculateTangentBitangents(cmds, cutoff);
 
     // Upload to GPU
     m.cmds = gl.createBuffer();
