@@ -1,4 +1,5 @@
 import Vector from '../../shared/Vector.mjs';
+import Key from '../client/Key.mjs';
 import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -909,6 +910,17 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get width() { return VID.width; },
     get height() { return VID.height; },
     get pixelRatio() { return VID.pixelRatio; },
+  };
+
+  static Key = {
+    /**
+     * Gets the string representation of a key binding, e.g. "+attack" -> "mouse1"
+     * @param {string} binding key binding string
+     * @returns {string|null} string representation of the key binding, or null if not found
+     */
+    getKeyForBinding(binding) {
+      return Key.BindingToString(binding);
+    },
   };
 
   static SCR = {

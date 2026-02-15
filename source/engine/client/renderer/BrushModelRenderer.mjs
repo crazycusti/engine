@@ -422,6 +422,12 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform1f(program.uTime, Host.realtime);
     gl.uniform1f(program.uAlpha, 1.0);
 
+    // Disable depth writes so turbulent surfaces don't contaminate the depth
+    // texture. The fog volume shader samples that texture to compute fog
+    // thickness — if water/slime depths were included, fog behind or inside
+    // liquid surfaces would be incorrectly clipped.
+    gl.depthMask(false);
+
     // Setup vertex attributes
     this._setupBrushVertexAttributes(program, clmodel.waterchain);
 
@@ -459,6 +465,7 @@ export class BrushModelRenderer extends ModelRenderer {
    */
   endWorldTurbulentPass() {
     gl.disable(gl.BLEND);
+    gl.depthMask(true);
     this._worldTurbulentProgram = null;
     this._worldTurbulentModel = null;
   }
@@ -1093,6 +1100,39 @@ export class BrushModelRenderer extends ModelRenderer {
   }
 
   /**
+   * Expand a leaf's bounding box to contain all vertices of a surface.
+   * BSP leaf bounds represent only the leaf's convex volume, but surfaces
+   * assigned via marksurfaces can extend beyond it. Without expansion,
+   * frustum culling incorrectly rejects leafs whose geometry is visible.
+   * @private
+   * @param {Node} leaf The leaf whose bounds to expand
+   * @param {Array<number[]>} verts The surface's vertex array
+   */
+  _expandLeafBoundsForSurface(leaf, verts) {
+    for (let v = 0; v < verts.length; v++) {
+      const vert = verts[v];
+      if (vert[0] < leaf.mins[0]) {
+        leaf.mins[0] = vert[0];
+      }
+      if (vert[1] < leaf.mins[1]) {
+        leaf.mins[1] = vert[1];
+      }
+      if (vert[2] < leaf.mins[2]) {
+        leaf.mins[2] = vert[2];
+      }
+      if (vert[0] > leaf.maxs[0]) {
+        leaf.maxs[0] = vert[0];
+      }
+      if (vert[1] > leaf.maxs[1]) {
+        leaf.maxs[1] = vert[1];
+      }
+      if (vert[2] > leaf.maxs[2]) {
+        leaf.maxs[2] = vert[2];
+      }
+    }
+  }
+
+  /**
    * Build display lists for the world model.
    * Uses leafs structure for visibility-based rendering.
    * @private
@@ -1126,6 +1166,7 @@ export class BrushModelRenderer extends ModelRenderer {
           for (let l = 0; l < surf.styles.length; l++) {
             styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
           }
+          this._expandLeafBoundsForSurface(leaf, surf.verts);
           chain[2] += surf.verts.length;
           for (let l = 0; l < surf.verts.length; l++) {
             const vert = surf.verts[l];
@@ -1166,6 +1207,7 @@ export class BrushModelRenderer extends ModelRenderer {
           if (surf.texture !== i) {
             continue;
           }
+          this._expandLeafBoundsForSurface(leaf, surf.verts);
           chain[1] += surf.verts.length;
           for (let l = 0; l < surf.verts.length; l++) {
             const vert = surf.verts[l];
@@ -1200,6 +1242,7 @@ export class BrushModelRenderer extends ModelRenderer {
           for (let l = 0; l < surf.styles.length; l++) {
             styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
           }
+          this._expandLeafBoundsForSurface(leaf, surf.verts);
           chain[2] += surf.verts.length;
           for (let l = 0; l < surf.verts.length; l++) {
             const vert = surf.verts[l];

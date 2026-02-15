@@ -314,6 +314,10 @@ export default class CL {
 
     if (this.cls.changelevel || this.cls.connecting) {
       Draw.BlackScreen();
+
+      if (this.state.gameAPI) {
+        this.state.gameAPI.drawLoading();
+      }
     }
 
     if (this.cls.changelevel) {

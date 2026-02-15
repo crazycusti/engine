@@ -690,9 +690,15 @@ R.DrawEntitiesOnList = function() {
 };
 
 /**
- * Render fog volumes and world turbulent surfaces interleaved in
- * back-to-front order. Items farther from the camera are drawn first so
- * nearer semi-transparent geometry blends correctly on top.
+ * Render world turbulent surfaces and fog volumes in the correct order.
+ *
+ * Turbulent surfaces must render BEFORE fog volumes because fog volumes
+ * are screen-space compositing effects (depth test disabled, depth texture
+ * sampled). If a turbulent surface renders after a co-located fog volume,
+ * it overwrites the fog with its own color (alpha = 1.0).
+ *
+ * Both turbulents and fog volumes are individually sorted back-to-front
+ * (farthest first) for correct blending among items of the same type.
  *
  * When no fog volumes exist (or post-process is unavailable), this falls
  * back to the simple sequential turbulent pass.
@@ -719,69 +725,29 @@ R._renderFogAndTurbulentsSorted = function(worldEntity) {
     return;
   }
 
-  // Collect both fog volumes and turbulent leaves with distances
   const vieworg = R.refdef.vieworg;
 
-  /** @type {Array<{dist: number, kind: number, data: Node|import('../common/model/BSP.mjs').FogVolumeInfo}>} */
-  const items = [];
-
-  // kind 0 = turbulent leaf, kind 1 = fog volume
+  // Phase 1: Render all turbulent leaves (back-to-front)
   const turbulentLeaves = brushRenderer.getWorldTurbulentLeaves(worldmodel, vieworg);
-  for (let i = 0; i < turbulentLeaves.length; i++) {
-    items.push({ dist: turbulentLeaves[i].dist, kind: 0, data: turbulentLeaves[i].leaf });
-  }
-
-  const fogItems = brushRenderer.getFogVolumeItems(worldmodel, vieworg);
-  for (let i = 0; i < fogItems.length; i++) {
-    items.push({ dist: fogItems[i].dist, kind: 1, data: fogItems[i].fogVolume });
-  }
-
-  if (items.length === 0) {
-    return;
-  }
-
-  // Sort back-to-front (farthest first)
-  items.sort((a, b) => b.dist - a.dist);
-
-  // Render interleaved, tracking which pass is currently active to
-  // minimise GL state switches between turbulent and fog shaders.
-  let turbulentPassActive = false;
-  let fogPassActive = false;
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-
-    if (item.kind === 0) {
-      // Turbulent leaf — end fog pass if active (shader switch)
-      if (fogPassActive) {
-        brushRenderer.endFogVolumePass();
-        fogPassActive = false;
-      }
-      if (!turbulentPassActive) {
-        brushRenderer.beginWorldTurbulentPass(worldmodel);
-        turbulentPassActive = true;
-      }
-      brushRenderer.renderWorldTurbulentLeaf(worldmodel, /** @type {Node} */ (item.data));
-    } else {
-      // Fog volume — end turbulent pass if active (shader switch)
-      if (turbulentPassActive) {
-        brushRenderer.endWorldTurbulentPass();
-        turbulentPassActive = false;
-      }
-      if (!fogPassActive) {
-        brushRenderer.beginFogVolumePass(worldmodel);
-        fogPassActive = true;
-      }
-      brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (item.data));
+  if (turbulentLeaves.length > 0) {
+    turbulentLeaves.sort((a, b) => b.dist - a.dist);
+    brushRenderer.beginWorldTurbulentPass(worldmodel);
+    for (let i = 0; i < turbulentLeaves.length; i++) {
+      brushRenderer.renderWorldTurbulentLeaf(worldmodel, turbulentLeaves[i].leaf);
     }
-  }
-
-  // Clean up whichever pass is still active
-  if (turbulentPassActive) {
     brushRenderer.endWorldTurbulentPass();
   }
-  if (fogPassActive) {
-    brushRenderer.endFogVolumePass();
+
+  // Phase 2: Render all fog volumes on top (back-to-front)
+  const fogItems = brushRenderer.getFogVolumeItems(worldmodel, vieworg);
+  if (fogItems.length > 0) {
+    fogItems.sort((a, b) => b.dist - a.dist);
+    if (brushRenderer.beginFogVolumePass(worldmodel)) {
+      for (let i = 0; i < fogItems.length; i++) {
+        brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (fogItems[i].fogVolume));
+      }
+      brushRenderer.endFogVolumePass();
+    }
   }
 };
 
