@@ -709,7 +709,7 @@ R._renderFogAndTurbulentsSorted = function(worldEntity) {
   const brushRenderer = /** @type {BrushModelRenderer} */ (modelRendererRegistry.getRenderer(Mod.type.brush));
   const hasFog = PostProcess.active
     && worldmodel.fogVolumes && worldmodel.fogVolumes.length > 0;
-  const hasTurbulents = R.drawturbolents.value;
+  const hasTurbulents = R.drawturbulents.value;
 
   // Fast path: no fog volumes — just render turbulents the simple way
   if (!hasFog) {
@@ -1407,7 +1407,7 @@ R.Init = async function() {
   R.fullbright = new Cvar('r_fullbright', '0', Cvar.FLAG.CHEAT);
   R.drawentities = new Cvar('r_drawentities', '1', Cvar.FLAG.CHEAT);
   R.drawviewmodel = new Cvar('r_drawviewmodel', '1');
-  R.drawturbolents = new Cvar('r_drawturbolents', '1', Cvar.FLAG.CHEAT);
+  R.drawturbulents = new Cvar('r_drawturbulents', '1', Cvar.FLAG.CHEAT);
   R.novis = new Cvar('r_novis', '0', Cvar.FLAG.CHEAT);
   R.speeds = new Cvar('r_speeds', '0');
   R.polyblend = new Cvar('gl_polyblend', '1');

@@ -73,7 +73,7 @@ export class BrushModelRenderer extends ModelRenderer {
     if (e === CL.state.clientEntities.getEntity(0)) {
       if (pass === 0) {
         this.renderWorld(clmodel);
-      } else if (pass === 1 && R.drawturbolents.value) {
+      } else if (pass === 1 && R.drawturbulents.value) {
         this.renderWorldTurbolents(clmodel);
       } else if (pass === 2) {
         this.renderWorldTransparent(clmodel);
@@ -121,7 +121,7 @@ export class BrushModelRenderer extends ModelRenderer {
     // Render opaque surfaces (pass 0), turbulent surfaces (pass 1), or transparent surfaces (pass 2)
     if (pass === 0) {
       this._renderOpaqueSurfaces(clmodel, e, viewMatrix);
-    } else if (pass === 1 && R.drawturbolents.value) {
+    } else if (pass === 1 && R.drawturbulents.value) {
       this._renderTurbulentSurfaces(clmodel, e, viewMatrix);
     } else if (pass === 2) {
       this._renderTransparentSurfaces(clmodel, e, viewMatrix);
