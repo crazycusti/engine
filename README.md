@@ -26,6 +26,7 @@ Added features include but not limited to:
 * Automatic area portals infrastructure for dynamic sound and rendering culling, though experimental.
 * Semi-transparent model (through `alpha` entity key) support.
 * [Volumentric fog support](./docs/volumetric-fog.md) through `func_fog` and opt-in for automatically fog turbulents.
+* Peer-to-peer multiplayer support using [WebRTC](./docs/webrtc.md).
 
 Yet, there is still plenty to do.
 
