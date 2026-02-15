@@ -69,3 +69,11 @@ The `flags` array can contain the following strings:
 1. Texture paths are relative to the game directory (e.g., `id1/`).
 2. The engine uses `GLTexture.FromImageFile` to load these textures, so standard image formats supported by the browser (PNG, JPG, etc.) are acceptable. Make sure the dimensions are each a power of two, e.g. 512x512.
 3. If a `diffuse` map is not provided in the `.qsmat.json`, the engine will use the original diffuse texture data from the BSP file, allowing you to add only normal or specular maps to existing textures.
+
+## In-game example
+
+See [video showing support of PBR materials](./img/pbr-support.mp4).
+
+![PBR materials](./img/pbr-support.jpg)
+
+

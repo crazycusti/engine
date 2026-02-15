@@ -10,6 +10,7 @@ Added features include but not limited to:
 * 32-bit texture support.
 * WAD3 file support and texture support.
 * Colored dynamic and static lighting support, supporting both BSPX/RGBLIGHTING lumps and `.lit` files.
+* [PBR materials](./docs/qsmat-format.md) support.
 * Slightly improved console subsystem.
 * Smooth animations using lerping.
 * Somewhat optimized network code.
@@ -24,6 +25,7 @@ Added features include but not limited to:
 * Static skybox support, like in Half-Life 1 and Quake 2.
 * Automatic area portals infrastructure for dynamic sound and rendering culling, though experimental.
 * Semi-transparent model (through `alpha` entity key) support.
+* [Volumentric fog support](./docs/volumetric-fog.md) through `func_fog` and opt-in for automatically fog turbulents.
 
 Yet, there is still plenty to do.
 
