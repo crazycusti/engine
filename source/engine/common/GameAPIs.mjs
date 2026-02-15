@@ -359,7 +359,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @deprecated use FindAllByFieldAndValue instead
    */
   static FindByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
-    for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+    for (let i = startEdictId; i < SV.server.num_edicts; i++) {
       /** @type {ServerEdict} */
       const ent = SV.server.edicts[i];
 
@@ -377,7 +377,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
 
   // TODO: optimize lookups by using maps for fields such as targetname, etc.
   static *FindAllByFieldAndValue(field, value, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
-    for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+    for (let i = startEdictId; i < SV.server.num_edicts; i++) {
       /** @type {ServerEdict} */
       const ent = SV.server.edicts[i];
 
@@ -397,7 +397,7 @@ export class ServerEngineAPI extends CommonEngineAPI {
    * @yields {ServerEdict}
    */
   static *FindAllByFilter(filterFn = null, startEdictId = 0) { // FIXME: startEdictId should be edict? not 100% happy about this
-    for (let i = (startEdictId % SV.server.num_edicts); i < SV.server.num_edicts; i++) {
+    for (let i = startEdictId; i < SV.server.num_edicts; i++) {
       const ent = SV.server.edicts[i];
 
       if (ent.isFree()) {

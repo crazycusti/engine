@@ -38,6 +38,9 @@ export class BaseMaterial {
   width = /** @type {number} */ (0);
   height = /** @type {number} */ (0);
 
+  /** @type {number[]} Average color of the texture as [r, g, b] in 0-255 range */
+  averageColor = [128, 128, 128];
+
   /**
    * @param {string} name name
    * @param {number} width width

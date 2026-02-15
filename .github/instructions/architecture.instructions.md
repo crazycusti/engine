@@ -19,6 +19,12 @@ The server manages the game state, processes player actions, and enforces game r
 
 In single player mode, both the client and server run in the same process. The client sends player actions directly to the server, and the server updates the game state and sends it back to the client using the loopback driver implementation.
 
+### Data structures
+
+#### Maps (bsp files)
+
+Make sure to always traverse the BSP tree when doing collision detection, visibility checks, and other spatial queries. This is crucial for not just performance and correctness, but also for maintaining the integrity of the game world. No AABB minmax checks, no ray-box intersection tests, no distance checks. Always traverse the BSP tree and use the plane equations to determine which nodes to visit.
+
 ## Origins
 
 The code is originally based on WinQuake almost verbatim, however the goal of this project is to replace almost all of the original code with new implementations. The architecture is still inspired by id tech 3, GoldSrc engine and the Source engine. However, the code is not a direct port of those, but rather a new implementation that takes advantage of modern web technologies and design patterns.

@@ -7,6 +7,8 @@ import { clientConnectionState } from '../common/Def.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import GL from './GL.mjs';
 import VID from './VID.mjs';
+import PostProcess from './renderer/PostProcess.mjs';
+import WarpEffect from './renderer/WarpEffect.mjs';
 
 let { CL, Con, Draw, Host, Key, M, R, S, Sbar, V } = registry;
 
@@ -174,24 +176,6 @@ SCR.CalcRefdef = function() {
   const ymax = 4.0 * Math.tan(R.refdef.fov_y * Math.PI / 360.0);
   R.perspective[0] = 4.0 / (ymax * R.refdef.vrect.width / R.refdef.vrect.height);
   R.perspective[5] = 4.0 / ymax;
-
-  R.warpwidth = (vrect.width * VID.pixelRatio) >> 0;
-  R.warpheight = (vrect.height * VID.pixelRatio) >> 0;
-  if (R.warpwidth > 2048) {
-    R.warpwidth = 2048;
-  }
-  if (R.warpheight > 2048) {
-    R.warpheight = 2048;
-  }
-  if ((R.oldwarpwidth !== R.warpwidth) || (R.oldwarpheight !== R.warpheight)) {
-    R.oldwarpwidth = R.warpwidth;
-    R.oldwarpheight = R.warpheight;
-    GL.Bind(0, R.warptexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, R.warpwidth, R.warpheight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, R.warprenderbuffer);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, R.warpwidth, R.warpheight);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-  }
 };
 
 SCR.SizeUp_f = function() {
@@ -371,8 +355,19 @@ SCR.UpdateScreen = function() {
 
     V.RenderView();
     GL.Set2D();
-    if (R.dowarp === true) {
-      R.WarpScreen();
+    if (R.usePostProcess === true || PostProcess.hasActiveEffects()) {
+      // End scene FBO and resolve through the effect pipeline to screen.
+      // PostProcess.resolve handles both the simple blit (no active effects)
+      // and the chained effect path (warp, motion blur, etc.).
+      PostProcess.end();
+      const sceneTexture = R.usePostProcess
+        ? PostProcess.colorTexture
+        : WarpEffect.texture;
+      PostProcess.resolve(
+        R.refdef.vrect.x, R.refdef.vrect.y,
+        R.refdef.vrect.width, R.refdef.vrect.height,
+        sceneTexture,
+      );
     }
     if (Con.forcedup !== true) {
       R.PolyBlend();

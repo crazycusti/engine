@@ -457,6 +457,9 @@ V.RenderView = function () {
   if (!CL.state.worldmodel) {
     return;
   }
+  if (CL.cls.signon < 4) {
+    return;
+  }
   R.PushDlights();
   R.RenderView();
 };

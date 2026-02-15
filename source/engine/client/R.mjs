@@ -16,6 +16,8 @@ import { SpriteModelRenderer } from './renderer/SpriteModelRenderer.mjs';
 import { MeshModelRenderer } from './renderer/MeshModelRenderer.mjs';
 import Draw from './Draw.mjs';
 import { BrushModel, Node, revealedVisibility } from '../common/model/BSP.mjs';
+import PostProcess from './renderer/PostProcess.mjs';
+import WarpEffect from './renderer/WarpEffect.mjs';
 import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
@@ -688,6 +690,102 @@ R.DrawEntitiesOnList = function() {
 };
 
 /**
+ * Render fog volumes and world turbulent surfaces interleaved in
+ * back-to-front order. Items farther from the camera are drawn first so
+ * nearer semi-transparent geometry blends correctly on top.
+ *
+ * When no fog volumes exist (or post-process is unavailable), this falls
+ * back to the simple sequential turbulent pass.
+ * @param {ClientEdict} worldEntity The world entity (entity 0)
+ */
+R._renderFogAndTurbulentsSorted = function(worldEntity) {
+  const worldmodel = /** @type {BrushModel} */ (worldEntity.model);
+  const brushRenderer = /** @type {BrushModelRenderer} */ (modelRendererRegistry.getRenderer(Mod.type.brush));
+  const hasFog = PostProcess.active
+    && worldmodel.fogVolumes && worldmodel.fogVolumes.length > 0;
+  const hasTurbulents = R.drawturbolents.value;
+
+  // Fast path: no fog volumes — just render turbulents the simple way
+  if (!hasFog) {
+    if (hasTurbulents) {
+      brushRenderer.render(worldmodel, worldEntity, 1);
+    }
+    return;
+  }
+
+  // Fast path: fog but no turbulents — just render fog volumes
+  if (!hasTurbulents) {
+    brushRenderer.renderFogVolumes(worldmodel);
+    return;
+  }
+
+  // Collect both fog volumes and turbulent leaves with distances
+  const vieworg = R.refdef.vieworg;
+
+  /** @type {Array<{dist: number, kind: number, data: Node|import('../common/model/BSP.mjs').FogVolumeInfo}>} */
+  const items = [];
+
+  // kind 0 = turbulent leaf, kind 1 = fog volume
+  const turbulentLeaves = brushRenderer.getWorldTurbulentLeaves(worldmodel, vieworg);
+  for (let i = 0; i < turbulentLeaves.length; i++) {
+    items.push({ dist: turbulentLeaves[i].dist, kind: 0, data: turbulentLeaves[i].leaf });
+  }
+
+  const fogItems = brushRenderer.getFogVolumeItems(worldmodel, vieworg);
+  for (let i = 0; i < fogItems.length; i++) {
+    items.push({ dist: fogItems[i].dist, kind: 1, data: fogItems[i].fogVolume });
+  }
+
+  if (items.length === 0) {
+    return;
+  }
+
+  // Sort back-to-front (farthest first)
+  items.sort((a, b) => b.dist - a.dist);
+
+  // Render interleaved, tracking which pass is currently active to
+  // minimise GL state switches between turbulent and fog shaders.
+  let turbulentPassActive = false;
+  let fogPassActive = false;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (item.kind === 0) {
+      // Turbulent leaf — end fog pass if active (shader switch)
+      if (fogPassActive) {
+        brushRenderer.endFogVolumePass();
+        fogPassActive = false;
+      }
+      if (!turbulentPassActive) {
+        brushRenderer.beginWorldTurbulentPass(worldmodel);
+        turbulentPassActive = true;
+      }
+      brushRenderer.renderWorldTurbulentLeaf(worldmodel, /** @type {Node} */ (item.data));
+    } else {
+      // Fog volume — end turbulent pass if active (shader switch)
+      if (turbulentPassActive) {
+        brushRenderer.endWorldTurbulentPass();
+        turbulentPassActive = false;
+      }
+      if (!fogPassActive) {
+        brushRenderer.beginFogVolumePass(worldmodel);
+        fogPassActive = true;
+      }
+      brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (item.data));
+    }
+  }
+
+  // Clean up whichever pass is still active
+  if (turbulentPassActive) {
+    brushRenderer.endWorldTurbulentPass();
+  }
+  if (fogPassActive) {
+    brushRenderer.endFogVolumePass();
+  }
+};
+
+/**
  * Render all transparent geometry (world brush surfaces + entities) in
  * back-to-front sorted order with depth writes disabled.
  * This ensures transparent surfaces blend correctly regardless of type.
@@ -1005,14 +1103,25 @@ R.Perspective = function() {
 };
 
 R.SetupGL = function() {
-  if (R.dowarp === true) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, R.warpbuffer);
-    gl.clear(gl.COLOR_BUFFER_BIT + gl.DEPTH_BUFFER_BIT);
-    gl.viewport(0, 0, R.warpwidth, R.warpheight);
+  const vrect = R.refdef.vrect;
+  const pixelRatio = VID.pixelRatio;
+  const w = (vrect.width * pixelRatio) >> 0;
+  const h = (vrect.height * pixelRatio) >> 0;
+
+  if (R.usePostProcess === true) {
+    // Depth-aware post-process path: render scene to FBO with depth texture
+    // for fog volumes. Pipeline effects (warp, etc.) are applied during resolve.
+    PostProcess.resize(w, h);
+    PostProcess.begin();
+    gl.viewport(0, 0, w, h);
+  } else if (PostProcess.hasActiveEffects()) {
+    // Pipeline effects only (no fog): render scene to the warp effect's FBO
+    // so the effect pipeline can sample it.
+    const warpEffect = /** @type {WarpEffect} */ (PostProcess.getEffect('warp'));
+    warpEffect.resize(w, h);
+    PostProcess.beginToEffectFBO(WarpEffect.fbo, WarpEffect.width, WarpEffect.height);
   } else {
-    const vrect = R.refdef.vrect;
-    const pixelRatio = VID.pixelRatio;
-    gl.viewport((vrect.x * pixelRatio) >> 0, ((VID.height - vrect.height - vrect.y) * pixelRatio) >> 0, (vrect.width * pixelRatio) >> 0, (vrect.height * pixelRatio) >> 0);
+    gl.viewport((vrect.x * pixelRatio) >> 0, ((VID.height - vrect.height - vrect.y) * pixelRatio) >> 0, w, h);
   }
   R.Perspective();
   gl.enable(gl.DEPTH_TEST);
@@ -1028,6 +1137,17 @@ R.PreRenderScene = function() {
   V.SetContentsColor(R.viewleaf.contents);
   V.CalcBlend();
   R.dowarp = (R.waterwarp.value !== 0) && (R.viewleaf.contents <= content.CONTENT_WATER);
+
+  // Update warp effect active state
+  const warpEffect = PostProcess.getEffect('warp');
+  if (warpEffect) {
+    warpEffect.active = R.dowarp;
+  }
+
+  // Activate depth-texture post-process when fog volumes exist.
+  // Pipeline effects (warp, etc.) are resolved separately via PostProcess.resolve.
+  R.usePostProcess = PostProcess.hasDepthTexture
+    && CL.state.worldmodel.fogVolumes && CL.state.worldmodel.fogVolumes.length > 0;
 };
 
 R.RenderWorld = function() {
@@ -1042,10 +1162,13 @@ R.RenderWorld = function() {
   // Draw all other entities (pass 0 for opaque, pass 1 for turbulent)
   R.DrawEntitiesOnList();
 
-  // Pass 1: World turbulent surfaces
+  // Fog volumes and turbulent surfaces must be interleaved back-to-front.
+  // Without sorting, turbulents always draw over fog (or vice versa),
+  // which is wrong when a fog volume is in front of a water surface.
+  // We collect both into a single list, sort by distance from the camera,
+  // and render farthest-first so nearer surfaces blend over farther ones.
   if (worldEntity && worldEntity.model) {
-    const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
-    brushRenderer.render(worldEntity.model, worldEntity, 1);
+    R._renderFogAndTurbulentsSorted(worldEntity);
   }
 
   gl.disable(gl.CULL_FACE);
@@ -1295,6 +1418,14 @@ R.InitShaders = async function() {
       ['uViewOrigin', 'uViewAngles', 'uPerspective'],
       [['aPosition', gl.FLOAT, 3]],
       []),
+
+    // rendering volumetric fog brush volumes
+    GL.CreateProgram('fog-volume',
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma',
+       'uFogVolumeColor', 'uFogVolumeDensity', 'uFogVolumeMaxOpacity',
+       'uFogVolumeMins', 'uFogVolumeMaxs', 'uScreenSize'],
+      [['aPosition', gl.FLOAT, 3]],
+      ['tDepth']),
   ]);
 
   eventBus.publish('renderer.shaders.initialized');
@@ -1335,21 +1466,10 @@ R.Init = async function() {
   modelRendererRegistry.register(new SpriteModelRenderer());
   modelRendererRegistry.register(new MeshModelRenderer());
 
-  R.warpbuffer = gl.createFramebuffer();
-  R.warptexture = gl.createTexture();
-  GL.Bind(0, R.warptexture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); // FIXME: mipmap
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); // FIXME: mipmap
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  R.warprenderbuffer = gl.createRenderbuffer();
-  gl.bindRenderbuffer(gl.RENDERBUFFER, R.warprenderbuffer);
-  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 0, 0);
-  gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, R.warpbuffer);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R.warptexture, 0);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, R.warprenderbuffer);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  // Initialize post-process infrastructure (scene FBO with depth texture)
+  // and register the warp effect for underwater distortion.
+  PostProcess.init();
+  PostProcess.addEffect(new WarpEffect());
 
   R.dlightvecs = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, R.dlightvecs);
@@ -1515,9 +1635,9 @@ R.EntityParticles = function(ent) {
       ramp: 0.0,
       type: R.ptype.explode,
       org: [
-        ent.origin[0] + avertexnormals[i][0] * 64.0 + cp * cy * 16.0,
-        ent.origin[1] + avertexnormals[i][1] * 64.0 + cp * sy * 16.0,
-        ent.origin[2] + avertexnormals[i][2] * 64.0 + sp * -16.0,
+        ent.origin[0] + avertexnormals[i * 3 + 0] * 64.0 + cp * cy * 16.0,
+        ent.origin[1] + avertexnormals[i * 3 + 1] * 64.0 + cp * sy * 16.0,
+        ent.origin[2] + avertexnormals[i * 3 + 2] * 64.0 + sp * -16.0,
       ],
       vel: new Vector(),
     };
@@ -2315,21 +2435,6 @@ R.BuildLightmaps = function() {
 
   GL.Bind(0, R.deluxemap_texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
-};
-
-// scan
-
-R.WarpScreen = function() {
-  GL.StreamFlush();
-  gl.finish();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.bindRenderbuffer(gl.RENDERBUFFER, null);
-  const program = GL.UseProgram('warp');
-  GL.Bind(program.tTexture, R.warptexture);
-  gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
-  const vrect = R.refdef.vrect;
-  GL.StreamDrawTexturedQuad(vrect.x, vrect.y, vrect.width, vrect.height, 0.0, 1.0, 1.0, 0.0);
-  GL.StreamFlush();
 };
 
 // warp

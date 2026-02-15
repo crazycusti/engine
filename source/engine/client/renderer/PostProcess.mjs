@@ -1,0 +1,416 @@
+import GL from '../GL.mjs';
+import VID from '../VID.mjs';
+import PostProcessEffect from './PostProcessEffect.mjs';
+import { eventBus } from '../../registry.mjs';
+
+let gl = /** @type {WebGL2RenderingContext} */ (null);
+
+eventBus.subscribe('gl.ready', () => {
+  gl = GL.gl;
+});
+
+eventBus.subscribe('gl.shutdown', () => {
+  gl = null;
+});
+
+/**
+ * Post-process rendering infrastructure with an effect pipeline.
+ *
+ * Manages a scene framebuffer with color and depth texture attachments,
+ * enabling depth-aware effects like volumetric fog during scene rendering.
+ *
+ * After scene rendering, registered effects (warp, motion blur, flash, etc.)
+ * are applied in order via a ping-pong FBO resolve chain. Each effect reads
+ * from one texture and writes to another, with the final result blitted to
+ * the default framebuffer (screen).
+ *
+ * Effects that need the depth buffer (e.g. fog volumes) are handled during
+ * scene rendering via `beginDepthSampling`/`endDepthSampling`
+ * and are NOT part of the post-resolve effect pipeline.
+ */
+export default class PostProcess {
+  // ─── Scene FBO (depth-aware rendering) ───────────────────────────
+
+  /** @type {WebGLFramebuffer} Scene framebuffer object */
+  static fbo = null;
+
+  /** @type {WebGLTexture} Color texture attachment (RGBA) */
+  static colorTexture = null;
+
+  /** @type {WebGLTexture} Depth texture attachment (requires WEBGL_depth_texture) */
+  static depthTexture = null;
+
+  /** @type {WebGLRenderbuffer} Depth renderbuffer used temporarily during depth sampling */
+  static depthRenderbuffer = null;
+
+  /** @type {number} Current scene FBO width in pixels */
+  static width = 0;
+
+  /** @type {number} Current scene FBO height in pixels */
+  static height = 0;
+
+  /** @type {boolean} Whether the WEBGL_depth_texture extension is available */
+  static hasDepthTexture = false;
+
+  /** @type {boolean} Whether the PostProcess system is currently active (FBO bound) */
+  static active = false;
+
+  // ─── Ping-pong FBOs for effect chaining ──────────────────────────
+
+  /** @type {WebGLFramebuffer} Ping FBO for effect chaining */
+  static pingFBO = null;
+
+  /** @type {WebGLTexture} Ping color texture */
+  static pingTexture = null;
+
+  /** @type {WebGLFramebuffer} Pong FBO for effect chaining */
+  static pongFBO = null;
+
+  /** @type {WebGLTexture} Pong color texture */
+  static pongTexture = null;
+
+  /** @type {number} Ping-pong FBO width */
+  static ppWidth = 0;
+
+  /** @type {number} Ping-pong FBO height */
+  static ppHeight = 0;
+
+  // ─── Effect pipeline ─────────────────────────────────────────────
+
+  /** @type {PostProcessEffect[]} Registered effects, applied in order */
+  static effects = [];
+
+  /**
+   * Register a post-process effect. Effects are applied in the order
+   * they are added. Each effect's {@link PostProcessEffect.init} is
+   * called during registration.
+   * @param {PostProcessEffect} effect - The effect to register
+   */
+  static addEffect(effect) {
+    effect.init();
+    PostProcess.effects.push(effect);
+  }
+
+  /**
+   * Get a registered effect by name.
+   * @param {string} name - The effect name to look up
+   * @returns {PostProcessEffect} The effect, or undefined if not found
+   */
+  static getEffect(name) {
+    return PostProcess.effects.find((e) => e.name === name);
+  }
+
+  /**
+   * Whether any post-process effect is currently active.
+   * @returns {boolean} True if any registered effect is active
+   */
+  static hasActiveEffects() {
+    return PostProcess.effects.some((e) => e.active);
+  }
+
+  /**
+   * Initialize the post-process system.
+   * Acquires the depth texture extension and creates FBOs.
+   */
+  static init() {
+    const depthExt = gl.getExtension('WEBGL_depth_texture');
+    PostProcess.hasDepthTexture = !!depthExt;
+
+    // Scene FBO (only if depth textures are available for fog volumes)
+    if (PostProcess.hasDepthTexture) {
+      PostProcess.fbo = gl.createFramebuffer();
+
+      // Color texture
+      PostProcess.colorTexture = gl.createTexture();
+      GL.Bind(0, PostProcess.colorTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      // Depth texture
+      PostProcess.depthTexture = gl.createTexture();
+      GL.Bind(0, PostProcess.depthTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      // Depth renderbuffer (temporary during depth sampling)
+      PostProcess.depthRenderbuffer = gl.createRenderbuffer();
+
+      // Assemble scene FBO
+      gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, PostProcess.colorTexture, 0);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, PostProcess.depthTexture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    // Ping-pong FBOs for effect chaining (always created — no depth texture needed)
+    PostProcess.pingFBO = gl.createFramebuffer();
+    PostProcess.pingTexture = gl.createTexture();
+    GL.Bind(0, PostProcess.pingTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.pingFBO);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, PostProcess.pingTexture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    PostProcess.pongFBO = gl.createFramebuffer();
+    PostProcess.pongTexture = gl.createTexture();
+    GL.Bind(0, PostProcess.pongTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.pongFBO);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, PostProcess.pongTexture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /**
+   * Resize the scene FBO textures to match the viewport dimensions.
+   * @param {number} width - New width in pixels
+   * @param {number} height - New height in pixels
+   */
+  static resize(width, height) {
+    if (!PostProcess.hasDepthTexture || (PostProcess.width === width && PostProcess.height === height)) {
+      return;
+    }
+
+    PostProcess.width = width;
+    PostProcess.height = height;
+
+    // Resize color texture
+    GL.Bind(0, PostProcess.colorTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    // Resize depth texture
+    GL.Bind(0, PostProcess.depthTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, width, height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+
+    // Resize depth renderbuffer
+    gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+  }
+
+  /**
+   * Resize the ping-pong FBOs used for effect chaining.
+   * @param {number} width - New width in pixels
+   * @param {number} height - New height in pixels
+   */
+  static resizePingPong(width, height) {
+    if (PostProcess.ppWidth === width && PostProcess.ppHeight === height) {
+      return;
+    }
+
+    PostProcess.ppWidth = width;
+    PostProcess.ppHeight = height;
+
+    GL.Bind(0, PostProcess.pingTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    GL.Bind(0, PostProcess.pongTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    // Notify effects of the new dimensions
+    for (const effect of PostProcess.effects) {
+      effect.resize(width, height);
+    }
+  }
+
+  /**
+   * Begin rendering the scene to the post-process FBO.
+   * Binds the FBO, sets the viewport, and clears.
+   */
+  static begin() {
+    if (!PostProcess.hasDepthTexture) {
+      return;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
+    gl.viewport(0, 0, PostProcess.width, PostProcess.height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    PostProcess.active = true;
+  }
+
+  /**
+   * Begin rendering the scene to an effect's own FBO.
+   * Used when only pipeline effects are active (no depth-texture scene FBO needed).
+   * @param {WebGLFramebuffer} fbo - The effect's FBO
+   * @param {number} width - FBO width
+   * @param {number} height - FBO height
+   */
+  static beginToEffectFBO(fbo, width, height) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0, 0, width, height);
+    PostProcess.active = true;
+  }
+
+  /**
+   * Detach the depth texture from the FBO so it can be sampled in shaders.
+   * Attaches a depth renderbuffer instead to keep the FBO complete.
+   */
+  static beginDepthSampling() {
+    if (!PostProcess.hasDepthTexture) {
+      return;
+    }
+
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
+  }
+
+  /**
+   * Reattach the depth texture to the FBO after depth sampling is done.
+   */
+  static endDepthSampling() {
+    if (!PostProcess.hasDepthTexture) {
+      return;
+    }
+
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, PostProcess.depthTexture, 0);
+  }
+
+  /**
+   * End scene rendering. Unbinds the post-process FBO.
+   */
+  static end() {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    PostProcess.active = false;
+  }
+
+  /**
+   * Resolve the scene to the screen, applying all active effects in order.
+   * When no effects are active, performs a simple blit. When effects are
+   * active, chains them using ping-pong FBOs.
+   * @param {number} x - Viewport x position
+   * @param {number} y - Viewport y position
+   * @param {number} width - Viewport width
+   * @param {number} height - Viewport height
+   * @param {WebGLTexture} sceneTexture - The scene color texture to resolve
+   */
+  static resolve(x, y, width, height, sceneTexture) {
+    const activeEffects = PostProcess.effects.filter((e) => e.active);
+
+    if (activeEffects.length === 0) {
+      // No effects — simple blit to screen
+      PostProcess._blitToScreen(sceneTexture, x, y, width, height);
+      return;
+    }
+
+    // Ensure ping-pong FBOs are sized correctly
+    const pixelWidth = (width * VID.pixelRatio) >> 0;
+    const pixelHeight = (height * VID.pixelRatio) >> 0;
+    PostProcess.resizePingPong(pixelWidth, pixelHeight);
+
+    // Save the current viewport (GL.Set2D has already set up 2D rendering)
+    const savedViewport = gl.getParameter(gl.VIEWPORT);
+
+    gl.disable(gl.BLEND);
+
+    let inputTexture = sceneTexture;
+    const fbos = [PostProcess.pingFBO, PostProcess.pongFBO];
+    const textures = [PostProcess.pingTexture, PostProcess.pongTexture];
+
+    for (let i = 0; i < activeEffects.length; i++) {
+      const isLast = (i === activeEffects.length - 1);
+
+      if (isLast) {
+        // Last effect renders directly to screen
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(savedViewport[0], savedViewport[1], savedViewport[2], savedViewport[3]);
+        activeEffects[i].apply(inputTexture, x, y, width, height);
+      } else {
+        // Intermediate effects render to the next ping-pong FBO
+        const targetFBO = fbos[i % 2];
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+        gl.viewport(0, 0, pixelWidth, pixelHeight);
+        // Draw at ortho-space dimensions (VID.width/height) so the ortho matrix works
+        activeEffects[i].apply(inputTexture, 0, 0, VID.width, VID.height);
+        inputTexture = textures[i % 2];
+      }
+    }
+
+    gl.enable(gl.BLEND);
+  }
+
+  /**
+   * Blit a texture to the screen using the 'pic' shader.
+   * @param {WebGLTexture} texture - Source texture
+   * @param {number} x - Screen x
+   * @param {number} y - Screen y
+   * @param {number} width - Screen width
+   * @param {number} height - Screen height
+   */
+  static _blitToScreen(texture, x, y, width, height) {
+    gl.disable(gl.BLEND);
+
+    const program = GL.UseProgram('pic');
+    gl.uniform3f(program.uColor, 1.0, 1.0, 1.0);
+    GL.Bind(program.tTexture, texture);
+    // FBO texture has (0,0) at bottom-left; 2D screen has (0,0) at top-left.
+    GL.StreamDrawTexturedQuad(x, y, width, height, 0.0, 1.0, 1.0, 0.0);
+    GL.StreamFlush();
+
+    gl.enable(gl.BLEND);
+  }
+
+  /**
+   * Clean up all GPU resources.
+   */
+  static shutdown() {
+    // Shut down all effects
+    for (const effect of PostProcess.effects) {
+      effect.shutdown();
+    }
+    PostProcess.effects.length = 0;
+
+    // Scene FBO
+    if (PostProcess.fbo) {
+      gl.deleteFramebuffer(PostProcess.fbo);
+      PostProcess.fbo = null;
+    }
+    if (PostProcess.colorTexture) {
+      gl.deleteTexture(PostProcess.colorTexture);
+      PostProcess.colorTexture = null;
+    }
+    if (PostProcess.depthTexture) {
+      gl.deleteTexture(PostProcess.depthTexture);
+      PostProcess.depthTexture = null;
+    }
+    if (PostProcess.depthRenderbuffer) {
+      gl.deleteRenderbuffer(PostProcess.depthRenderbuffer);
+      PostProcess.depthRenderbuffer = null;
+    }
+
+    // Ping-pong FBOs
+    if (PostProcess.pingFBO) {
+      gl.deleteFramebuffer(PostProcess.pingFBO);
+      PostProcess.pingFBO = null;
+    }
+    if (PostProcess.pingTexture) {
+      gl.deleteTexture(PostProcess.pingTexture);
+      PostProcess.pingTexture = null;
+    }
+    if (PostProcess.pongFBO) {
+      gl.deleteFramebuffer(PostProcess.pongFBO);
+      PostProcess.pongFBO = null;
+    }
+    if (PostProcess.pongTexture) {
+      gl.deleteTexture(PostProcess.pongTexture);
+      PostProcess.pongTexture = null;
+    }
+
+    PostProcess.width = 0;
+    PostProcess.height = 0;
+    PostProcess.ppWidth = 0;
+    PostProcess.ppHeight = 0;
+    PostProcess.active = false;
+    PostProcess.hasDepthTexture = false;
+  }
+};

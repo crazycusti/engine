@@ -6,6 +6,7 @@ import { materialFlags } from './Materials.mjs';
 import { BrushModel, Node } from '../../common/model/BSP.mjs';
 import { ClientEdict } from '../ClientEntities.mjs';
 import Mesh from './Mesh.mjs';
+import PostProcess from './PostProcess.mjs';
 
 let { CL, Host, R } = registry;
 
@@ -362,8 +363,55 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {BrushModel} clmodel The world model
    */
   renderWorldTurbolents(clmodel) {
-    const worldspawn = CL.state.clientEntities.getEntity(0);
+    this.beginWorldTurbulentPass(clmodel);
+    for (let i = 0; i < clmodel.leafs.length; i++) {
+      const leaf = clmodel.leafs[i];
+      if ((leaf.visframe !== R.visframecount) || (leaf.waterchain === leaf.cmds.length)) {
+        continue;
+      }
+      if (R.CullBox(leaf.mins, leaf.maxs) === true) {
+        continue;
+      }
+      this.renderWorldTurbulentLeaf(clmodel, leaf);
+    }
+    this.endWorldTurbulentPass();
+  }
 
+  /**
+   * Collect visible world leafs that contain turbulent surfaces, with
+   * squared distance from the given viewpoint for back-to-front sorting.
+   * @param {BrushModel} clmodel The world model
+   * @param {Float32Array|number[]} vieworg Camera position [x, y, z]
+   * @returns {{leaf: Node, dist: number}[]} Turbulent leaf items sorted by distance (farthest first)
+   */
+  getWorldTurbulentLeaves(clmodel, vieworg) {
+    const items = [];
+    for (let i = 0; i < clmodel.leafs.length; i++) {
+      const leaf = clmodel.leafs[i];
+      if ((leaf.visframe !== R.visframecount) || (leaf.waterchain === leaf.cmds.length)) {
+        continue;
+      }
+      if (R.CullBox(leaf.mins, leaf.maxs) === true) {
+        continue;
+      }
+      const cx = (leaf.mins[0] + leaf.maxs[0]) * 0.5;
+      const cy = (leaf.mins[1] + leaf.maxs[1]) * 0.5;
+      const cz = (leaf.mins[2] + leaf.maxs[2]) * 0.5;
+      const dx = cx - vieworg[0];
+      const dy = cy - vieworg[1];
+      const dz = cz - vieworg[2];
+      const dist = Math.hypot(dx, dy, dz);
+      items.push({ leaf, dist });
+    }
+    return items;
+  }
+
+  /**
+   * Setup GL state for world turbulent leaf rendering.
+   * Call once before one or more `renderWorldTurbulentLeaf` calls.
+   * @param {BrushModel} clmodel The world model
+   */
+  beginWorldTurbulentPass(clmodel) {
     gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
     R.c_brush_vbos++;
 
@@ -381,25 +429,38 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, true);
     GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
 
-    for (let i = 0; i < clmodel.leafs.length; i++) {
-      const leaf = clmodel.leafs[i];
-      if ((leaf.visframe !== R.visframecount) || (leaf.waterchain === leaf.cmds.length)) {
-        continue;
-      }
-      if (R.CullBox(leaf.mins, leaf.maxs) === true) {
-        continue;
-      }
-      for (let j = leaf.waterchain; j < leaf.cmds.length; j++) {
-        const cmds = leaf.cmds[j];
-        R.c_brush_verts += cmds[2];
-        R.c_brush_tris += cmds[2] / 3;
-        clmodel.textures[cmds[0]].emit(worldspawn);
-        clmodel.textures[cmds[0]].bindTo(program);
-        gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
-        R.c_brush_draws++;
-      }
+    this._worldTurbulentProgram = program;
+    this._worldTurbulentModel = clmodel;
+  }
+
+  /**
+   * Render a single leaf's turbulent surfaces.
+   * Must be called between `beginWorldTurbulentPass` and `endWorldTurbulentPass`.
+   * @param {BrushModel} clmodel The world model
+   * @param {Node} leaf The BSP leaf to render
+   */
+  renderWorldTurbulentLeaf(clmodel, leaf) {
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+    const program = this._worldTurbulentProgram;
+
+    for (let j = leaf.waterchain; j < leaf.cmds.length; j++) {
+      const cmds = leaf.cmds[j];
+      R.c_brush_verts += cmds[2];
+      R.c_brush_tris += cmds[2] / 3;
+      clmodel.textures[cmds[0]].emit(worldspawn);
+      clmodel.textures[cmds[0]].bindTo(program);
+      gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
+      R.c_brush_draws++;
     }
+  }
+
+  /**
+   * Cleanup GL state after world turbulent leaf rendering.
+   */
+  endWorldTurbulentPass() {
     gl.disable(gl.BLEND);
+    this._worldTurbulentProgram = null;
+    this._worldTurbulentModel = null;
   }
 
   /**
@@ -598,8 +659,8 @@ export class BrushModelRenderer extends ModelRenderer {
 
       // Only render transparent surfaces in this pass
       if (e.alpha === 1.0 && (
-          (material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)
-        )) {
+        (material.flags & materialFlags.MF_TURBULENT) || !(material.flags & materialFlags.MF_TRANSPARENT)
+      )) {
         continue;
       }
 
@@ -684,9 +745,218 @@ export class BrushModelRenderer extends ModelRenderer {
   }
 
   /**
-   * Cleanup rendering state after brush models
-   * @param {number} [_pass] Rendering pass (0=opaque, 1=transparent)
+   * Lazily created unit cube VBO for rendering world-level fog volumes.
+   * The cube spans [0,1]^3 and is transformed via uOrigin/uAngles to match each fog volume's AABB.
+   * @type {WebGLBuffer|null}
    */
+  #fogCubeVBO = null;
+
+  /**
+   * Get or create the shared unit cube VBO used for world-level fog volumes.
+   * @returns {WebGLBuffer} The unit cube VBO
+   */
+  _getFogCubeVBO() {
+    if (this.#fogCubeVBO) {
+      return this.#fogCubeVBO;
+    }
+
+    // Unit cube [0,1]^3 — 12 triangles, 36 vertices, CW winding from outside
+    // (matching Quake BSP convention: outward faces are CW in world space).
+    // The fog shader uses gl.cullFace(gl.BACK) which, with the Quake projection's
+    // coordinate mapping, culls near-side faces and renders far-side faces.
+    // This gives exit-point fragments for correct fog thickness calculation.
+    const verts = new Float32Array([
+      // Front face (z=1)
+      0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1,
+      // Back face (z=0)
+      1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0,
+      // Top face (y=1)
+      0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1,
+      // Bottom face (y=0)
+      0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0,
+      // Right face (x=1)
+      1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0,
+      // Left face (x=0)
+      0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1,
+    ]);
+
+    this.#fogCubeVBO = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.#fogCubeVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+    return this.#fogCubeVBO;
+  }
+
+  /**
+   * Render all fog volumes defined in the world model.
+   * Handles both inline brush model fog volumes (*N) and world-level
+   * water/slime/lava fog volumes (modelIndex === 0).
+   * @param {BrushModel} worldmodel The world model containing fog volume definitions
+   */
+  renderFogVolumes(worldmodel) {
+    if (!this.beginFogVolumePass(worldmodel)) {
+      return;
+    }
+    for (const fogVolume of worldmodel.fogVolumes) {
+      this.renderSingleFogVolume(worldmodel, fogVolume);
+    }
+    this.endFogVolumePass();
+  }
+
+  /**
+   * Collect fog volumes with distance from the given viewpoint for back-to-front sorting.
+   * @param {BrushModel} worldmodel The world model containing fog volume definitions
+   * @param {Float32Array|number[]} vieworg Camera position [x, y, z]
+   * @returns {{fogVolume: import('../../common/model/BSP.mjs').FogVolumeInfo, dist: number}[]} Fog volume items with distance
+   */
+  getFogVolumeItems(worldmodel, vieworg) {
+    if (!worldmodel.fogVolumes || worldmodel.fogVolumes.length === 0) {
+      return [];
+    }
+    if (!PostProcess.hasDepthTexture) {
+      return [];
+    }
+    const items = [];
+    for (const fogVolume of worldmodel.fogVolumes) {
+      const cx = (fogVolume.mins[0] + fogVolume.maxs[0]) * 0.5;
+      const cy = (fogVolume.mins[1] + fogVolume.maxs[1]) * 0.5;
+      const cz = (fogVolume.mins[2] + fogVolume.maxs[2]) * 0.5;
+      const dx = cx - vieworg[0];
+      const dy = cy - vieworg[1];
+      const dz = cz - vieworg[2];
+      const dist = Math.hypot(dx, dy, dz);
+      items.push({ fogVolume, dist });
+    }
+    return items;
+  }
+
+  /**
+   * Setup GL state for fog volume rendering.
+   * Call once before one or more `renderSingleFogVolume` calls.
+   * @param {BrushModel} worldmodel The world model
+   * @returns {boolean} True if fog volume pass was started, false if skipped
+   */
+  beginFogVolumePass(worldmodel) {
+    if (!worldmodel.fogVolumes || worldmodel.fogVolumes.length === 0) {
+      return false;
+    }
+    if (!PostProcess.hasDepthTexture) {
+      return false;
+    }
+
+    // Detach depth texture from FBO so we can sample it
+    PostProcess.beginDepthSampling();
+
+    const program = GL.UseProgram('fog-volume');
+
+    // GL state for fog volumes:
+    // - Blend: src alpha compositing
+    // - No depth test: shader handles depth via texture sampling
+    // - No depth writes
+    // - Cull back faces (Quake winding): renders the far side of the brush,
+    //   giving us exit points for the fog ray. The shader computes entry via AABB.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.CULL_FACE);
+
+    // Bind scene depth texture
+    GL.Bind(program.tDepth, PostProcess.depthTexture);
+
+    // Pass screen dimensions for depth texture UV calculation
+    gl.uniform2f(program.uScreenSize, PostProcess.width, PostProcess.height);
+
+    this._fogVolumeProgram = program;
+    return true;
+  }
+
+  /**
+   * Render a single fog volume.
+   * Must be called between `beginFogVolumePass` and `endFogVolumePass`.
+   * @param {BrushModel} worldmodel The world model
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume to render
+   */
+  renderSingleFogVolume(worldmodel, fogVolume) {
+    const program = this._fogVolumeProgram;
+
+    // Set fog volume parameters
+    gl.uniform3f(
+      program.uFogVolumeColor,
+      fogVolume.color[0] / 255.0,
+      fogVolume.color[1] / 255.0,
+      fogVolume.color[2] / 255.0,
+    );
+    gl.uniform1f(program.uFogVolumeDensity, fogVolume.density);
+    gl.uniform1f(program.uFogVolumeMaxOpacity, fogVolume.maxOpacity);
+
+    // Pass the AABB of the fog volume for ray intersection
+    gl.uniform3f(program.uFogVolumeMins, fogVolume.mins[0], fogVolume.mins[1], fogVolume.mins[2]);
+    gl.uniform3f(program.uFogVolumeMaxs, fogVolume.maxs[0], fogVolume.maxs[1], fogVolume.maxs[2]);
+
+    if (fogVolume.modelIndex === 0) {
+      // World-level fog volume: use a unit cube transformed to match the AABB
+      const sizeX = fogVolume.maxs[0] - fogVolume.mins[0];
+      const sizeY = fogVolume.maxs[1] - fogVolume.mins[1];
+      const sizeZ = fogVolume.maxs[2] - fogVolume.mins[2];
+
+      // uAngles becomes a scale matrix (diagonal = AABB size)
+      gl.uniformMatrix3fv(program.uAngles, false, new Float32Array([
+        sizeX, 0, 0,
+        0, sizeY, 0,
+        0, 0, sizeZ,
+      ]));
+      gl.uniform3f(program.uOrigin, fogVolume.mins[0], fogVolume.mins[1], fogVolume.mins[2]);
+
+      const cubeVBO = this._getFogCubeVBO();
+      gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBO);
+      R.c_brush_vbos++;
+
+      // Unit cube uses compact 12-byte stride (3 floats, position only)
+      gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 36);
+      R.c_brush_draws++;
+    } else {
+      // Submodel fog volume: use the submodel's own VBO
+      const submodel = worldmodel.submodels[fogVolume.modelIndex - 1];
+
+      if (!submodel || !submodel.cmds) {
+        return;
+      }
+
+      gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
+      gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, submodel.cmds);
+      R.c_brush_vbos++;
+      gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, 0);
+
+      if (submodel.chains) {
+        for (const chain of submodel.chains) {
+          gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
+          R.c_brush_draws++;
+        }
+      }
+    }
+  }
+
+  /**
+   * Cleanup GL state after fog volume rendering.
+   */
+  endFogVolumePass() {
+    // Restore GL state for subsequent passes (turbulents, particles, etc.).
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    gl.cullFace(gl.FRONT);
+    gl.enable(gl.CULL_FACE);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
+    gl.disable(gl.BLEND);
+
+    // Reattach depth texture to FBO
+    PostProcess.endDepthSampling();
+    this._fogVolumeProgram = null;
+  }
+
   // eslint-disable-next-line no-unused-vars
   cleanupRenderState(_pass = 0) {
     // Brush models clean up their own state per-entity

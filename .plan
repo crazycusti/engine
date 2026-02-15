@@ -26,6 +26,7 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] M: rewrite the code using the new framework
 - [_] IN: proper virtual joystick and keyboard/UI
 - [_] M: expose GUI toolkit (draw routines etc.) to the client game code, put stuff in shared/
+- [_] CL: remove that chatlog stuff again, it’s all done in the Client code now
 
 ### Code smell
 
@@ -57,7 +58,9 @@ Grouped by sections and then sorted by priority (more or less).
 - [X] texture cache can return wrong textures when they share the same name across maps but are actually different
 - [_] more interesting warp: https://www.shadertoy.com/view/ctXyW8
 - [_] fix lightmap datastructure, right now it’s eating up ~200 MiB
-- [_] double check the fullbright texture rendering of alias and sprite models
+- [X] double check the fullbright texture rendering of alias ~and sprite~ models
+- [_] proper func_fog functionality so that game code can change fog parameters
+- [_] lod considering fog
 
 ### Random issues
 
@@ -149,6 +152,13 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-02-15
+
+- revamped the post processing stuff a bit
+- added volumetric fog, introduced func_fog, also auto-apply to turbulents
+- I am considering removing all QuakeC and legacy stuff to simplify code base
+- sprites are always considered fullbright, maybe sometime I’ll enhance that
+- need to work on an assets caching system, right now I’m using a heuristic based on `changelevel`
 
 ### 2026-02-11
 

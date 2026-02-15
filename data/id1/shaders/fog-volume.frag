@@ -1,0 +1,97 @@
+precision mediump float;
+
+uniform vec3 uViewOrigin;
+uniform mat3 uViewAngles;
+uniform mat4 uPerspective;
+uniform float uGamma;
+
+uniform vec3 uFogVolumeColor;
+uniform float uFogVolumeDensity;
+uniform float uFogVolumeMaxOpacity;
+uniform vec3 uFogVolumeMins;
+uniform vec3 uFogVolumeMaxs;
+
+uniform sampler2D tDepth;
+uniform vec2 uScreenSize;
+
+varying vec3 vWorldPos;
+
+/**
+ * Convert a depth buffer value (non-linear) to linear view-space distance.
+ * Derives near/far from the actual perspective matrix elements:
+ *   uPerspective[2][2] = -(far+near)/(far-near)
+ *   uPerspective[3][2] = -2*near*far/(far-near)
+ */
+float linearizeDepth(float depth) {
+  float z_ndc = depth * 2.0 - 1.0;
+  return uPerspective[3][2] / (z_ndc + uPerspective[2][2]);
+}
+
+/**
+ * Intersect a ray with an axis-aligned bounding box.
+ * Returns tNear and tFar (signed distances along the ray).
+ * If tNear > tFar, there is no intersection.
+ */
+vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
+  vec3 invDir = 1.0 / rayDir;
+  vec3 t1 = (boxMin - rayOrigin) * invDir;
+  vec3 t2 = (boxMax - rayOrigin) * invDir;
+  vec3 tMin = min(t1, t2);
+  vec3 tMax = max(t1, t2);
+  float tNear = max(max(tMin.x, tMin.y), tMin.z);
+  float tFar = min(min(tMax.x, tMax.y), tMax.z);
+  return vec2(tNear, tFar);
+}
+
+void main(void) {
+  // Screen UV for depth texture lookup
+  vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+
+  // Sample scene depth and linearize
+  float rawDepth = texture2D(tDepth, screenUV).r;
+  float sceneDepth = linearizeDepth(rawDepth);
+
+  // Ray from camera through this fragment in world space
+  vec3 rayDir = normalize(vWorldPos - uViewOrigin);
+
+  // Intersect the ray with the fog volume AABB
+  vec2 tHit = intersectAABB(uViewOrigin, rayDir, uFogVolumeMins, uFogVolumeMaxs);
+
+  // Clamp entry to 0 (camera might be inside the volume)
+  float tEntry = max(tHit.x, 0.0);
+  float tExit = tHit.y;
+
+  // No intersection or volume is entirely behind camera
+  if (tEntry >= tExit || tExit <= 0.0) {
+    discard;
+  }
+
+  // Convert scene view-depth to world-space ray distance.
+  // The view-space Y axis IS the forward direction, and linearizeDepth
+  // returns the distance along forward. Dividing by the cosine of the angle
+  // between the ray and the forward vector gives the radial ray distance.
+  vec3 forward = vec3(uViewAngles[0][1], uViewAngles[1][1], uViewAngles[2][1]);
+  float cosAngle = dot(rayDir, forward);
+  float sceneRayDist = (abs(cosAngle) > 0.001) ? sceneDepth / cosAngle : 100000.0;
+
+  // Also clamp by the back-face distance (useful for non-box brushes)
+  float backFaceDist = length(vWorldPos - uViewOrigin);
+  tExit = min(tExit, min(backFaceDist, sceneRayDist));
+
+  // Fog thickness is the distance the ray travels through the volume
+  float thickness = max(0.0, tExit - tEntry);
+
+  // Exponential fog falloff
+  float fogFactor = 1.0 - exp(-uFogVolumeDensity * thickness);
+  fogFactor = clamp(fogFactor, 0.0, uFogVolumeMaxOpacity);
+
+  // Discard fully transparent fragments
+  if (fogFactor < 0.001) {
+    discard;
+  }
+
+  // Apply gamma to fog color
+  vec3 color = pow(uFogVolumeColor, vec3(uGamma));
+
+  gl_FragColor = vec4(color, fogFactor);
+}

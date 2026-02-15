@@ -106,6 +106,7 @@ export class BSP29Loader extends ModelLoader {
     this._loadDeluxeMap(loadmodel, buffer);
     this._loadLightgridOctree(loadmodel, buffer);
     this._loadSubmodels(loadmodel, buffer); // CR: must be last, since it’s creating additional models based on this one
+    this._parseFogVolumes(loadmodel); // must be after _loadSubmodels so we can scan submodel faces
     this._computeAreas(loadmodel);
 
     if (loadmodel.coloredlights && !loadmodel.lightdata_rgb) {
@@ -250,6 +251,7 @@ export class BSP29Loader extends ModelLoader {
               new Uint8Array(data).set(new Uint8Array(buf, absofs, len));
               const wtex = readWad3Texture(data, tx.name, 0);
               glt = GLTexture.FromLumpTexture(wtex);
+              tx.averageColor = BSP29Loader._computeAverageColor(wtex.data);
             }
           }
         }
@@ -259,6 +261,7 @@ export class BSP29Loader extends ModelLoader {
           const rgba = translateIndexToRGBA(pixelData, tx.width, tx.height, W.d_8to24table_u8, tx.name[0] === '{' ? 255 : null, 240);
           const textureId = `${tx.name}/${CRC16CCITT.Block(pixelData)}`; // CR: unique texture ID to avoid conflicts across maps
           glt = GLTexture.Allocate(textureId, tx.width, tx.height, rgba);
+          tx.averageColor = BSP29Loader._computeAverageColor(rgba);
         }
 
         if (tx.name[0] === '*' || tx.name[0] === '!') {
@@ -1066,7 +1069,281 @@ export class BSP29Loader extends ModelLoader {
       }
     }
 
+    // Second pass: parse func_fog entities from the entity lump
+    // (moved to load() after _loadSubmodels so we can also scan submodel faces)
+
     loadmodel.bspxoffset = Math.max(loadmodel.bspxoffset, fileofs + filelen);
+  }
+
+  /**
+   * Parse func_fog entities from the BSP entity lump and store
+   * them as fog volume descriptors on the model.
+   * @protected
+   * @param {BrushModel} loadmodel - The model being loaded
+   */
+  _parseFogVolumes(loadmodel) {
+    loadmodel.fogVolumes.length = 0;
+
+    let data = loadmodel.entities;
+    if (!data) {
+      return;
+    }
+
+    while (data) {
+      const parsed = COM.Parse(data);
+      data = parsed.data;
+
+      if (!data) {
+        break;
+      }
+
+      const entity = {};
+
+      while (data) {
+        const parsedKey = COM.Parse(data);
+        data = parsedKey.data;
+
+        if (!data || parsedKey.token === '}') {
+          break;
+        }
+
+        const parsedValue = COM.Parse(data);
+        data = parsedValue.data;
+
+        if (!data || parsedValue.token === '}') {
+          break;
+        }
+
+        entity[parsedKey.token] = parsedValue.token;
+      }
+
+      if (entity.classname !== 'func_fog' || !entity.model) {
+        continue;
+      }
+
+      const modelIndex = parseInt(entity.model.substring(1), 10);
+
+      if (isNaN(modelIndex) || modelIndex <= 0) {
+        Con.PrintWarning(`func_fog has invalid model '${entity.model}'\n`);
+        continue;
+      }
+
+      const colorParts = (entity.fog_color || '128 128 128').split(/\s+/).map(Number);
+      const submodel = loadmodel.submodels[modelIndex - 1];
+
+      loadmodel.fogVolumes.push({
+        modelIndex,
+        color: [colorParts[0] || 128, colorParts[1] || 128, colorParts[2] || 128],
+        density: parseFloat(entity.fog_density || '0.01'),
+        maxOpacity: Math.min(1.0, Math.max(0.0, parseFloat(entity.fog_max_opacity || '0.8'))),
+        mins: submodel ? [submodel.mins[0], submodel.mins[1], submodel.mins[2]] : [0, 0, 0],
+        maxs: submodel ? [submodel.maxs[0], submodel.maxs[1], submodel.maxs[2]] : [0, 0, 0],
+      });
+
+      Con.DPrint(`Found func_fog: model *${modelIndex}, color ${colorParts}, density ${entity.fog_density || '0.01'}\n`);
+    }
+
+    if (loadmodel.worldspawnInfo._qs_autogen_fog !== '1') {
+      Con.DPrint('Auto-generation of fog volumes is disabled.\n');
+      return;
+    }
+
+    // Auto-generate fog volumes for turbulent submodels (water, slime, lava)
+    // that weren't already claimed by a func_fog entity
+    const claimedModels = new Set(loadmodel.fogVolumes.map((fv) => fv.modelIndex));
+
+    for (let i = 0; i < loadmodel.submodels.length; i++) {
+      const modelIndex = i + 1; // submodels[0] = *1, submodels[1] = *2, etc.
+
+      if (claimedModels.has(modelIndex)) {
+        continue;
+      }
+
+      const submodel = loadmodel.submodels[i];
+
+      // Check if ALL faces in this submodel are turbulent
+      let allTurbulent = submodel.numfaces > 0;
+      /** @type {number} */
+      let turbulentTextureIndex = -1;
+
+      for (let j = 0; j < submodel.numfaces; j++) {
+        const face = submodel.faces[submodel.firstface + j];
+        const material = loadmodel.textures[face.texture];
+
+        if (!(material.flags & materialFlags.MF_TURBULENT)) {
+          allTurbulent = false;
+          break;
+        }
+
+        if (turbulentTextureIndex === -1) {
+          turbulentTextureIndex = face.texture;
+        }
+      }
+
+      if (!allTurbulent || turbulentTextureIndex === -1) {
+        continue;
+      }
+
+      // Derive fog color from the texture's average color
+      const material = loadmodel.textures[turbulentTextureIndex];
+      const color = material.averageColor || [128, 128, 128];
+
+      loadmodel.fogVolumes.push({
+        modelIndex,
+        color: [color[0], color[1], color[2]],
+        density: 0.02,
+        maxOpacity: 0.85,
+        mins: [submodel.mins[0], submodel.mins[1], submodel.mins[2]],
+        maxs: [submodel.maxs[0], submodel.maxs[1], submodel.maxs[2]],
+      });
+
+      Con.DPrint(`Auto-fog for turbulent *${modelIndex} (${material.name}): color [${color}]\n`);
+    }
+
+    // Phase 3: Auto-generate fog volumes for world-level turbulent surfaces
+    // (water/slime/lava that belong to the worldspawn, not a brush entity).
+    // These exist as BSP leafs with CONTENT_WATER/SLIME/LAVA contents.
+    // We cluster adjacent leafs of the same type and create fog volumes from their merged AABBs.
+    this._parseFogVolumesFromWorldLeafs(loadmodel);
+  }
+
+  /**
+   * Create fog volumes for world-level water/slime/lava directly from BSP leafs.
+   * Each liquid leaf gets its own fog volume with exact bounds from the BSP compiler,
+   * avoiding imprecision from merging AABBs across multiple leafs.
+   * @private
+   * @param {BrushModel} loadmodel - The model being loaded
+   */
+  _parseFogVolumesFromWorldLeafs(loadmodel) {
+    if (!loadmodel.leafs || loadmodel.leafs.length === 0) {
+      return;
+    }
+
+    /** @type {Map<number, number[]>} content type -> leaf indices (for color lookup) */
+    const liquidLeafsByType = new Map();
+
+    for (let i = 0; i < loadmodel.leafs.length; i++) {
+      const leaf = loadmodel.leafs[i];
+      const c = leaf.contents;
+
+      if (c !== content.CONTENT_WATER && c !== content.CONTENT_SLIME && c !== content.CONTENT_LAVA) {
+        continue;
+      }
+
+      if (!liquidLeafsByType.has(c)) {
+        liquidLeafsByType.set(c, []);
+      }
+      liquidLeafsByType.get(c).push(i);
+    }
+
+    if (liquidLeafsByType.size === 0) {
+      return;
+    }
+
+    for (const [contentType, leafIndices] of liquidLeafsByType) {
+      // Find dominant turbulent texture color across all leafs of this type
+      const color = this._findClusterTurbulentColor(loadmodel, leafIndices) || [128, 128, 128];
+
+      const contentName = contentType === content.CONTENT_WATER ? 'water'
+        : contentType === content.CONTENT_SLIME ? 'slime' : 'lava';
+
+      const density = contentType === content.CONTENT_LAVA ? 0.05
+        : contentType === content.CONTENT_SLIME ? 0.01 : 0.005;
+
+      // Create one fog volume per leaf with exact BSP bounds
+      for (const leafIdx of leafIndices) {
+        const leaf = loadmodel.leafs[leafIdx];
+
+        loadmodel.fogVolumes.push({
+          modelIndex: 0,
+          color: [color[0], color[1], color[2]],
+          density,
+          maxOpacity: 0.85,
+          mins: [leaf.mins[0], leaf.mins[1], leaf.mins[2]],
+          maxs: [leaf.maxs[0], leaf.maxs[1], leaf.maxs[2]],
+        });
+      }
+
+      Con.DPrint(`Auto-fog: ${leafIndices.length} ${contentName} leaf volumes, color [${color}]\n`);
+    }
+  }
+
+  /**
+   * Find the average color of the dominant turbulent texture in a set of leafs.
+   * Scans marksurfaces for turbulent faces and returns the most common texture's color.
+   * @param {BrushModel} loadmodel - The model with leaf/face/texture data
+   * @param {number[]} leafIndices - Leaf indices to scan
+   * @returns {number[]|null} Average color as [r, g, b] or null if no turbulent face found
+   */
+  _findClusterTurbulentColor(loadmodel, leafIndices) {
+    /** @type {Map<number, number>} texture index -> face count */
+    const textureCounts = new Map();
+
+    for (const leafIdx of leafIndices) {
+      const leaf = loadmodel.leafs[leafIdx];
+
+      for (let k = 0; k < leaf.nummarksurfaces; k++) {
+        const faceIdx = loadmodel.marksurfaces[leaf.firstmarksurface + k];
+        const face = loadmodel.faces[faceIdx];
+
+        if (!face.turbulent) {
+          continue;
+        }
+
+        textureCounts.set(face.texture, (textureCounts.get(face.texture) || 0) + 1);
+      }
+    }
+
+    if (textureCounts.size === 0) {
+      return null;
+    }
+
+    // Find the most common turbulent texture
+    let bestTexture = -1;
+    let bestCount = 0;
+
+    for (const [texIdx, count] of textureCounts) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestTexture = texIdx;
+      }
+    }
+
+    const material = loadmodel.textures[bestTexture];
+    return material?.averageColor || null;
+  }
+
+  /**
+   * Compute the average color of an RGBA texture buffer.
+   * Skips fully transparent pixels so alpha-masked areas don't dilute the color.
+   * @param {Uint8Array} rgba - RGBA pixel data
+   * @returns {number[]} Average color as [r, g, b] in 0-255 range
+   */
+  static _computeAverageColor(rgba) {
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
+
+    for (let i = 0; i < rgba.length; i += 4) {
+      if (rgba[i + 3] === 0) {
+        continue; // skip fully transparent pixels
+      }
+      r += rgba[i];
+      g += rgba[i + 1];
+      b += rgba[i + 2];
+      count++;
+    }
+
+    if (count === 0) {
+      return [128, 128, 128];
+    }
+
+    return [
+      Math.round(r / count),
+      Math.round(g / count),
+      Math.round(b / count),
+    ];
   }
 
   /**

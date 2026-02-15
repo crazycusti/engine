@@ -67,6 +67,12 @@ Mod.Init = function () {
 };
 
 Mod.ClearAll = function () {
+  if (!registry.isDedicatedServer) {
+    if (CL.cls.changelevel) {
+      return; // don’t clear models during a changelevel, they will be freed by the renderer when the level is unloaded
+    }
+  }
+
   const tempEnts = (() => {
     if (registry.isDedicatedServer) {
       return [];
@@ -111,6 +117,11 @@ Mod.RegisterModel = function (model) {
  * @returns {Promise<BaseModel|null>} the loaded model or null if not found
  */
 Mod.LoadModelAsync = async function (name, crash) { // private method
+  // lookup from cache first
+  if (Mod.known[name]) {
+    return Mod.known[name];
+  }
+
   const buf = await COM.LoadFile(name);
   if (buf === null) {
     if (crash === true) {

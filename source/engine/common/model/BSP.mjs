@@ -30,6 +30,16 @@ import { AreaPortals } from './AreaPortals.mjs';
  */
 
 /**
+ * @typedef {object} FogVolumeInfo
+ * @property {number} modelIndex - The inline brush model index (from *N notation), 0 for world water
+ * @property {number[]} color - Fog color as [r, g, b] in 0-255 range
+ * @property {number} density - Fog density for exponential falloff
+ * @property {number} maxOpacity - Maximum fog opacity (0-1 clamped)
+ * @property {number[]} mins - AABB minimum corner [x, y, z]
+ * @property {number[]} maxs - AABB maximum corner [x, y, z]
+ */
+
+/**
  * @typedef {Record<string, {fileofs: number, filelen: number}>} BSPXLumps
  * BSPX extended lump data (RGBLIGHTING, LIGHTINGDIR, etc.)
  */
@@ -457,6 +467,9 @@ export class BrushModel extends BaseModel {
 
   /** @type {Record<string, number>} Maps brush model names (e.g. "*1") to auto-assigned portal numbers */
   modelPortalMap = {};
+
+  /** @type {FogVolumeInfo[]} Fog volume brush entities parsed from the BSP entity lump */
+  fogVolumes = [];
 
   /** @type {number[]|null} Leaf brushes, useful for PHS/PVS (optional) */
   leafbrushes = null;

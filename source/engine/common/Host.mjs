@@ -794,17 +794,23 @@ Host.Changelevel_f = function(mapname) {
     client.message.writeString(mapname);
   }
 
+  if (!registry.isDedicatedServer) {
+    // this hack allows us to show the loading plaque and resetting the client renderer
+    CL.cls.changelevel = true;
+    CL.cls.signon = 0;
+  }
+
   Host.ScheduleForNextFrame(async () => {
     SV.SaveSpawnparms();
 
-    console.info('Host.Changelevel_f: changing level to ' + mapname);
+    Con.DPrint('Host.Changelevel_f: changing level to ' + mapname + '\n');
 
     if (!await SV.SpawnServer(mapname)) {
       SV.ShutdownServer(false);
       throw new HostError('Could not spawn server for changelevel to ' + mapname);
     }
 
-    console.info('Host.Changelevel_f: spawned server for changelevel to ' + mapname);
+    Con.DPrint('Host.Changelevel_f: spawned server for changelevel to ' + mapname + '\n');
 
     if (!registry.isDedicatedServer) {
       CL.SetConnectingStep(null, null);

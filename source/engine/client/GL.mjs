@@ -246,6 +246,8 @@ class GL {
       const errorName = errorNames[error] || `Unknown error (${error})`;
       const message = `WebGL Error: ${errorName} during ${operation}`;
 
+      debugger;
+
       throw new GLError(message, error, errorName, operation);
     }
   }

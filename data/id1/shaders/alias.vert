@@ -6,7 +6,6 @@ uniform mat4 uPerspective;
 uniform vec3 uLightVec;
 uniform vec3 uDynamicLightVec;
 uniform float uInterpolation;
-uniform float uAlpha;
 
 attribute vec3 aPositionA;
 attribute vec3 aPositionB;
