@@ -173,7 +173,35 @@ export class ServerCollision {
   }
 
   /**
-   * Traces a moving box against a mesh entity.
+   * Tests whether a point lies inside a triangle using cross-product winding.
+   * @param {Vector} p point to test (should lie on the triangle plane)
+   * @param {Vector} v0 first vertex
+   * @param {Vector} v1 second vertex
+   * @param {Vector} v2 third vertex
+   * @param {Vector} normal unit face normal of the triangle
+   * @returns {boolean} true if the point is inside the triangle
+   */
+  _pointInTriangle(p, v0, v1, v2, normal) {
+    // Small negative tolerance closes micro-gaps between adjacent triangles.
+    // The cross product magnitude scales with edge length, so for typical
+    // game triangles (edges ~5-50 units) this allows roughly 0.01–0.025 units
+    // of perpendicular tolerance per edge.
+    const EDGE_TOLERANCE = -0.125;
+
+    const d0 = normal.dot(v1.copy().subtract(v0).cross(p.copy().subtract(v0)));
+    const d1 = normal.dot(v2.copy().subtract(v1).cross(p.copy().subtract(v1)));
+    const d2 = normal.dot(v0.copy().subtract(v2).cross(p.copy().subtract(v2)));
+
+    return d0 >= EDGE_TOLERANCE && d1 >= EDGE_TOLERANCE && d2 >= EDGE_TOLERANCE;
+  }
+
+  /**
+   * Traces a moving box against a mesh entity using expanded face planes.
+   * Each triangle face is expanded outward by the box's support radius
+   * (Minkowski sum) and tested for ray intersection. A DIST_EPSILON push-back
+   * keeps the endpoint slightly in front of the surface, preventing the next
+   * frame's trace from starting on or inside the plane (which causes
+   * wall-sticking during slides).
    * @param {ServerEdict} ent entity to collide with
    * @param {Vector} start start position
    * @param {Vector} mins minimum extents of the moving box
@@ -196,104 +224,144 @@ export class ServerCollision {
       return trace;
     }
 
+    const meshModel = /** @type {import('../../common/model/MeshModel.mjs').MeshModel} */(model);
+    if (!meshModel.indices || !meshModel.vertices || meshModel.numTriangles === 0) {
+      return trace;
+    }
+
     const origin = ent.entity.origin;
-    const angles = ent.entity.angles;
-    const mat = angles.toRotationMatrix();
+    const mat = ent.entity.angles.toRotationMatrix();
     const forward = new Vector(mat[0], mat[1], mat[2]);
     const right = new Vector(mat[3], mat[4], mat[5]);
     const up = new Vector(mat[6], mat[7], mat[8]);
 
-    const transformToWorld = (v) => {
-      const out = origin.copy();
-      out.add(forward.copy().multiply(v[0]));
-      out.add(right.copy().multiply(v[1]));
-      out.add(up.copy().multiply(v[2]));
-      return out;
-    };
-
-    const vel = end.copy().subtract(start);
+    const moveDir = end.copy().subtract(start);
     const boxExtents = maxs.copy().subtract(mins).multiply(0.5);
     const boxCenterOffset = mins.copy().add(maxs).multiply(0.5);
+    const startCenter = start.copy().add(boxCenterOffset);
 
-    for (let i = 0; i < /** @type {import('../../common/model/MeshModel.mjs').MeshModel} */(model).numTriangles; i++) {
-      const meshModel = /** @type {import('../../common/model/MeshModel.mjs').MeshModel} */(model);
+    for (let i = 0; i < meshModel.numTriangles; i++) {
       const idx0 = meshModel.indices[i * 3];
       const idx1 = meshModel.indices[i * 3 + 1];
       const idx2 = meshModel.indices[i * 3 + 2];
 
-      const v0 = transformToWorld(new Vector(meshModel.vertices[idx0 * 3], meshModel.vertices[idx0 * 3 + 1], meshModel.vertices[idx0 * 3 + 2]));
-      const v1 = transformToWorld(new Vector(meshModel.vertices[idx1 * 3], meshModel.vertices[idx1 * 3 + 1], meshModel.vertices[idx1 * 3 + 2]));
-      const v2 = transformToWorld(new Vector(meshModel.vertices[idx2 * 3], meshModel.vertices[idx2 * 3 + 1], meshModel.vertices[idx2 * 3 + 2]));
+      // Transform triangle vertices to world space
+      const lv0 = new Vector(meshModel.vertices[idx0 * 3], meshModel.vertices[idx0 * 3 + 1], meshModel.vertices[idx0 * 3 + 2]);
+      const lv1 = new Vector(meshModel.vertices[idx1 * 3], meshModel.vertices[idx1 * 3 + 1], meshModel.vertices[idx1 * 3 + 2]);
+      const lv2 = new Vector(meshModel.vertices[idx2 * 3], meshModel.vertices[idx2 * 3 + 1], meshModel.vertices[idx2 * 3 + 2]);
 
-      const edge1 = v1.copy().subtract(v0);
-      const edge2 = v2.copy().subtract(v0);
-      const normal = edge1.cross(edge2);
-      normal.normalize();
-      const dist = normal.dot(v0);
+      const v0 = origin.copy()
+        .add(forward.copy().multiply(lv0[0]))
+        .add(right.copy().multiply(lv0[1]))
+        .add(up.copy().multiply(lv0[2]));
+      const v1 = origin.copy()
+        .add(forward.copy().multiply(lv1[0]))
+        .add(right.copy().multiply(lv1[1]))
+        .add(up.copy().multiply(lv1[2]));
+      const v2 = origin.copy()
+        .add(forward.copy().multiply(lv2[0]))
+        .add(right.copy().multiply(lv2[1]))
+        .add(up.copy().multiply(lv2[2]));
 
-      // Project box radius onto normal
-      const r = boxExtents[0] * Math.abs(normal[0]) + boxExtents[1] * Math.abs(normal[1]) + boxExtents[2] * Math.abs(normal[2]);
+      // Face normal (cross product of triangle edges, then normalize)
+      const normal = v1.copy().subtract(v0).cross(v2.copy().subtract(v0));
+      const lenSq = normal.dot(normal);
+      if (lenSq < 1e-12) {
+        continue; // degenerate triangle
+      }
+      normal.multiply(1.0 / Math.sqrt(lenSq));
 
-      const startCenter = start.copy().add(boxCenterOffset);
-      const startDist = normal.dot(startCenter) - dist;
-      const endCenter = end.copy().add(boxCenterOffset);
-      const endDist = normal.dot(endCenter) - dist;
+      const planeDist = normal.dot(v0);
 
-      // Check for front-face collision
-      // We allow startDist to be slightly inside (up to r) to catch cases where we are already touching
-      // But we only care if we are moving INTO the plane (endDist < startDist)
-      if (endDist >= startDist || endDist >= r) {
+      // Box support radius projected onto the face normal (Minkowski expansion)
+      const r = boxExtents[0] * Math.abs(normal[0])
+              + boxExtents[1] * Math.abs(normal[1])
+              + boxExtents[2] * Math.abs(normal[2]);
+
+      // Rate of approach: positive when moving toward the front face
+      const approach = -(normal[0] * moveDir[0] + normal[1] * moveDir[1] + normal[2] * moveDir[2]);
+
+      // Signed distance from box nearest surface to triangle plane at start
+      const d1 = normal.dot(startCenter) - planeDist - r;
+
+      // --- Start-inside detection (separate from intersection) ---
+      if (d1 <= 0) {
+        // Too far behind the plane — on the back side, not stuck inside
+        if (d1 < -r) {
+          continue;
+        }
+
+        // Project start center onto triangle plane for containment check
+        const hd = normal.dot(startCenter) - planeDist;
+        const projStart = new Vector(
+          startCenter[0] - normal[0] * hd,
+          startCenter[1] - normal[1] * hd,
+          startCenter[2] - normal[2] * hd,
+        );
+
+        if (this._pointInTriangle(projStart, v0, v1, v2, normal)) {
+          trace.startsolid = true;
+          const d2 = d1 - approach;
+          if (d2 <= 0) {
+            trace.allsolid = true;
+          }
+        }
+
+        // Do not generate an impact fraction when starting overlapped;
+        // the physics engine handles startsolid via depenetration logic
         continue;
       }
 
-      const d1 = startDist - r;
-      const d2 = endDist - r;
-      const frac = d1 / (d1 - d2);
+      // --- Front-face intersection ---
 
-      // If frac < 0, it means startDist < r (we started inside the expanded plane)
-      // We need to check if we are actually overlapping the triangle prism
-
-      const checkFrac = Math.max(0, frac);
-
-      // Calculate hit point (center of box at impact)
-      const hitCenter = startCenter.copy().add(vel.copy().multiply(checkFrac));
-      // The actual contact point on the plane is hitCenter - normal * r
-      const contactPoint = hitCenter.copy().subtract(normal.copy().multiply(r));
-
-      // Check if contactPoint is inside triangle
-      const e0 = v1.copy().subtract(v0);
-      const e1 = v2.copy().subtract(v1);
-      const e2 = v0.copy().subtract(v2);
-      const c0 = contactPoint.copy().subtract(v0);
-      const c1 = contactPoint.copy().subtract(v1);
-      const c2 = contactPoint.copy().subtract(v2);
-
-      // CR: Use a small epsilon to prevent slipping through cracks between adjacent polygons
-      const EDGE_EPSILON = -1.0;
-      if (normal.dot(e0.cross(c0)) >= EDGE_EPSILON &&
-          normal.dot(e1.cross(c1)) >= EDGE_EPSILON &&
-          normal.dot(e2.cross(c2)) >= EDGE_EPSILON) {
-
-        if (frac < 0) {
-          // Started inside
-          trace.startsolid = true;
-          trace.allsolid = true;
-          trace.fraction = 0;
-          trace.ent = ent;
-          return trace;
-        }
-
-        if (frac < trace.fraction) {
-          trace.fraction = frac;
-          trace.plane.normal = normal;
-          trace.plane.dist = dist;
-          trace.ent = ent;
-        }
+      // Not approaching or moving parallel — no face collision possible
+      if (approach < DIST_EPSILON) {
+        continue;
       }
+
+      // Compute impact fraction with DIST_EPSILON push-back to keep the
+      // endpoint slightly in front of the surface, preventing the next
+      // frame's trace from starting on or inside the plane
+      let frac = (d1 - DIST_EPSILON) / approach;
+      frac = Math.max(0, Math.min(1, frac));
+
+      // Already found a nearer hit
+      if (frac >= trace.fraction) {
+        continue;
+      }
+
+      // Box center at the candidate impact time
+      const hitCenter = new Vector(
+        startCenter[0] + moveDir[0] * frac,
+        startCenter[1] + moveDir[1] * frac,
+        startCenter[2] + moveDir[2] * frac,
+      );
+
+      // Project onto the triangle plane for point-in-triangle test
+      const hd = normal.dot(hitCenter) - planeDist;
+      const projHit = new Vector(
+        hitCenter[0] - normal[0] * hd,
+        hitCenter[1] - normal[1] * hd,
+        hitCenter[2] - normal[2] * hd,
+      );
+
+      if (!this._pointInTriangle(projHit, v0, v1, v2, normal)) {
+        continue;
+      }
+
+      // Record nearest collision
+      trace.fraction = frac;
+      trace.plane.normal = normal.copy();
+      trace.plane.dist = planeDist;
+      trace.ent = ent;
     }
 
     if (trace.fraction < 1.0) {
-      trace.endpos = start.copy().add(vel.multiply(trace.fraction));
+      trace.endpos.setTo(
+        start[0] + moveDir[0] * trace.fraction,
+        start[1] + moveDir[1] * trace.fraction,
+        start[2] + moveDir[2] * trace.fraction,
+      );
     }
 
     return trace;

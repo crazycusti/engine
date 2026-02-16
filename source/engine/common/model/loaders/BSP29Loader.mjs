@@ -1184,20 +1184,28 @@ export class BSP29Loader extends ModelLoader {
         continue;
       }
 
-      // Derive fog color from the texture's average color
+      // Derive fog color from the texture's average color, modulated by ambient light
       const material = loadmodel.textures[turbulentTextureIndex];
-      const color = material.averageColor || [128, 128, 128];
+      const baseColor = material.averageColor || [128, 128, 128];
+      const volMins = [submodel.mins[0], submodel.mins[1], submodel.mins[2]];
+      const volMaxs = [submodel.maxs[0], submodel.maxs[1], submodel.maxs[2]];
+      const lightFactor = this._sampleAmbientLightForVolume(loadmodel, volMins, volMaxs);
+      const color = [
+        Math.round(baseColor[0] * lightFactor),
+        Math.round(baseColor[1] * lightFactor),
+        Math.round(baseColor[2] * lightFactor),
+      ];
 
       loadmodel.fogVolumes.push({
         modelIndex,
-        color: [color[0], color[1], color[2]],
+        color,
         density: 0.02,
         maxOpacity: 0.85,
-        mins: [submodel.mins[0], submodel.mins[1], submodel.mins[2]],
-        maxs: [submodel.maxs[0], submodel.maxs[1], submodel.maxs[2]],
+        mins: volMins,
+        maxs: volMaxs,
       });
 
-      Con.DPrint(`Auto-fog for turbulent *${modelIndex} (${material.name}): color [${color}]\n`);
+      Con.DPrint(`Auto-fog for turbulent *${modelIndex} (${material.name}): color [${color}], light=${lightFactor.toFixed(2)}\n`);
     }
 
     // Phase 3: Auto-generate fog volumes for world-level turbulent surfaces
@@ -1250,21 +1258,29 @@ export class BSP29Loader extends ModelLoader {
       const density = contentType === content.CONTENT_LAVA ? 0.05
         : contentType === content.CONTENT_SLIME ? 0.01 : 0.005;
 
-      // Create one fog volume per leaf with exact BSP bounds
+      // Create one fog volume per leaf with exact BSP bounds, modulated by ambient light
       for (const leafIdx of leafIndices) {
         const leaf = loadmodel.leafs[leafIdx];
+        const volMins = [leaf.mins[0], leaf.mins[1], leaf.mins[2]];
+        const volMaxs = [leaf.maxs[0], leaf.maxs[1], leaf.maxs[2]];
+        const lightFactor = this._sampleAmbientLightForVolume(loadmodel, volMins, volMaxs);
+        const dimmedColor = [
+          Math.round(color[0] * lightFactor),
+          Math.round(color[1] * lightFactor),
+          Math.round(color[2] * lightFactor),
+        ];
 
         loadmodel.fogVolumes.push({
           modelIndex: 0,
-          color: [color[0], color[1], color[2]],
+          color: dimmedColor,
           density,
           maxOpacity: 0.85,
-          mins: [leaf.mins[0], leaf.mins[1], leaf.mins[2]],
-          maxs: [leaf.maxs[0], leaf.maxs[1], leaf.maxs[2]],
+          mins: volMins,
+          maxs: volMaxs,
         });
-      }
 
-      Con.DPrint(`Auto-fog: ${leafIndices.length} ${contentName} leaf volumes, color [${color}]\n`);
+        Con.DPrint(`Auto-fog: ${leafIdx} ${contentName} leaf volume, base color [${color}], lightFactor = ${lightFactor.toFixed(2)}\n`);
+      }
     }
   }
 
@@ -1311,6 +1327,107 @@ export class BSP29Loader extends ModelLoader {
 
     const material = loadmodel.textures[bestTexture];
     return material?.averageColor || null;
+  }
+
+  /**
+   * Sample the average ambient light intensity near a fog volume's bounding box.
+   * Scans BSP leafs that overlap the expanded AABB and samples lightmap data
+   * from non-turbulent, non-sky faces to estimate the local light level.
+   * @param {BrushModel} loadmodel - The model with leaf/face/lighting data
+   * @param {number[]} mins - Volume AABB minimum [x, y, z]
+   * @param {number[]} maxs - Volume AABB maximum [x, y, z]
+   * @returns {number} Normalized intensity factor in [0.15, 1.0] range
+   */
+  _sampleAmbientLightForVolume(loadmodel, mins, maxs) {
+    if ((loadmodel.lightdata_rgb === null && loadmodel.lightdata === null) || !loadmodel.leafs || loadmodel.leafs.length === 0) {
+      return 1.0;
+    }
+
+    // Expand AABB by 64 units to catch nearby lit surfaces
+    const expand = 64;
+    const eMins = [mins[0] - expand, mins[1] - expand, mins[2] - expand];
+    const eMaxs = [maxs[0] + expand, maxs[1] + expand, maxs[2] + expand];
+
+    let totalIntensity = 0;
+    let sampleCount = 0;
+
+    const hasRGB = loadmodel.lightdata_rgb !== null;
+
+    for (let i = 0; i < loadmodel.leafs.length; i++) {
+      const leaf = loadmodel.leafs[i];
+
+      // Skip liquid leafs — we want light from surrounding solid geometry
+      if (leaf.contents === content.CONTENT_WATER
+        || leaf.contents === content.CONTENT_SLIME
+        || leaf.contents === content.CONTENT_LAVA) {
+        continue;
+      }
+
+      // AABB overlap test
+      if (leaf.mins[0] > eMaxs[0] || leaf.maxs[0] < eMins[0]
+        || leaf.mins[1] > eMaxs[1] || leaf.maxs[1] < eMins[1]
+        || leaf.mins[2] > eMaxs[2] || leaf.maxs[2] < eMins[2]) {
+        continue;
+      }
+
+      // Scan marksurfaces in this leaf
+      for (let k = 0; k < leaf.nummarksurfaces; k++) {
+        const faceIdx = loadmodel.marksurfaces[leaf.firstmarksurface + k];
+        const face = loadmodel.faces[faceIdx];
+
+        if (face.turbulent || face.sky || face.lightofs < 0 || face.styles.length === 0) {
+          continue;
+        }
+
+        // Compute lightmap dimensions for this face
+        const smax = (face.extents[0] >> face.lmshift) + 1;
+        const tmax = (face.extents[1] >> face.lmshift) + 1;
+        const size = smax * tmax;
+
+        if (size <= 0 || size > 4096) {
+          continue;
+        }
+
+        // Sample only the first light style (style 0 = static light)
+        if (hasRGB) {
+          const offset = face.lightofs * 3;
+
+          if (offset + size * 3 > loadmodel.lightdata_rgb.length) {
+            continue;
+          }
+
+          for (let s = 0; s < size * 3; s += 3) {
+            // Perceptual luminance
+            totalIntensity += loadmodel.lightdata_rgb[offset + s] * 0.299
+              + loadmodel.lightdata_rgb[offset + s + 1] * 0.587
+              + loadmodel.lightdata_rgb[offset + s + 2] * 0.114;
+            sampleCount++;
+          }
+        } else {
+          const offset = face.lightofs;
+
+          if (offset + size > loadmodel.lightdata.length) {
+            continue;
+          }
+
+          for (let s = 0; s < size; s++) {
+            totalIntensity += loadmodel.lightdata[offset + s];
+            sampleCount++;
+          }
+        }
+      }
+    }
+
+    if (sampleCount === 0) {
+      return 1.0;
+    }
+
+    // Average intensity in 0-255 range, normalize to a 0-1 scale.
+    // Quake lighting with value ~200 is considered well-lit; we use 200 as reference
+    // so well-lit areas keep the fog color roughly unchanged.
+    const avgIntensity = totalIntensity / sampleCount;
+    const factor = Math.min(1.0, Math.max(0.15, avgIntensity / 200.0));
+    return factor;
   }
 
   /**

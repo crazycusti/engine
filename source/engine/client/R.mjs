@@ -321,6 +321,13 @@ R.LightPoint = function(p) {
   if (CL.state.worldmodel.lightgrid !== null) {
     const gridResult = R.LightPointFromGrid(p);
     if (gridResult !== null) {
+      // Get a proper light origin from surface trace for directional shading.
+      // The lightgrid provides correct color but has no surface information,
+      // so we trace downward to find the surface below the entity.
+      const surfaceTrace = R.RecursiveLightPoint(CL.state.worldmodel.nodes[0], p, new Vector(p[0], p[1], p[2] - 2048.0));
+      if (surfaceTrace !== null) {
+        gridResult[1] = surfaceTrace[1];
+      }
       return gridResult;
     }
   }
@@ -336,11 +343,10 @@ R.LightPoint = function(p) {
 
 /**
  * Sample a single point from the lightgrid octree
- * @param {Vector} pos - World position to sample
  * @param {number[]} gridPos - Grid position [x, y, z]
  * @returns {{stylecount: number, styles: Array<{stylenum: number, rgb: number[]}>}|null} Point data or null if missing
  */
-R.SampleLightgridPoint = function(pos, gridPos) {
+R.SampleLightgridPoint = function(gridPos) {
   const grid = CL.state.worldmodel.lightgrid;
   const LGNODE_LEAF = 1 << 31;
   const LGNODE_MISSING = 1 << 30;
@@ -456,7 +462,7 @@ R.LightPointFromGrid = function(pos) {
     for (let dy = 0; dy <= 1; dy++) {
       for (let dx = 0; dx <= 1; dx++) {
         const gridPos = [baseX + dx, baseY + dy, baseZ + dz];
-        const sample = R.SampleLightgridPoint(pos, gridPos);
+        const sample = R.SampleLightgridPoint(gridPos);
 
         // Calculate trilinear weight
         const wx = dx === 0 ? (1 - fracX) : fracX;
@@ -497,11 +503,11 @@ R.LightPointFromGrid = function(pos) {
       const style = sample.styles[s];
       const stylenum = style.stylenum;
 
-      // Apply lightstyle animation
+      // Apply lightstyle animation (matches RecursiveLightPoint: lightstyle * 22.0 / 256.0)
       const scale = (
         R.lightstylevalue_a[stylenum] * (1 - uInterpolation) +
         R.lightstylevalue_b[stylenum] * uInterpolation
-      ) / 12.0; // Normalize from 0-25 range to multiplier
+      ) * 0.0859375; // 22.0 / 256.0
 
       r3[0] += style.rgb[0] * scale * weight;
       r3[1] += style.rgb[1] * scale * weight;

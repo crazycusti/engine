@@ -68,6 +68,7 @@ export interface ClientGameInterface {
   // client main loop methods
   startFrame(): void;
   draw(): void;
+  drawLoading(): void;
 
   // serialization methods (for saving/loading games)
   saveGame(): string;

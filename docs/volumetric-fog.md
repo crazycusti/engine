@@ -41,6 +41,8 @@ QuakeShack automatically generates fog for water, slime, and lava volumes in you
 - Analyzes the texture colors to match the fog color
 - Creates appropriately colored fog (blue for water, green for slime, orange-red for lava)
 
+**NOTE**: Since this works not well enough on old maps, this feature is opt-in by setting `_qs_autogen_fog` to 1 on `worldspawn`.
+
 ## Tips for Mappers
 
 **Color Selection:**
