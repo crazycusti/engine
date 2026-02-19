@@ -1,3 +1,4 @@
+#version 300 es
 uniform vec3 uOrigin;
 uniform mat3 uAngles;
 uniform vec3 uViewOrigin;
@@ -6,14 +7,14 @@ uniform mat4 uPerspective;
 uniform vec3 uLightVec;
 uniform vec3 uDynamicLightVec;
 
-attribute vec3 aPosition;
-attribute vec2 aTexCoord;
-attribute vec3 aNormal;
+in vec3 aPosition;
+in vec2 aTexCoord;
+in vec3 aNormal;
 
-varying vec2 vTexCoord;
-varying float vLightDot;
-varying float vDynamicLightDot;
-varying float vFog;
+out vec2 vTexCoord;
+out float vLightDot;
+out float vDynamicLightDot;
+out float vFog;
 
 uniform vec4 uFogParams; // start, end, density, mode
 

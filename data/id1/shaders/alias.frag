@@ -1,4 +1,6 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform float uGamma;
 uniform vec3 uAmbientLight;
@@ -8,24 +10,24 @@ uniform float uTime;
 uniform sampler2D tTexture;
 uniform float uAlpha;
 
-varying vec2 vTexCoord;
-varying float vLightDot;
-varying float vDynamicLightDot;
-varying float vFog;
+in vec2 vTexCoord;
+in float vLightDot;
+in float vDynamicLightDot;
+in float vFog;
 uniform vec3 uFogColor;
 
 void main(void){
-  vec4 texture = texture2D(tTexture, vTexCoord);
-  gl_FragColor = vec4(
-    texture.r * mix(1.0, vLightDot * uShadeLight.r + uAmbientLight.r + vDynamicLightDot * uDynamicShadeLight.r, texture.a),
-    texture.g * mix(1.0, vLightDot * uShadeLight.g + uAmbientLight.g + vDynamicLightDot * uDynamicShadeLight.g, texture.a),
-    texture.b * mix(1.0, vLightDot * uShadeLight.b + uAmbientLight.b + vDynamicLightDot * uDynamicShadeLight.b, texture.a),
+  vec4 texel = texture(tTexture, vTexCoord);
+  fragColor = vec4(
+    texel.r * mix(1.0, vLightDot * uShadeLight.r + uAmbientLight.r + vDynamicLightDot * uDynamicShadeLight.r, texel.a),
+    texel.g * mix(1.0, vLightDot * uShadeLight.g + uAmbientLight.g + vDynamicLightDot * uDynamicShadeLight.g, texel.a),
+    texel.b * mix(1.0, vLightDot * uShadeLight.b + uAmbientLight.b + vDynamicLightDot * uDynamicShadeLight.b, texel.a),
     uAlpha
   );
-  gl_FragColor.r = pow(gl_FragColor.r, uGamma);
-  gl_FragColor.g = pow(gl_FragColor.g, uGamma);
-  gl_FragColor.b = pow(gl_FragColor.b, uGamma);
+  fragColor.r = pow(fragColor.r, uGamma);
+  fragColor.g = pow(fragColor.g, uGamma);
+  fragColor.b = pow(fragColor.b, uGamma);
   // apply fog
-  vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
-  gl_FragColor = vec4(finalRgb, gl_FragColor.a);
+  vec3 finalRgb = mix(uFogColor, fragColor.rgb, vFog);
+  fragColor = vec4(finalRgb, fragColor.a);
 }

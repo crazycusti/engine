@@ -1,19 +1,20 @@
+#version 300 es
 uniform vec3 uOrigin;
 uniform mat3 uAngles;
 uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 
-attribute vec3 aPosition;
-// attribute vec3 aNormal;
-attribute vec4 aTexCoord;
-attribute vec4 aLightStyle;
-// attribute vec3 aTangent;
-// attribute vec3 aBitangent;
+in vec3 aPosition;
+// in vec3 aNormal;
+in vec4 aTexCoord;
+in vec4 aLightStyle;
+// in vec3 aTangent;
+// in vec3 aBitangent;
 
-varying vec4 vTexCoord;
-varying vec4 vLightStyle;
-varying float vFog;
+out vec4 vTexCoord;
+out vec4 vLightStyle;
+out float vFog;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {

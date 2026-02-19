@@ -1,9 +1,11 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform float uTime;
 uniform sampler2D tTexture;
 
-varying vec2 vTexCoord;
+in vec2 vTexCoord;
 
 void main(void) {
   // Apply warp effect to the texture coordinates.
@@ -23,9 +25,9 @@ void main(void) {
 
   for (int i = -1; i <= 1; i++) {
     for (int j = -1; j <= 1; j++) {
-      color += texture2D(tTexture, warpedCoord + vec2(float(i) * texOffset.x, float(j) * texOffset.y)) * kernel[i + 1 + (j + 1) * 3];
+      color += texture(tTexture, warpedCoord + vec2(float(i) * texOffset.x, float(j) * texOffset.y)) * kernel[i + 1 + (j + 1) * 3];
     }
   }
 
-  gl_FragColor = color;
+  fragColor = color;
 }

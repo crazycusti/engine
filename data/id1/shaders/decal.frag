@@ -1,25 +1,27 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform float uGamma;
 uniform sampler2D tTexture;
 
-varying vec2 vTexCoord;
-varying vec3 vColor;
-varying float vFog;
+in vec2 vTexCoord;
+in vec3 vColor;
+in float vFog;
 uniform vec3 uFogColor;
 
 void main(void) {
-  vec4 texColor = texture2D(tTexture, vTexCoord);
+  vec4 texColor = texture(tTexture, vTexCoord);
   texColor.rgb *= vColor;
 
-  gl_FragColor = texColor;
-  gl_FragColor.r = pow(gl_FragColor.r, uGamma);
-  gl_FragColor.g = pow(gl_FragColor.g, uGamma);
-  gl_FragColor.b = pow(gl_FragColor.b, uGamma);
+  fragColor = texColor;
+  fragColor.r = pow(fragColor.r, uGamma);
+  fragColor.g = pow(fragColor.g, uGamma);
+  fragColor.b = pow(fragColor.b, uGamma);
 
-  if (gl_FragColor.a < 0.01) discard;
+  if (fragColor.a < 0.01) discard;
 
   // apply fog
-  vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
-  gl_FragColor = vec4(finalRgb, gl_FragColor.a);
+  vec3 finalRgb = mix(uFogColor, fragColor.rgb, vFog);
+  fragColor = vec4(finalRgb, fragColor.a);
 }

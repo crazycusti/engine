@@ -87,9 +87,9 @@ R.AnimateLight = function() {
     }
   }
   GL.Bind(0, R.lightstyle_texture_a);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.ALPHA, 64, 1, 0, gl.ALPHA, gl.UNSIGNED_BYTE, R.lightstylevalue_a);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 64, 1, 0, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_a);
   GL.Bind(0, R.lightstyle_texture_b);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.ALPHA, 64, 1, 0, gl.ALPHA, gl.UNSIGNED_BYTE, R.lightstylevalue_b);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 64, 1, 0, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_b);
 };
 
 R.RenderDlights = function() {
@@ -1118,8 +1118,7 @@ R.PreRenderScene = function() {
 
   // Activate depth-texture post-process when fog volumes exist.
   // Pipeline effects (warp, etc.) are resolved separately via PostProcess.resolve.
-  R.usePostProcess = PostProcess.hasDepthTexture
-    && CL.state.worldmodel.fogVolumes && CL.state.worldmodel.fogVolumes.length > 0;
+  R.usePostProcess = CL.state.worldmodel.fogVolumes && CL.state.worldmodel.fogVolumes.length > 0;
 };
 
 R.RenderWorld = function() {

@@ -1,3 +1,4 @@
+#version 300 es
 precision mediump float;
 
 uniform vec3 uOrigin;
@@ -11,24 +12,24 @@ uniform vec3 uDynamicLightVec;
 uniform bool uPerformDotLighting;
 uniform bool uHaveDeluxemap;
 
-attribute vec3 aPosition;
-attribute vec3 aNormal;
-attribute vec4 aTexCoord;
-attribute vec4 aLightStyle;
-attribute vec3 aTangent;
+in vec3 aPosition;
+in vec3 aNormal;
+in vec4 aTexCoord;
+in vec4 aLightStyle;
+in vec3 aTangent;
 
-varying vec4 vTexCoord;
-varying vec4 vLightStyle;
-varying float vLightDot;
-varying float vDynamicLightDot;
-varying float vFog;
-varying vec3 vNormal;
-varying vec3 vLightVec;
-varying float vLightMix;
-varying vec3 vTangent;
-varying mat3 vAngles;
+out vec4 vTexCoord;
+out vec4 vLightStyle;
+out float vLightDot;
+out float vDynamicLightDot;
+out float vFog;
+out vec3 vNormal;
+out vec3 vLightVec;
+out float vLightMix;
+out vec3 vTangent;
+out mat3 vAngles;
 
-varying vec3 vViewVec;
+out vec3 vViewVec;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {

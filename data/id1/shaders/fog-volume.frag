@@ -1,4 +1,6 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
@@ -23,7 +25,7 @@ uniform int uDlightCount;
 uniform vec4 uDlightPos[MAX_FOG_DLIGHTS];
 uniform vec4 uDlightColor[MAX_FOG_DLIGHTS];
 
-varying vec3 vWorldPos;
+in vec3 vWorldPos;
 
 /**
  * Compute the 2D texture UV for a light probe texel at integer grid position (ix, iy, iz).
@@ -59,14 +61,14 @@ vec3 sampleLightProbe(vec3 worldPos) {
   vec3 f = gridPos - g0;
 
   // Sample 8 corners of the enclosing grid cell
-  vec3 c000 = texture2D(tLightProbe, lightProbeUV(g0.x, g0.y, g0.z)).rgb;
-  vec3 c100 = texture2D(tLightProbe, lightProbeUV(g1.x, g0.y, g0.z)).rgb;
-  vec3 c010 = texture2D(tLightProbe, lightProbeUV(g0.x, g1.y, g0.z)).rgb;
-  vec3 c110 = texture2D(tLightProbe, lightProbeUV(g1.x, g1.y, g0.z)).rgb;
-  vec3 c001 = texture2D(tLightProbe, lightProbeUV(g0.x, g0.y, g1.z)).rgb;
-  vec3 c101 = texture2D(tLightProbe, lightProbeUV(g1.x, g0.y, g1.z)).rgb;
-  vec3 c011 = texture2D(tLightProbe, lightProbeUV(g0.x, g1.y, g1.z)).rgb;
-  vec3 c111 = texture2D(tLightProbe, lightProbeUV(g1.x, g1.y, g1.z)).rgb;
+  vec3 c000 = texture(tLightProbe, lightProbeUV(g0.x, g0.y, g0.z)).rgb;
+  vec3 c100 = texture(tLightProbe, lightProbeUV(g1.x, g0.y, g0.z)).rgb;
+  vec3 c010 = texture(tLightProbe, lightProbeUV(g0.x, g1.y, g0.z)).rgb;
+  vec3 c110 = texture(tLightProbe, lightProbeUV(g1.x, g1.y, g0.z)).rgb;
+  vec3 c001 = texture(tLightProbe, lightProbeUV(g0.x, g0.y, g1.z)).rgb;
+  vec3 c101 = texture(tLightProbe, lightProbeUV(g1.x, g0.y, g1.z)).rgb;
+  vec3 c011 = texture(tLightProbe, lightProbeUV(g0.x, g1.y, g1.z)).rgb;
+  vec3 c111 = texture(tLightProbe, lightProbeUV(g1.x, g1.y, g1.z)).rgb;
 
   // Trilinear interpolation
   vec3 c00 = mix(c000, c100, f.x);
@@ -112,7 +114,7 @@ void main(void) {
   vec2 screenUV = gl_FragCoord.xy / uScreenSize;
 
   // Sample scene depth and linearize
-  float rawDepth = texture2D(tDepth, screenUV).r;
+  float rawDepth = texture(tDepth, screenUV).r;
   float sceneDepth = linearizeDepth(rawDepth);
 
   // Ray from camera through this fragment in world space
@@ -177,5 +179,5 @@ void main(void) {
   // Apply gamma to light-tinted fog color (static probe + dynamic lights)
   vec3 color = pow(uFogVolumeColor * lightTint + dlightContrib, vec3(uGamma));
 
-  gl_FragColor = vec4(color, fogFactor);
+  fragColor = vec4(color, fogFactor);
 }

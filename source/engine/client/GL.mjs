@@ -685,18 +685,11 @@ export class GLTexture {
     } else if (data instanceof Uint8Array) {
       console.assert(data.length === this.width * this.height * 4, 'Texture data length must match width and height');
 
-      const { scaledWidth, scaledHeight, resampleRequired } = scaleTextureDimensions(this.width, this.height);
-
-      if (resampleRequired) {
-        data = resampleTexture32(data, this.width, this.height, scaledWidth, scaledHeight);
-      }
-
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, scaledWidth, scaledHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
       gl.generateMipmap(gl.TEXTURE_2D);
       GL.CheckError();
     } else if (data === null) {
-      const { scaledWidth, scaledHeight } = scaleTextureDimensions(this.width, this.height);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, scaledWidth, scaledHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }
 
     this._setTextureMode(this.#textureMode);
@@ -760,47 +753,7 @@ class TextureModeCommand extends ConsoleCommand {
   }
 }
 
-/**
- * Determines the scaled dimensions of a texture based on the input width and height.
- * @param {number} width input texture width
- * @param {number} height input texture height
- * @returns {{scaledWidth: number, scaledHeight: number, resampleRequired: boolean}} new dimensions and whether resampling is required
- */
-function scaleTextureDimensions(width, height) {
-  let scaledWidth = width;
-  let scaledHeight = height;
 
-  if (((width & (width - 1)) !== 0) || ((height & (height - 1)) !== 0)) {
-    scaledWidth--;
-    scaledWidth |= (scaledWidth >> 1);
-    scaledWidth |= (scaledWidth >> 2);
-    scaledWidth |= (scaledWidth >> 4);
-    scaledWidth |= (scaledWidth >> 8);
-    scaledWidth |= (scaledWidth >> 16);
-    scaledWidth++;
-    scaledHeight--;
-    scaledHeight |= (scaledHeight >> 1);
-    scaledHeight |= (scaledHeight >> 2);
-    scaledHeight |= (scaledHeight >> 4);
-    scaledHeight |= (scaledHeight >> 8);
-    scaledHeight |= (scaledHeight >> 16);
-    scaledHeight++;
-  }
-
-  if (scaledWidth > GL.maxtexturesize) {
-    scaledWidth = GL.maxtexturesize;
-  }
-
-  if (scaledHeight > GL.maxtexturesize) {
-    scaledHeight = GL.maxtexturesize;
-  }
-
-  return {
-    scaledWidth,
-    scaledHeight,
-    resampleRequired: (scaledWidth !== width) || (scaledHeight !== height),
-  };
-}
 
 /**
  * @param {Uint8Array} data 8-bit texture data
@@ -829,33 +782,7 @@ export function resampleTexture8(data, inwidth, inheight, outwidth, outheight) {
   return out;
 }
 
-/**
- * @param {Uint8Array} data RGBA texture data
- * @param {number} inwidth source texture width
- * @param {number} inheight source texture height
- * @param {number} outwidth target texture width
- * @param {number} outheight target texture height
- * @returns {Uint8Array} resampled texture data
- */
-export function resampleTexture32(data, inwidth, inheight, outwidth, outheight) {
-  const outdata = new ArrayBuffer(outwidth * outheight * 4);
-  const out = new Uint8Array(outdata);
-  const xstep = inwidth / outwidth;
-  const ystep = inheight / outheight;
-  for (let i = 0; i < outheight; i++) {
-    const src_y = Math.floor(i * ystep);
-    for (let j = 0; j < outwidth; j++) {
-      const src_x = Math.floor(j * xstep);
-      const srcIndex = (src_y * inwidth + src_x) * 4;
-      const destIndex = (i * outwidth + j) * 4;
-      out[destIndex + 0] = data[srcIndex + 0];
-      out[destIndex + 1] = data[srcIndex + 1];
-      out[destIndex + 2] = data[srcIndex + 2];
-      out[destIndex + 3] = data[srcIndex + 3];
-    }
-  }
-  return out;
-}
+
 
 /** Turn this on to enable GL profiling */
 const profileGL = false;
@@ -921,13 +848,12 @@ function GL_Init() {
       preserveDrawingBuffer: true,
     };
 
-    // @ts-ignore
-    gl = VID.mainwindow.getContext('webgl', options) || VID.mainwindow.getContext('experimental-webgl', options);
+    gl = /** @type {WebGL2RenderingContext} */ (VID.mainwindow.getContext('webgl2', options));
   } catch (e) {
-    throw new Error(`Unable to initialize WebGL. ${e.message}`);
+    throw new Error(`Unable to initialize WebGL2. ${e.message}`);
   }
   if (!gl) {
-    throw new Error('Unable to initialize WebGL. Your browser may not support it.');
+    throw new Error('Unable to initialize WebGL2. Your browser may not support it.');
   }
 
   GL.maxtexturesize = gl.getParameter(gl.MAX_TEXTURE_SIZE);

@@ -1,12 +1,13 @@
+#version 300 es
 uniform vec3 uOrigin;
 uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform float uRadius;
 
-attribute vec3 aPosition;
+in vec3 aPosition;
 
-varying float vAlpha;
+out float vAlpha;
 
 void main(void) {
   vec3 position = aPosition * 0.35 * uRadius + uViewAngles * (uOrigin - uViewOrigin);

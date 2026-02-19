@@ -1079,9 +1079,6 @@ export class BrushModelRenderer extends ModelRenderer {
     if (!worldmodel.fogVolumes || worldmodel.fogVolumes.length === 0) {
       return [];
     }
-    if (!PostProcess.hasDepthTexture) {
-      return [];
-    }
     const items = [];
     for (const fogVolume of worldmodel.fogVolumes) {
       const cx = (fogVolume.mins[0] + fogVolume.maxs[0]) * 0.5;
@@ -1104,9 +1101,6 @@ export class BrushModelRenderer extends ModelRenderer {
    */
   beginFogVolumePass(worldmodel) {
     if (!worldmodel.fogVolumes || worldmodel.fogVolumes.length === 0) {
-      return false;
-    }
-    if (!PostProcess.hasDepthTexture) {
       return false;
     }
 

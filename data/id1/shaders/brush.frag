@@ -1,4 +1,6 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform float uGamma;
 uniform float uInterpolation;
@@ -22,43 +24,43 @@ uniform vec3 uAmbientLight;
 uniform vec3 uShadeLight;
 uniform vec3 uDynamicShadeLight;
 
-varying vec4 vTexCoord;
-varying vec4 vLightStyle;
-varying float vLightDot;
-varying float vDynamicLightDot;
-varying float vFog;
-varying vec3 vNormal;
-varying vec3 vLightVec;
-varying float vLightMix;
-varying vec3 vTangent;
-varying vec3 vViewVec;
+in vec4 vTexCoord;
+in vec4 vLightStyle;
+in float vLightDot;
+in float vDynamicLightDot;
+in float vFog;
+in vec3 vNormal;
+in vec3 vLightVec;
+in float vLightMix;
+in vec3 vTangent;
+in vec3 vViewVec;
 uniform vec3 uFogColor;
-varying mat3 vAngles;
+in mat3 vAngles;
 
 void main(void) {
   // Combine texture samples at the start
-  vec4 textureA = texture2D(tTextureA, vTexCoord.xy);
-  vec4 textureB = texture2D(tTextureB, vTexCoord.xy);
-  vec4 luminance = texture2D(tLuminance, vTexCoord.xy);
+  vec4 textureA = texture(tTextureA, vTexCoord.xy);
+  vec4 textureB = texture(tTextureB, vTexCoord.xy);
+  vec4 luminance = texture(tLuminance, vTexCoord.xy);
 
   // interpolation
-  vec4 texture = mix(textureA, textureB, uInterpolation);
+  vec4 texel = mix(textureA, textureB, uInterpolation);
 
   // Pre-calculate lightstyle constant
   const float LIGHTSTYLE_SCALE = 43.828125;
 
   // Optimize lightstyle sampling - use texture lookups more efficiently
   vec4 lightstyleA = vec4(
-    texture2D(tLightStyleA, vec2(vLightStyle.x, 0.0)).a,
-    texture2D(tLightStyleA, vec2(vLightStyle.y, 0.0)).a,
-    texture2D(tLightStyleA, vec2(vLightStyle.z, 0.0)).a,
-    texture2D(tLightStyleA, vec2(vLightStyle.w, 0.0)).a
+    texture(tLightStyleA, vec2(vLightStyle.x, 0.0)).r,
+    texture(tLightStyleA, vec2(vLightStyle.y, 0.0)).r,
+    texture(tLightStyleA, vec2(vLightStyle.z, 0.0)).r,
+    texture(tLightStyleA, vec2(vLightStyle.w, 0.0)).r
   );
   vec4 lightstyleB = vec4(
-    texture2D(tLightStyleB, vec2(vLightStyle.x, 0.0)).a,
-    texture2D(tLightStyleB, vec2(vLightStyle.y, 0.0)).a,
-    texture2D(tLightStyleB, vec2(vLightStyle.z, 0.0)).a,
-    texture2D(tLightStyleB, vec2(vLightStyle.w, 0.0)).a
+    texture(tLightStyleB, vec2(vLightStyle.x, 0.0)).r,
+    texture(tLightStyleB, vec2(vLightStyle.y, 0.0)).r,
+    texture(tLightStyleB, vec2(vLightStyle.z, 0.0)).r,
+    texture(tLightStyleB, vec2(vLightStyle.w, 0.0)).r
   );
   vec4 lightstyle = mix(lightstyleA, lightstyleB, uInterpolation) * LIGHTSTYLE_SCALE;
 
@@ -69,9 +71,9 @@ void main(void) {
   vec2 lightmapCoordB = vec2(vTexCoord.z, lightmapW + 0.5);
 
   // Sample all lightmap channels
-  vec4 lightmapR = texture2D(tLightmap, lightmapCoordR);
-  vec4 lightmapG = texture2D(tLightmap, lightmapCoordG);
-  vec4 lightmapB = texture2D(tLightmap, lightmapCoordB);
+  vec4 lightmapR = texture(tLightmap, lightmapCoordR);
+  vec4 lightmapG = texture(tLightmap, lightmapCoordG);
+  vec4 lightmapB = texture(tLightmap, lightmapCoordB);
 
   vec3 lightmap = vec3(
     dot(lightmapR, lightstyle),
@@ -79,7 +81,7 @@ void main(void) {
     dot(lightmapB, lightstyle)
   );
 
-  vec3 staticLight = lightmap + texture2D(tDlight, vTexCoord.zw).rgb;
+  vec3 staticLight = lightmap + texture(tDlight, vTexCoord.zw).rgb;
 
   float bumpLightDot = 1.0;
   float specFactor = 0.0;
@@ -90,9 +92,9 @@ void main(void) {
 
     if (uHaveDeluxemap) {
       // Reuse pre-calculated deluxemap coordinates
-      vec4 deluxemapR = texture2D(tDeluxemap, lightmapCoordR);
-      vec4 deluxemapG = texture2D(tDeluxemap, lightmapCoordG);
-      vec4 deluxemapB = texture2D(tDeluxemap, lightmapCoordB);
+      vec4 deluxemapR = texture(tDeluxemap, lightmapCoordR);
+      vec4 deluxemapG = texture(tDeluxemap, lightmapCoordG);
+      vec4 deluxemapB = texture(tDeluxemap, lightmapCoordB);
 
       lightDirection = vec3(
         dot(deluxemapR, lightstyle),
@@ -112,8 +114,8 @@ void main(void) {
     }
 
     // Sample normal and specular maps once
-    vec3 normalPoint = texture2D(tNormal, vTexCoord.xy).xyz;
-    float specIntensity = texture2D(tSpecular, vTexCoord.xy).r;
+    vec3 normalPoint = texture(tNormal, vTexCoord.xy).xyz;
+    float specIntensity = texture(tSpecular, vTexCoord.xy).r;
 
     // Convert normal from [0,1] to [-1,1] and invert X,Y in one operation
     vec3 normalMap = normalize(vec3(
@@ -154,10 +156,10 @@ void main(void) {
   // Pre-calculate common factors to avoid redundant calculations
   vec3 shadeAmbient = vLightDot * uShadeLight + uAmbientLight + vDynamicLightDot * uDynamicShadeLight;
   vec3 lightingFactor = staticLight * bumpFactor * shadeAmbient;
-  vec3 luminanceMask = texture.a * (vec3(1.0) - luminance.rgb);
+  vec3 luminanceMask = texel.a * (vec3(1.0) - luminance.rgb);
 
   // Combine lighting in one operation per channel
-  vec3 finalColor = texture.rgb * mix(vec3(1.0), lightingFactor, luminanceMask) + specFactor * staticLight;
+  vec3 finalColor = texel.rgb * mix(vec3(1.0), lightingFactor, luminanceMask) + specFactor * staticLight;
 
   // Apply gamma correction using pow on vec3 (single operation instead of 3)
   finalColor = pow(finalColor, vec3(uGamma));
@@ -165,5 +167,5 @@ void main(void) {
   // Apply fog
   finalColor = mix(uFogColor, finalColor, vFog);
 
-  gl_FragColor = vec4(finalColor, texture.a * uAlpha);
+  fragColor = vec4(finalColor, texel.a * uAlpha);
 }

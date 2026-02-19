@@ -1,16 +1,17 @@
+#version 300 es
 uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform float uScale;
 
-attribute vec3 aOrigin;
-attribute vec2 aCoord;
-attribute float aScale;
-attribute vec3 aColor;
+in vec3 aOrigin;
+in vec2 aCoord;
+in float aScale;
+in vec3 aColor;
 
-varying vec2 vCoord;
-varying vec3 vColor;
-varying float vFog;
+out vec2 vCoord;
+out vec3 vColor;
+out float vFog;
 
 uniform vec4 uFogParams; // start, end, density, mode
 

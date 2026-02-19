@@ -49,9 +49,6 @@ export default class PostProcess {
   /** @type {number} Current scene FBO height in pixels */
   static height = 0;
 
-  /** @type {boolean} Whether the WEBGL_depth_texture extension is available */
-  static hasDepthTexture = false;
-
   /** @type {boolean} Whether the PostProcess system is currently active (FBO bound) */
   static active = false;
 
@@ -113,12 +110,8 @@ export default class PostProcess {
    * Acquires the depth texture extension and creates FBOs.
    */
   static init() {
-    const depthExt = gl.getExtension('WEBGL_depth_texture');
-    PostProcess.hasDepthTexture = !!depthExt;
-
-    // Scene FBO (only if depth textures are available for fog volumes)
-    if (PostProcess.hasDepthTexture) {
-      PostProcess.fbo = gl.createFramebuffer();
+    PostProcess.fbo = gl.createFramebuffer();
+    {
 
       // Color texture
       PostProcess.colorTexture = gl.createTexture();
@@ -146,7 +139,7 @@ export default class PostProcess {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    // Ping-pong FBOs for effect chaining (always created — no depth texture needed)
+    // Ping-pong FBOs for effect chaining
     PostProcess.pingFBO = gl.createFramebuffer();
     PostProcess.pingTexture = gl.createTexture();
     GL.Bind(0, PostProcess.pingTexture);
@@ -176,7 +169,7 @@ export default class PostProcess {
    * @param {number} height - New height in pixels
    */
   static resize(width, height) {
-    if (!PostProcess.hasDepthTexture || (PostProcess.width === width && PostProcess.height === height)) {
+    if (PostProcess.width === width && PostProcess.height === height) {
       return;
     }
 
@@ -189,7 +182,7 @@ export default class PostProcess {
 
     // Resize depth texture
     GL.Bind(0, PostProcess.depthTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, width, height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, width, height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
 
     // Resize depth renderbuffer
     gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
@@ -227,10 +220,6 @@ export default class PostProcess {
    * Binds the FBO, sets the viewport, and clears.
    */
   static begin() {
-    if (!PostProcess.hasDepthTexture) {
-      return;
-    }
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
     gl.viewport(0, 0, PostProcess.width, PostProcess.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -256,10 +245,6 @@ export default class PostProcess {
    * Attaches a depth renderbuffer instead to keep the FBO complete.
    */
   static beginDepthSampling() {
-    if (!PostProcess.hasDepthTexture) {
-      return;
-    }
-
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
   }
@@ -268,10 +253,6 @@ export default class PostProcess {
    * Reattach the depth texture to the FBO after depth sampling is done.
    */
   static endDepthSampling() {
-    if (!PostProcess.hasDepthTexture) {
-      return;
-    }
-
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, PostProcess.depthTexture, 0);
   }
@@ -411,6 +392,5 @@ export default class PostProcess {
     PostProcess.ppWidth = 0;
     PostProcess.ppHeight = 0;
     PostProcess.active = false;
-    PostProcess.hasDepthTexture = false;
   }
 };

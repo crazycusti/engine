@@ -1,3 +1,4 @@
+#version 300 es
 precision mediump float;
 
 uniform vec3 uOrigin;
@@ -6,9 +7,9 @@ uniform vec3 uViewOrigin;
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 
-attribute vec3 aPosition;
+in vec3 aPosition;
 
-varying vec3 vWorldPos;
+out vec3 vWorldPos;
 
 void main(void) {
   vec3 worldPos = uAngles * aPosition + uOrigin;

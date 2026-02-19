@@ -1,9 +1,10 @@
+#version 300 es
 uniform mat4 uOrtho;
 
-attribute vec2 aPosition;
-attribute vec2 aTexCoord;
+in vec2 aPosition;
+in vec2 aTexCoord;
 
-varying vec2 vTexCoord;
+out vec2 vTexCoord;
 
 void main(void) {
   gl_Position = uOrtho * vec4(aPosition, 0.0, 1.0);

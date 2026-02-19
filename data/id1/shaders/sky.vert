@@ -1,11 +1,12 @@
+#version 300 es
 uniform mat3 uViewAngles;
 uniform mat4 uPerspective;
 uniform vec3 uScale;
 
-attribute vec3 aPosition;
+in vec3 aPosition;
 
-varying vec2 vTexCoord;
-varying float vFog;
+out vec2 vTexCoord;
+out float vFog;
 
 uniform vec4 uFogParams; // start, end, density, mode
 

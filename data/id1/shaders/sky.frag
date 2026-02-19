@@ -1,23 +1,25 @@
+#version 300 es
 precision mediump float;
+out vec4 fragColor;
 
 uniform float uGamma;
 uniform vec2 uTime;
 uniform sampler2D tSolid;
 uniform sampler2D tAlpha;
 
-varying vec2 vTexCoord;
-varying float vFog;
+in vec2 vTexCoord;
+in float vFog;
 uniform vec3 uFogColor;
 
 void main(void) {
-  vec4 alpha = texture2D(tAlpha, vTexCoord + uTime.x);
+  vec4 alpha = texture(tAlpha, vTexCoord + uTime.x);
 
-  gl_FragColor = vec4(mix(texture2D(tSolid, vTexCoord + uTime.y).rgb, alpha.rgb, alpha.a), 1.0);
+  fragColor = vec4(mix(texture(tSolid, vTexCoord + uTime.y).rgb, alpha.rgb, alpha.a), 1.0);
 
-  gl_FragColor.r = pow(gl_FragColor.r, uGamma);
-  gl_FragColor.g = pow(gl_FragColor.g, uGamma);
-  gl_FragColor.b = pow(gl_FragColor.b, uGamma);
+  fragColor.r = pow(fragColor.r, uGamma);
+  fragColor.g = pow(fragColor.g, uGamma);
+  fragColor.b = pow(fragColor.b, uGamma);
   // apply fog to sky RGB
-  vec3 finalRgb = mix(uFogColor, gl_FragColor.rgb, vFog);
-  gl_FragColor = vec4(finalRgb, gl_FragColor.a);
+  vec3 finalRgb = mix(uFogColor, fragColor.rgb, vFog);
+  fragColor = vec4(finalRgb, fragColor.a);
 }
