@@ -12,9 +12,73 @@ uniform vec3 uFogVolumeMins;
 uniform vec3 uFogVolumeMaxs;
 
 uniform sampler2D tDepth;
+uniform sampler2D tLightProbe;
+uniform vec3 uLightProbeRes;
+uniform float uHasLightProbe;
 uniform vec2 uScreenSize;
 
+// Dynamic lights (point lights): position.xyz + radius in w, color.rgb + unused w
+const int MAX_FOG_DLIGHTS = 8;
+uniform int uDlightCount;
+uniform vec4 uDlightPos[MAX_FOG_DLIGHTS];
+uniform vec4 uDlightColor[MAX_FOG_DLIGHTS];
+
 varying vec3 vWorldPos;
+
+/**
+ * Compute the 2D texture UV for a light probe texel at integer grid position (ix, iy, iz).
+ * The 3D grid is packed into a 2D texture with Z slices laid out horizontally.
+ * Texture width = resX * resZ, height = resY.
+ */
+vec2 lightProbeUV(float ix, float iy, float iz) {
+  float texWidth = uLightProbeRes.x * uLightProbeRes.z;
+  float px = iz * uLightProbeRes.x + ix;
+  return vec2((px + 0.5) / texWidth, (iy + 0.5) / uLightProbeRes.y);
+}
+
+/**
+ * Sample the light probe grid at a world position using manual trilinear interpolation.
+ * Maps the world position into the fog volume's [0,1] space, then samples 8 corner
+ * texels and interpolates to get the light color at that point.
+ */
+vec3 sampleLightProbe(vec3 worldPos) {
+  if (uHasLightProbe < 0.5) {
+    return vec3(1.0);
+  }
+
+  // Normalize world position to [0,1] within the fog volume AABB
+  vec3 size = uFogVolumeMaxs - uFogVolumeMins;
+  vec3 uvw = clamp((worldPos - uFogVolumeMins) / size, 0.0, 1.0);
+
+  // Scale to grid coordinates (0..res-1)
+  vec3 gridPos = uvw * (uLightProbeRes - 1.0);
+
+  // 8 corner integer positions
+  vec3 g0 = floor(gridPos);
+  vec3 g1 = min(g0 + 1.0, uLightProbeRes - 1.0);
+  vec3 f = gridPos - g0;
+
+  // Sample 8 corners of the enclosing grid cell
+  vec3 c000 = texture2D(tLightProbe, lightProbeUV(g0.x, g0.y, g0.z)).rgb;
+  vec3 c100 = texture2D(tLightProbe, lightProbeUV(g1.x, g0.y, g0.z)).rgb;
+  vec3 c010 = texture2D(tLightProbe, lightProbeUV(g0.x, g1.y, g0.z)).rgb;
+  vec3 c110 = texture2D(tLightProbe, lightProbeUV(g1.x, g1.y, g0.z)).rgb;
+  vec3 c001 = texture2D(tLightProbe, lightProbeUV(g0.x, g0.y, g1.z)).rgb;
+  vec3 c101 = texture2D(tLightProbe, lightProbeUV(g1.x, g0.y, g1.z)).rgb;
+  vec3 c011 = texture2D(tLightProbe, lightProbeUV(g0.x, g1.y, g1.z)).rgb;
+  vec3 c111 = texture2D(tLightProbe, lightProbeUV(g1.x, g1.y, g1.z)).rgb;
+
+  // Trilinear interpolation
+  vec3 c00 = mix(c000, c100, f.x);
+  vec3 c10 = mix(c010, c110, f.x);
+  vec3 c01 = mix(c001, c101, f.x);
+  vec3 c11 = mix(c011, c111, f.x);
+
+  vec3 c0 = mix(c00, c10, f.y);
+  vec3 c1 = mix(c01, c11, f.y);
+
+  return mix(c0, c1, f.z);
+}
 
 /**
  * Convert a depth buffer value (non-linear) to linear view-space distance.
@@ -90,8 +154,28 @@ void main(void) {
     discard;
   }
 
-  // Apply gamma to fog color
-  vec3 color = pow(uFogVolumeColor, vec3(uGamma));
+  // Sample light probe at the midpoint of the fog ray to tint the fog
+  // by the local lighting environment (colored lights, etc.)
+  vec3 fogMidpoint = uViewOrigin + rayDir * ((tEntry + tExit) * 0.5);
+  vec3 lightTint = sampleLightProbe(fogMidpoint);
+
+  // Accumulate dynamic light contributions at the fog midpoint.
+  // Each dlight acts as a point light with linear falloff based on radius.
+  vec3 dlightContrib = vec3(0.0);
+  for (int i = 0; i < MAX_FOG_DLIGHTS; i++) {
+    if (i >= uDlightCount) {
+      break;
+    }
+    vec3 dlPos = uDlightPos[i].xyz;
+    float dlRadius = uDlightPos[i].w;
+    vec3 dlColor = uDlightColor[i].rgb;
+    float dist = distance(fogMidpoint, dlPos);
+    float atten = max(0.0, 1.0 - dist / dlRadius);
+    dlightContrib += dlColor * atten;
+  }
+
+  // Apply gamma to light-tinted fog color (static probe + dynamic lights)
+  vec3 color = pow(uFogVolumeColor * lightTint + dlightContrib, vec3(uGamma));
 
   gl_FragColor = vec4(color, fogFactor);
 }

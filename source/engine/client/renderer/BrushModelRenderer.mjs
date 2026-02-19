@@ -7,6 +7,7 @@ import { BrushModel, Node } from '../../common/model/BSP.mjs';
 import { ClientEdict } from '../ClientEntities.mjs';
 import Mesh from './Mesh.mjs';
 import PostProcess from './PostProcess.mjs';
+import * as Def from '../../common/Def.mjs';
 
 let { CL, Host, R } = registry;
 
@@ -752,11 +753,270 @@ export class BrushModelRenderer extends ModelRenderer {
   }
 
   /**
+   * Resolution of the 3D light probe grid per axis.
+   * A grid of RES^3 probes is sampled from R.LightPoint and packed into a 2D texture.
+   * @type {number}
+   */
+  static FOG_LIGHT_PROBE_RES = 8;
+
+  /**
+   * Maximum number of dynamic lights passed to the fog volume shader.
+   * Must match MAX_FOG_DLIGHTS in fog-volume.frag.
+   * @type {number}
+   */
+  static MAX_FOG_DLIGHTS = 8;
+
+  /**
+   * Light probe textures for fog volumes, keyed by the fog volume object.
+   * Each entry holds a raw WebGL texture, the grid resolution, and a reusable
+   * pixel buffer to avoid reallocating on every lightstyle update.
+   * @type {Map<import('../../common/model/BSP.mjs').FogVolumeInfo, {texture: WebGLTexture, resX: number, resY: number, resZ: number, data: Uint8Array}>}
+   */
+  #fogLightProbes = new Map();
+
+  /**
+   * The lightstyle animation frame index when probes were last rebuilt.
+   * Lightstyles tick at 10 Hz (floor(time * 10)), so probes are only
+   * regenerated when this value changes.
+   * @type {number}
+   */
+  #fogProbeStyleFrame = -1;
+
+  /**
+   * A 1x1 white texture used as a fallback when no light probe is available.
+   * @type {WebGLTexture|null}
+   */
+  #fogLightProbeWhite = null;
+
+  /**
    * Lazily created unit cube VBO for rendering world-level fog volumes.
    * The cube spans [0,1]^3 and is transformed via uOrigin/uAngles to match each fog volume's AABB.
    * @type {WebGLBuffer|null}
    */
   #fogCubeVBO = null;
+
+  /**
+   * Get or create a 1x1 white fallback texture for fog volumes without light probes.
+   * @returns {WebGLTexture} The white texture
+   */
+  _getFogLightProbeWhite() {
+    if (this.#fogLightProbeWhite) {
+      return this.#fogLightProbeWhite;
+    }
+
+    this.#fogLightProbeWhite = gl.createTexture();
+    GL.Bind(0, this.#fogLightProbeWhite);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return this.#fogLightProbeWhite;
+  }
+
+  /**
+   * Sample R.LightPoint into a pixel buffer for a fog volume's light probe grid.
+   * The 3D grid is packed into a 2D layout with Z slices side-by-side.
+   *
+   * Texture layout: width = resX * resZ, height = resY.
+   * Texel at grid (ix,iy,iz) is at pixel (iz*resX + ix, iy).
+   *
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
+   * @param {Uint8Array} data Pixel buffer to fill (width * height * 4)
+   * @param {number} resX Grid resolution X
+   * @param {number} resY Grid resolution Y
+   * @param {number} resZ Grid resolution Z
+   */
+  _sampleFogLightProbe(fogVolume, data, resX, resY, resZ) {
+    const texWidth = resX * resZ;
+    const sizeX = fogVolume.maxs[0] - fogVolume.mins[0];
+    const sizeY = fogVolume.maxs[1] - fogVolume.mins[1];
+    const sizeZ = fogVolume.maxs[2] - fogVolume.mins[2];
+
+    for (let iz = 0; iz < resZ; iz++) {
+      for (let iy = 0; iy < resY; iy++) {
+        for (let ix = 0; ix < resX; ix++) {
+          // Map grid position to world position (probe at cell center)
+          const u = (ix + 0.5) / resX;
+          const v = (iy + 0.5) / resY;
+          const w = (iz + 0.5) / resZ;
+          const worldPos = new Vector(
+            fogVolume.mins[0] + u * sizeX,
+            fogVolume.mins[1] + v * sizeY,
+            fogVolume.mins[2] + w * sizeZ,
+          );
+
+          const [color] = R.LightPoint(worldPos);
+
+          const pixelX = iz * resX + ix;
+          const idx = (iy * texWidth + pixelX) * 4;
+
+          // Normalize light color: preserve hue, map maximum component to 1.0.
+          // This prevents the light probe from dimming the fog (the base fog
+          // color already accounts for ambient brightness). We only want the
+          // chromatic variation from colored lights.
+          const maxComp = Math.max(color[0], color[1], color[2]);
+
+          if (maxComp > 1.0) {
+            data[idx] = Math.min(255, Math.round((color[0] / maxComp) * 255));
+            data[idx + 1] = Math.min(255, Math.round((color[1] / maxComp) * 255));
+            data[idx + 2] = Math.min(255, Math.round((color[2] / maxComp) * 255));
+          } else {
+            // Very dark area — keep as white (no tinting)
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+          }
+          data[idx + 3] = 255;
+        }
+      }
+    }
+  }
+
+  /**
+   * Create or update the light probe texture for a fog volume.
+   * If the probe already exists, re-samples into the existing pixel buffer
+   * and re-uploads via texSubImage2D (avoids GPU allocation).
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
+   * @returns {{texture: WebGLTexture, resX: number, resY: number, resZ: number, data: Uint8Array}} The probe data
+   */
+  _createOrUpdateFogLightProbe(fogVolume) {
+    const existing = this.#fogLightProbes.get(fogVolume);
+
+    if (existing) {
+      // Re-sample into existing buffer and re-upload
+      this._sampleFogLightProbe(fogVolume, existing.data, existing.resX, existing.resY, existing.resZ);
+      GL.Bind(0, existing.texture);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, existing.resX * existing.resZ, existing.resY, gl.RGBA, gl.UNSIGNED_BYTE, existing.data);
+      return existing;
+    }
+
+    const res = BrushModelRenderer.FOG_LIGHT_PROBE_RES;
+    const resX = res;
+    const resY = res;
+    const resZ = res;
+    const texWidth = resX * resZ;
+    const texHeight = resY;
+    const data = new Uint8Array(texWidth * texHeight * 4);
+
+    this._sampleFogLightProbe(fogVolume, data, resX, resY, resZ);
+
+    const texture = gl.createTexture();
+    GL.Bind(0, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texWidth, texHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const probe = { texture, resX, resY, resZ, data };
+    this.#fogLightProbes.set(fogVolume, probe);
+    return probe;
+  }
+
+  /**
+   * Get the light probe texture for a fog volume, creating or updating it
+   * when lightstyle animations tick. Lightstyles animate at 10 Hz, so the
+   * probes are re-sampled at most 10 times per second.
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
+   * @returns {{texture: WebGLTexture, resX: number, resY: number, resZ: number, data: Uint8Array}|null} Probe data, or null if light data is unavailable
+   */
+  _getFogLightProbe(fogVolume) {
+    // Only create probes if the world has light data to sample
+    const worldmodel = CL.state.worldmodel;
+    if (!worldmodel || (worldmodel.lightdata === null && worldmodel.lightdata_rgb === null)) {
+      return null;
+    }
+
+    // Check if lightstyles have ticked since last update
+    const styleFrame = Math.floor(CL.state.time * 10.0);
+    const needsUpdate = styleFrame !== this.#fogProbeStyleFrame;
+
+    if (needsUpdate) {
+      this.#fogProbeStyleFrame = styleFrame;
+    }
+
+    // First access: always create. Subsequent: only re-sample on style tick.
+    if (!this.#fogLightProbes.has(fogVolume) || needsUpdate) {
+      return this._createOrUpdateFogLightProbe(fogVolume);
+    }
+
+    return this.#fogLightProbes.get(fogVolume);
+  }
+
+  /**
+   * Free all fog light probe textures. Called on map change.
+   */
+  _freeFogLightProbes() {
+    if (gl) {
+      for (const { texture } of this.#fogLightProbes.values()) {
+        gl.deleteTexture(texture);
+      }
+    }
+    this.#fogLightProbes.clear();
+  }
+
+  /**
+   * Collect active dynamic lights that overlap a fog volume's AABB.
+   * Returns up to MAX_FOG_DLIGHTS lights sorted by contribution (closest first).
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
+   * @returns {{origin: Vector, radius: number, color: Vector}[]} Overlapping dlights
+   */
+  _collectFogDlights(fogVolume) {
+    const results = [];
+    const dlights = CL.state.clientEntities.dlights;
+
+    for (let i = 0; i < Def.limits.dlights; i++) {
+      const dl = dlights[i];
+
+      if (dl.isFree()) {
+        continue;
+      }
+
+      // Sphere-AABB overlap: find closest point on AABB to light origin
+      const cx = Math.max(fogVolume.mins[0], Math.min(dl.origin[0], fogVolume.maxs[0]));
+      const cy = Math.max(fogVolume.mins[1], Math.min(dl.origin[1], fogVolume.maxs[1]));
+      const cz = Math.max(fogVolume.mins[2], Math.min(dl.origin[2], fogVolume.maxs[2]));
+      const dx = dl.origin[0] - cx;
+      const dy = dl.origin[1] - cy;
+      const dz = dl.origin[2] - cz;
+      const distSq = dx * dx + dy * dy + dz * dz;
+
+      if (distSq < dl.radius * dl.radius) {
+        results.push({
+          origin: dl.origin,
+          radius: dl.radius,
+          color: dl.color,
+          distSq,
+        });
+      }
+    }
+
+    // Sort by distance (closest first) and cap at MAX_FOG_DLIGHTS
+    results.sort((a, b) => a.distSq - b.distSq);
+    return results.slice(0, BrushModelRenderer.MAX_FOG_DLIGHTS);
+  }
+
+  /**
+   * Upload dynamic light uniforms for the current fog volume.
+   * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
+   */
+  _uploadFogDlights(fogVolume) {
+    const program = this._fogVolumeProgram;
+    const dlights = this._collectFogDlights(fogVolume);
+
+    gl.uniform1i(program.uDlightCount, dlights.length);
+
+    for (let i = 0; i < dlights.length; i++) {
+      const dl = dlights[i];
+      gl.uniform4f(
+        program['uDlightPos[' + i + ']'],
+        dl.origin[0], dl.origin[1], dl.origin[2], dl.radius,
+      );
+      gl.uniform4f(
+        program['uDlightColor[' + i + ']'],
+        dl.color[0], dl.color[1], dl.color[2], 0.0,
+      );
+    }
+  }
 
   /**
    * Get or create the shared unit cube VBO used for world-level fog volumes.
@@ -896,6 +1156,26 @@ export class BrushModelRenderer extends ModelRenderer {
     );
     gl.uniform1f(program.uFogVolumeDensity, fogVolume.density);
     gl.uniform1f(program.uFogVolumeMaxOpacity, fogVolume.maxOpacity);
+
+    // Bind the light probe texture for this fog volume.
+    // _getFogLightProbe / _getFogLightProbeWhite may upload texture data via
+    // GL.Bind(0, ...) which clobbers whatever is on texture unit 0 (tDepth).
+    // After binding the probe on its own unit, re-bind the depth texture on
+    // unit 0 so the shader reads the correct scene depth for occlusion.
+    const probe = this._getFogLightProbe(fogVolume);
+    if (probe) {
+      GL.Bind(program.tLightProbe, probe.texture);
+      gl.uniform3f(program.uLightProbeRes, probe.resX, probe.resY, probe.resZ);
+      gl.uniform1f(program.uHasLightProbe, 1.0);
+    } else {
+      GL.Bind(program.tLightProbe, this._getFogLightProbeWhite());
+      gl.uniform1f(program.uHasLightProbe, 0.0);
+    }
+    // Restore depth texture on unit 0 (may have been clobbered by probe upload)
+    GL.Bind(program.tDepth, PostProcess.depthTexture);
+
+    // Upload dynamic lights overlapping this fog volume
+    this._uploadFogDlights(fogVolume);
 
     // Pass the AABB of the fog volume for ray intersection
     gl.uniform3f(program.uFogVolumeMins, fogVolume.mins[0], fogVolume.mins[1], fogVolume.mins[2]);
@@ -1314,6 +1594,11 @@ export class BrushModelRenderer extends ModelRenderer {
     if (model.cmds) {
       gl.deleteBuffer(model.cmds);
       model.cmds = null;
+    }
+
+    // Free fog light probe textures when world model is cleaned up
+    if (model.fogVolumes && model.fogVolumes.length > 0) {
+      this._freeFogLightProbes();
     }
   }
 }

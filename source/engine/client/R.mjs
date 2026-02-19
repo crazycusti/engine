@@ -1395,9 +1395,14 @@ R.InitShaders = async function() {
     GL.CreateProgram('fog-volume',
       ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma',
        'uFogVolumeColor', 'uFogVolumeDensity', 'uFogVolumeMaxOpacity',
-       'uFogVolumeMins', 'uFogVolumeMaxs', 'uScreenSize'],
+       'uFogVolumeMins', 'uFogVolumeMaxs', 'uScreenSize',
+       'uLightProbeRes', 'uHasLightProbe', 'uDlightCount',
+       'uDlightPos[0]', 'uDlightPos[1]', 'uDlightPos[2]', 'uDlightPos[3]',
+       'uDlightPos[4]', 'uDlightPos[5]', 'uDlightPos[6]', 'uDlightPos[7]',
+       'uDlightColor[0]', 'uDlightColor[1]', 'uDlightColor[2]', 'uDlightColor[3]',
+       'uDlightColor[4]', 'uDlightColor[5]', 'uDlightColor[6]', 'uDlightColor[7]'],
       [['aPosition', gl.FLOAT, 3]],
-      ['tDepth']),
+      ['tDepth', 'tLightProbe']),
   ]);
 
   eventBus.publish('renderer.shaders.initialized');
