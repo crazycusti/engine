@@ -2,7 +2,7 @@ import W from '../../common/W.mjs';
 import { BrushModel } from '../../common/Mod.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 
-import GL, { GLTexture } from '../GL.mjs';
+import GL, { ATTRIB_LOCATIONS, GLTexture } from '../GL.mjs';
 
 let { Host, R } = registry;
 
@@ -95,6 +95,12 @@ export class Quake1Sky extends SkyRenderer {
   #skybox = null;
 
   /**
+   * VAO for the sky dome VBO (position-only, 12-byte stride).
+   * @type {WebGLVertexArrayObject|null}
+   */
+  #skyboxVAO = null;
+
+  /**
    * Procedurally generates a dome mesh for skybox rendering.
    *
    * Creates a partial hemisphere (dome) using a grid of triangles.
@@ -154,6 +160,10 @@ export class Quake1Sky extends SkyRenderer {
     this.#skybox = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#skybox);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vecs), gl.STATIC_DRAW);
+
+    this.#skyboxVAO = GL.CreateVAO(this.#skybox, [
+      { location: ATTRIB_LOCATIONS.aPosition, components: 3, type: gl.FLOAT, normalized: false, stride: 12, offset: 0 },
+    ]);
   }
 
   init() {
@@ -171,6 +181,10 @@ export class Quake1Sky extends SkyRenderer {
       gl.deleteBuffer(this.#skybox);
       this.#skybox = null;
     }
+    if (this.#skyboxVAO) {
+      gl.deleteVertexArray(this.#skyboxVAO);
+      this.#skyboxVAO = null;
+    }
   }
 
   #renderSkyboxDome() {
@@ -187,8 +201,7 @@ export class Quake1Sky extends SkyRenderer {
     this.#alphaskytexture.bind(program.tAlpha); // Overlay layer (e.g., clouds)
 
     // Bind the procedurally-generated dome mesh
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.#skybox);
-    gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, 0);
+    GL.BindVAO(this.#skyboxVAO);
 
     // Render the sky dome 8 times - once for each octant of a sphere
     // The uScale uniform transforms the base dome mesh to cover different octants
@@ -215,6 +228,8 @@ export class Quake1Sky extends SkyRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, 180);
     gl.uniform3f(program.uScale, -2.0, 2.0, -1.0);  // -X, +Y, -Z
     gl.drawArrays(gl.TRIANGLES, 0, 180);
+
+    GL.UnbindVAO();
 
     // Restore default GL state
     gl.enable(gl.CULL_FACE);
@@ -297,6 +312,12 @@ export class SimpleSkyBox extends SkyRenderer {
 
   #cubeBuffer = null;
 
+  /**
+   * VAO for the skybox cube VBO (position+texcoord+normal, 32-byte stride).
+   * @type {WebGLVertexArrayObject|null}
+   */
+  #cubeVAO = null;
+
   setSkyTextures(front, back, left, right, up, down) {
     this.#front = front;
     this.#back = back;
@@ -377,12 +398,22 @@ export class SimpleSkyBox extends SkyRenderer {
     this.#cubeBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#cubeBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+
+    this.#cubeVAO = GL.CreateVAO(this.#cubeBuffer, [
+      { location: ATTRIB_LOCATIONS.aPosition, components: 3, type: gl.FLOAT, normalized: false, stride: 32, offset: 0 },
+      { location: ATTRIB_LOCATIONS.aTexCoord, components: 2, type: gl.FLOAT, normalized: false, stride: 32, offset: 12 },
+      { location: ATTRIB_LOCATIONS.aNormal, components: 3, type: gl.FLOAT, normalized: false, stride: 32, offset: 20 },
+    ]);
   }
 
   shutdown() {
     if (this.#cubeBuffer) {
       gl.deleteBuffer(this.#cubeBuffer);
       this.#cubeBuffer = null;
+    }
+    if (this.#cubeVAO) {
+      gl.deleteVertexArray(this.#cubeVAO);
+      this.#cubeVAO = null;
     }
 
     this.#front.free();
@@ -419,11 +450,7 @@ export class SimpleSkyBox extends SkyRenderer {
     gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
     gl.uniform3f(program.uLightVec, 0.0, 0.0, 1.0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.#cubeBuffer);
-    const stride = 32;
-    gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, stride, 0);
-    gl.vertexAttribPointer(program.aTexCoord.location, 2, gl.FLOAT, false, stride, 12);
-    gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, stride, 20);
+    GL.BindVAO(this.#cubeVAO);
 
     const faces = [this.#front, this.#back, this.#right, this.#left, this.#up, this.#down];
     for (let i = 0; i < 6; i++) {
@@ -433,6 +460,7 @@ export class SimpleSkyBox extends SkyRenderer {
         }
     }
 
+    GL.UnbindVAO();
     gl.enable(gl.CULL_FACE);
     gl.depthMask(true);
     gl.depthFunc(gl.LESS);

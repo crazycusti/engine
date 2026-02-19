@@ -1,4 +1,5 @@
 import GL from '../GL.mjs';
+import Cvar from '../../common/Cvar.mjs';
 import VID from '../VID.mjs';
 import PostProcessEffect from './PostProcessEffect.mjs';
 import { eventBus } from '../../registry.mjs';
@@ -37,7 +38,7 @@ export default class PostProcess {
   /** @type {WebGLTexture} Color texture attachment (RGBA) */
   static colorTexture = null;
 
-  /** @type {WebGLTexture} Depth texture attachment (requires WEBGL_depth_texture) */
+  /** @type {WebGLTexture} Depth texture attachment (DEPTH_COMPONENT24) */
   static depthTexture = null;
 
   /** @type {WebGLRenderbuffer} Depth renderbuffer used temporarily during depth sampling */
@@ -51,6 +52,32 @@ export default class PostProcess {
 
   /** @type {boolean} Whether the PostProcess system is currently active (FBO bound) */
   static active = false;
+
+  // ─── MSAA (multisampled scene FBO) ───────────────────────────────
+
+  /** @type {Cvar} MSAA sample count (0 = off, 2/4/8) */
+  static msaa = null;
+
+  /** @type {WebGLFramebuffer} Multisampled FBO for scene rendering */
+  static msaaFBO = null;
+
+  /** @type {WebGLRenderbuffer} Multisampled color renderbuffer */
+  static msaaColorRB = null;
+
+  /** @type {WebGLRenderbuffer} Multisampled depth renderbuffer */
+  static msaaDepthRB = null;
+
+  /** @type {number} Current MSAA sample count (0 = disabled) */
+  static msaaSamples = 0;
+
+  /** @type {number} Current MSAA FBO width */
+  static msaaWidth = 0;
+
+  /** @type {number} Current MSAA FBO height */
+  static msaaHeight = 0;
+
+  /** @type {boolean} Whether MSAA has been resolved to the texture FBO this frame */
+  static msaaResolved = false;
 
   // ─── Ping-pong FBOs for effect chaining ──────────────────────────
 
@@ -107,9 +134,11 @@ export default class PostProcess {
 
   /**
    * Initialize the post-process system.
-   * Acquires the depth texture extension and creates FBOs.
+   * Creates scene FBO, MSAA FBO (if enabled), and ping-pong FBOs.
    */
   static init() {
+    PostProcess.msaa = new Cvar('gl_msaa', '4', Cvar.FLAG.ARCHIVE, ' MSAA sample count (0 = off, 2/4/8)');
+
     PostProcess.fbo = gl.createFramebuffer();
     {
 
@@ -138,6 +167,19 @@ export default class PostProcess {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, PostProcess.depthTexture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+
+    // MSAA FBO with multisampled renderbuffers (storage allocated in _resizeMSAA).
+    // Each renderbuffer must be bound at least once before framebufferRenderbuffer.
+    PostProcess.msaaFBO = gl.createFramebuffer();
+    PostProcess.msaaColorRB = gl.createRenderbuffer();
+    PostProcess.msaaDepthRB = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.msaaColorRB);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.msaaDepthRB);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.msaaFBO);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, PostProcess.msaaColorRB);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, PostProcess.msaaDepthRB);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     // Ping-pong FBOs for effect chaining
     PostProcess.pingFBO = gl.createFramebuffer();
@@ -188,6 +230,46 @@ export default class PostProcess {
     gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+
+    // Resize MSAA renderbuffers (if enabled)
+    PostProcess._resizeMSAA(width, height);
+  }
+
+  /**
+   * Allocate (or deallocate) multisampled renderbuffer storage.
+   * Called from `resize()` whenever the scene dimensions change.
+   * @param {number} width - New width in pixels
+   * @param {number} height - New height in pixels
+   */
+  static _resizeMSAA(width, height) {
+    const requested = PostProcess.msaa.value >> 0;
+    if (requested <= 0) {
+      PostProcess.msaaSamples = 0;
+      PostProcess.msaaWidth = 0;
+      PostProcess.msaaHeight = 0;
+      return;
+    }
+
+    const maxSamples = gl.getParameter(gl.MAX_SAMPLES);
+    const samples = Math.min(requested, maxSamples);
+
+    if (PostProcess.msaaWidth === width && PostProcess.msaaHeight === height
+      && PostProcess.msaaSamples === samples) {
+      return;
+    }
+
+    PostProcess.msaaSamples = samples;
+    PostProcess.msaaWidth = width;
+    PostProcess.msaaHeight = height;
+
+    // Multisampled color renderbuffer (RGBA8)
+    gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.msaaColorRB);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, width, height);
+
+    // Multisampled depth renderbuffer (DEPTH_COMPONENT24)
+    gl.bindRenderbuffer(gl.RENDERBUFFER, PostProcess.msaaDepthRB);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, width, height);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
   }
 
   /**
@@ -217,10 +299,17 @@ export default class PostProcess {
 
   /**
    * Begin rendering the scene to the post-process FBO.
-   * Binds the FBO, sets the viewport, and clears.
+   * When MSAA is enabled, binds the multisampled FBO instead so the scene
+   * is rendered with anti-aliasing. The MSAA FBO is resolved to the
+   * texture FBO before depth sampling or at `end()`.
    */
   static begin() {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
+    if (PostProcess.msaaSamples > 0) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.msaaFBO);
+      PostProcess.msaaResolved = false;
+    } else {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
+    }
     gl.viewport(0, 0, PostProcess.width, PostProcess.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     PostProcess.active = true;
@@ -243,8 +332,13 @@ export default class PostProcess {
   /**
    * Detach the depth texture from the FBO so it can be sampled in shaders.
    * Attaches a depth renderbuffer instead to keep the FBO complete.
+   * If MSAA is active, resolves to the texture FBO first so the depth
+   * texture contains valid data.
    */
   static beginDepthSampling() {
+    if (PostProcess.msaaSamples > 0 && !PostProcess.msaaResolved) {
+      PostProcess.resolveMSAA();
+    }
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, PostProcess.depthRenderbuffer);
   }
@@ -258,9 +352,31 @@ export default class PostProcess {
   }
 
   /**
-   * End scene rendering. Unbinds the post-process FBO.
+   * Resolve the multisampled FBO to the texture-backed scene FBO.
+   * Blits both color and depth so the texture FBO has valid data for
+   * depth sampling and the effect pipeline. After this call, the
+   * texture FBO is bound as the active FRAMEBUFFER.
+   */
+  static resolveMSAA() {
+    const w = PostProcess.width;
+    const h = PostProcess.height;
+
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, PostProcess.msaaFBO);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, PostProcess.fbo);
+    gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, PostProcess.fbo);
+    PostProcess.msaaResolved = true;
+  }
+
+  /**
+   * End scene rendering. If MSAA is active and hasn't been resolved yet
+   * (no-fog path), resolves to the texture FBO first so the color texture
+   * is available for the effect pipeline. Then unbinds the FBO.
    */
   static end() {
+    if (PostProcess.msaaSamples > 0 && !PostProcess.msaaResolved) {
+      PostProcess.resolveMSAA();
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     PostProcess.active = false;
   }
@@ -368,6 +484,24 @@ export default class PostProcess {
       gl.deleteRenderbuffer(PostProcess.depthRenderbuffer);
       PostProcess.depthRenderbuffer = null;
     }
+
+    // MSAA FBO
+    if (PostProcess.msaaFBO) {
+      gl.deleteFramebuffer(PostProcess.msaaFBO);
+      PostProcess.msaaFBO = null;
+    }
+    if (PostProcess.msaaColorRB) {
+      gl.deleteRenderbuffer(PostProcess.msaaColorRB);
+      PostProcess.msaaColorRB = null;
+    }
+    if (PostProcess.msaaDepthRB) {
+      gl.deleteRenderbuffer(PostProcess.msaaDepthRB);
+      PostProcess.msaaDepthRB = null;
+    }
+    PostProcess.msaaSamples = 0;
+    PostProcess.msaaWidth = 0;
+    PostProcess.msaaHeight = 0;
+    PostProcess.msaaResolved = false;
 
     // Ping-pong FBOs
     if (PostProcess.pingFBO) {

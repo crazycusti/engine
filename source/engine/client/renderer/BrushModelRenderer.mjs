@@ -1,7 +1,7 @@
 import Vector from '../../../shared/Vector.mjs';
 import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
-import GL from '../GL.mjs';
+import GL, { ATTRIB_LOCATIONS, BRUSH_VERTEX_STRIDE } from '../GL.mjs';
 import { materialFlags } from './Materials.mjs';
 import { BrushModel, Node } from '../../common/model/BSP.mjs';
 import { ClientEdict } from '../ClientEntities.mjs';
@@ -114,18 +114,24 @@ export class BrushModelRenderer extends ModelRenderer {
       }
     }
 
-    // Bind vertex buffer
-    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
-    R.c_brush_vbos++;
+    // Bind VAO and render appropriate pass
     const viewMatrix = e.lerp.angles.toRotationMatrix();
 
-    // Render opaque surfaces (pass 0), turbulent surfaces (pass 1), or transparent surfaces (pass 2)
     if (pass === 0) {
+      GL.BindVAO(clmodel.opaqueVAO);
+      R.c_brush_vbos++;
       this._renderOpaqueSurfaces(clmodel, e, viewMatrix);
+      GL.UnbindVAO();
     } else if (pass === 1 && R.drawturbulents.value) {
+      GL.BindVAO(clmodel.turbulentVAO);
+      R.c_brush_vbos++;
       this._renderTurbulentSurfaces(clmodel, e, viewMatrix);
+      GL.UnbindVAO();
     } else if (pass === 2) {
+      GL.BindVAO(clmodel.opaqueVAO);
+      R.c_brush_vbos++;
       this._renderTransparentSurfaces(clmodel, e, viewMatrix);
+      GL.UnbindVAO();
     }
   }
 
@@ -137,7 +143,7 @@ export class BrushModelRenderer extends ModelRenderer {
   renderWorld(clmodel) {
     const worldspawn = CL.state.clientEntities.getEntity(0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    GL.BindVAO(clmodel.opaqueVAO);
     R.c_brush_vbos++;
 
     const program = GL.UseProgram('brush');
@@ -147,9 +153,6 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform1f(program.uAlpha, 1.0);
 
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-
-    // Setup vertex attributes
-    this._setupBrushVertexAttributes(program, 0);
 
     // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, true);
@@ -213,6 +216,8 @@ export class BrushModelRenderer extends ModelRenderer {
         R.c_brush_draws++;
       }
     }
+
+    GL.UnbindVAO();
   }
 
   /**
@@ -281,7 +286,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {BrushModel} clmodel The world model
    */
   beginWorldTransparentPass(clmodel) {
-    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    GL.BindVAO(clmodel.opaqueVAO);
     R.c_brush_vbos++;
 
     /** @type {object} */
@@ -296,7 +301,6 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
     gl.uniform1f(program.uHaveDeluxemap, 1.0);
 
-    this._setupBrushVertexAttributes(program, 0);
     this._setupBrushShaderCommon(program, clmodel, true);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
@@ -354,6 +358,7 @@ export class BrushModelRenderer extends ModelRenderer {
    */
   endWorldTransparentPass() {
     gl.disable(gl.BLEND);
+    GL.UnbindVAO();
     this._worldTransparentProgram = null;
     this._worldTransparentModel = null;
   }
@@ -413,7 +418,7 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {BrushModel} clmodel The world model
    */
   beginWorldTurbulentPass(clmodel) {
-    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.cmds);
+    GL.BindVAO(clmodel.turbulentVAO);
     R.c_brush_vbos++;
 
     gl.enable(gl.BLEND);
@@ -428,9 +433,6 @@ export class BrushModelRenderer extends ModelRenderer {
     // thickness — if water/slime depths were included, fog behind or inside
     // liquid surfaces would be incorrectly clipped.
     gl.depthMask(false);
-
-    // Setup vertex attributes
-    this._setupBrushVertexAttributes(program, clmodel.waterchain);
 
     // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, true);
@@ -467,6 +469,7 @@ export class BrushModelRenderer extends ModelRenderer {
   endWorldTurbulentPass() {
     gl.disable(gl.BLEND);
     gl.depthMask(true);
+    GL.UnbindVAO();
     this._worldTurbulentProgram = null;
     this._worldTurbulentModel = null;
   }
@@ -492,27 +495,6 @@ export class BrushModelRenderer extends ModelRenderer {
       GL.Bind(program.tDlight, R.dlightmap_rgba_texture);
     } else {
       GL.Bind(program.tDlight, R.null_texture);
-    }
-  }
-
-  /**
-   * Setup brush shader vertex attributes.
-   * All brush geometry uses 80-byte stride with standard layout.
-   * @private
-   * @param {WebGLProgram} program The shader program
-   * @param {number} [offset] Byte offset for vertex data (0 for opaque, waterchain for turbulent)
-   */
-  _setupBrushVertexAttributes(program, offset = 0) {
-    gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 80, offset);
-    gl.vertexAttribPointer(program.aTexCoord.location, 4, gl.FLOAT, false, 80, offset + 12);
-    gl.vertexAttribPointer(program.aLightStyle.location, 4, gl.FLOAT, false, 80, offset + 28);
-
-    // Normal, tangent only used for 'brush' shader (not 'turbulent')
-    if (program.aNormal) {
-      gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, 80, offset + 44);
-    }
-    if (program.aTangent) {
-      gl.vertexAttribPointer(program.aTangent.location, 3, gl.FLOAT, false, 80, offset + 56);
     }
   }
 
@@ -545,9 +527,6 @@ export class BrushModelRenderer extends ModelRenderer {
     // Setup transforms
     gl.uniform3fv(program.uOrigin, e.lerp.origin);
     gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-
-    // Setup vertex attributes
-    this._setupBrushVertexAttributes(program, 0);
 
     // Setup uniforms
     gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
@@ -629,9 +608,6 @@ export class BrushModelRenderer extends ModelRenderer {
     // Setup transforms
     gl.uniform3fv(program.uOrigin, e.lerp.origin);
     gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-
-    // Setup vertex attributes
-    this._setupBrushVertexAttributes(program, 0);
 
     // Setup uniforms
     gl.uniform1f(program.uInterpolation, R.interpolation.value ? (CL.state.time % 0.2) / 0.2 : 0);
@@ -719,9 +695,6 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, false);
     GL.Bind(program.tLightStyle, R.lightstyle_texture_a);
 
-    // Setup vertex attributes (use waterchain offset from clmodel, not e.model)
-    this._setupBrushVertexAttributes(program, clmodel.waterchain);
-
     // Render each turbulent chain
     if (!clmodel.chains || clmodel.chains.length === 0) {
       gl.disable(gl.BLEND);
@@ -760,6 +733,24 @@ export class BrushModelRenderer extends ModelRenderer {
   static FOG_LIGHT_PROBE_RES = 8;
 
   /**
+   * Create a VAO for brush geometry at the given byte offset in the VBO.
+   * All 5 standard brush attributes are configured with 80-byte stride.
+   * @private
+   * @param {WebGLBuffer} vbo The VBO containing brush vertex data
+   * @param {number} offset Byte offset for the first vertex
+   * @returns {WebGLVertexArrayObject} The created VAO
+   */
+  _createBrushVAO(vbo, offset) {
+    return GL.CreateVAO(vbo, [
+      { location: 0, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset },
+      { location: 1, components: 4, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 12 },
+      { location: 2, components: 4, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 28 },
+      { location: 3, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 44 },
+      { location: 4, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 56 },
+    ]);
+  }
+
+  /**
    * Maximum number of dynamic lights passed to the fog volume shader.
    * Must match MAX_FOG_DLIGHTS in fog-volume.frag.
    * @type {number}
@@ -796,8 +787,14 @@ export class BrushModelRenderer extends ModelRenderer {
   #fogCubeVBO = null;
 
   /**
-   * Get or create a 1x1 white fallback texture for fog volumes without light probes.
-   * @returns {WebGLTexture} The white texture
+   * Lazily created VAO for the fog cube VBO (position-only, 12-byte stride).
+   * @type {WebGLVertexArrayObject|null}
+   */
+  #fogCubeVAO = null;
+
+  /**
+   * Get or create a 1×1×1 white fallback 3D texture for fog volumes without light probes.
+   * @returns {WebGLTexture} The white 3D texture
    */
   _getFogLightProbeWhite() {
     if (this.#fogLightProbeWhite) {
@@ -805,31 +802,31 @@ export class BrushModelRenderer extends ModelRenderer {
     }
 
     this.#fogLightProbeWhite = gl.createTexture();
-    GL.Bind(0, this.#fogLightProbeWhite);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    GL.Bind3D(0, this.#fogLightProbeWhite);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, 1, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
     return this.#fogLightProbeWhite;
   }
 
   /**
    * Sample R.LightPoint into a pixel buffer for a fog volume's light probe grid.
-   * The 3D grid is packed into a 2D layout with Z slices side-by-side.
-   *
-   * Texture layout: width = resX * resZ, height = resY.
-   * Texel at grid (ix,iy,iz) is at pixel (iz*resX + ix, iy).
-   *
+   * Data is laid out for TEXTURE_3D upload: Z slices are contiguous in memory.
+   * Texel at grid (ix, iy, iz) is at index (iz * resY * resX + iy * resX + ix).
    * @param {import('../../common/model/BSP.mjs').FogVolumeInfo} fogVolume The fog volume
-   * @param {Uint8Array} data Pixel buffer to fill (width * height * 4)
+   * @param {Uint8Array} data Pixel buffer to fill (resX * resY * resZ * 4)
    * @param {number} resX Grid resolution X
    * @param {number} resY Grid resolution Y
    * @param {number} resZ Grid resolution Z
    */
   _sampleFogLightProbe(fogVolume, data, resX, resY, resZ) {
-    const texWidth = resX * resZ;
     const sizeX = fogVolume.maxs[0] - fogVolume.mins[0];
     const sizeY = fogVolume.maxs[1] - fogVolume.mins[1];
     const sizeZ = fogVolume.maxs[2] - fogVolume.mins[2];
+    const sliceSize = resX * resY;
 
     for (let iz = 0; iz < resZ; iz++) {
       for (let iy = 0; iy < resY; iy++) {
@@ -846,8 +843,7 @@ export class BrushModelRenderer extends ModelRenderer {
 
           const [color] = R.LightPoint(worldPos);
 
-          const pixelX = iz * resX + ix;
-          const idx = (iy * texWidth + pixelX) * 4;
+          const idx = (iz * sliceSize + iy * resX + ix) * 4;
 
           // Normalize light color: preserve hue, map maximum component to 1.0.
           // This prevents the light probe from dimming the fog (the base fog
@@ -884,8 +880,8 @@ export class BrushModelRenderer extends ModelRenderer {
     if (existing) {
       // Re-sample into existing buffer and re-upload
       this._sampleFogLightProbe(fogVolume, existing.data, existing.resX, existing.resY, existing.resZ);
-      GL.Bind(0, existing.texture);
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, existing.resX * existing.resZ, existing.resY, gl.RGBA, gl.UNSIGNED_BYTE, existing.data);
+      GL.Bind3D(0, existing.texture);
+      gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, existing.resX, existing.resY, existing.resZ, gl.RGBA, gl.UNSIGNED_BYTE, existing.data);
       return existing;
     }
 
@@ -893,19 +889,18 @@ export class BrushModelRenderer extends ModelRenderer {
     const resX = res;
     const resY = res;
     const resZ = res;
-    const texWidth = resX * resZ;
-    const texHeight = resY;
-    const data = new Uint8Array(texWidth * texHeight * 4);
+    const data = new Uint8Array(resX * resY * resZ * 4);
 
     this._sampleFogLightProbe(fogVolume, data, resX, resY, resZ);
 
     const texture = gl.createTexture();
-    GL.Bind(0, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texWidth, texHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    GL.Bind3D(0, texture);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, resX, resY, resZ, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
 
     const probe = { texture, resX, resY, resZ, data };
     this.#fogLightProbes.set(fogVolume, probe);
@@ -1050,6 +1045,11 @@ export class BrushModelRenderer extends ModelRenderer {
     this.#fogCubeVBO = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#fogCubeVBO);
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+    this.#fogCubeVAO = GL.CreateVAO(this.#fogCubeVBO, [
+      { location: ATTRIB_LOCATIONS.aPosition, components: 3, type: gl.FLOAT, normalized: false, stride: 12, offset: 0 },
+    ]);
+
     return this.#fogCubeVBO;
   }
 
@@ -1151,20 +1151,11 @@ export class BrushModelRenderer extends ModelRenderer {
     gl.uniform1f(program.uFogVolumeDensity, fogVolume.density);
     gl.uniform1f(program.uFogVolumeMaxOpacity, fogVolume.maxOpacity);
 
-    // Bind the light probe texture for this fog volume.
-    // _getFogLightProbe / _getFogLightProbeWhite may upload texture data via
-    // GL.Bind(0, ...) which clobbers whatever is on texture unit 0 (tDepth).
-    // After binding the probe on its own unit, re-bind the depth texture on
-    // unit 0 so the shader reads the correct scene depth for occlusion.
+    // Bind the light probe 3D texture for this fog volume.
+    // _getFogLightProbe / _getFogLightProbeWhite may upload via Bind3D(0, ...)
+    // which clobbers texture unit 0 (tDepth). Re-bind depth after.
     const probe = this._getFogLightProbe(fogVolume);
-    if (probe) {
-      GL.Bind(program.tLightProbe, probe.texture);
-      gl.uniform3f(program.uLightProbeRes, probe.resX, probe.resY, probe.resZ);
-      gl.uniform1f(program.uHasLightProbe, 1.0);
-    } else {
-      GL.Bind(program.tLightProbe, this._getFogLightProbeWhite());
-      gl.uniform1f(program.uHasLightProbe, 0.0);
-    }
+    GL.Bind3D(program.tLightProbe, probe ? probe.texture : this._getFogLightProbeWhite());
     // Restore depth texture on unit 0 (may have been clobbered by probe upload)
     GL.Bind(program.tDepth, PostProcess.depthTexture);
 
@@ -1189,13 +1180,17 @@ export class BrushModelRenderer extends ModelRenderer {
       ]));
       gl.uniform3f(program.uOrigin, fogVolume.mins[0], fogVolume.mins[1], fogVolume.mins[2]);
 
-      const cubeVBO = this._getFogCubeVBO();
-      gl.bindBuffer(gl.ARRAY_BUFFER, cubeVBO);
+      this._getFogCubeVBO();
+
+      // Bind the fog cube VAO directly instead of through GL.BindVAO/UnbindVAO.
+      // GL.UnbindVAO() disables vertex attributes on the default VAO and clears
+      // GL.currentProgram, which breaks subsequent submodel fog volumes that
+      // rely on the default VAO having aPosition enabled from beginFogVolumePass.
+      gl.bindVertexArray(this.#fogCubeVAO);
       R.c_brush_vbos++;
 
-      // Unit cube uses compact 12-byte stride (3 floats, position only)
-      gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 12, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 36);
+      gl.bindVertexArray(null);
       R.c_brush_draws++;
     } else {
       // Submodel fog volume: use the submodel's own VBO
@@ -1371,6 +1366,10 @@ export class BrushModelRenderer extends ModelRenderer {
     m.cmds = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
+
+    // Create VAOs for opaque (offset 0) and turbulent (offset waterchain) passes
+    m.opaqueVAO = this._createBrushVAO(m.cmds, 0);
+    m.turbulentVAO = this._createBrushVAO(m.cmds, m.waterchain);
   }
 
   /**
@@ -1545,6 +1544,10 @@ export class BrushModelRenderer extends ModelRenderer {
     m.cmds = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, m.cmds);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cmds), gl.STATIC_DRAW);
+
+    // Create VAOs for opaque (offset 0) and turbulent (offset waterchain) passes
+    m.opaqueVAO = this._createBrushVAO(m.cmds, 0);
+    m.turbulentVAO = this._createBrushVAO(m.cmds, m.waterchain);
   }
 
   _buildSurfaceDisplayList(model, face) {
@@ -1585,6 +1588,14 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {BrushModel} model The brush model to cleanup
    */
   cleanupModel(model) {
+    if (model.opaqueVAO) {
+      gl.deleteVertexArray(model.opaqueVAO);
+      model.opaqueVAO = null;
+    }
+    if (model.turbulentVAO) {
+      gl.deleteVertexArray(model.turbulentVAO);
+      model.turbulentVAO = null;
+    }
     if (model.cmds) {
       gl.deleteBuffer(model.cmds);
       model.cmds = null;

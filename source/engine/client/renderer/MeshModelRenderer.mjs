@@ -1,7 +1,7 @@
 import Vector from '../../../shared/Vector.mjs';
 import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
-import GL from '../GL.mjs';
+import GL, { ATTRIB_LOCATIONS } from '../GL.mjs';
 
 let { Con, R } = registry;
 
@@ -89,16 +89,8 @@ export class MeshModelRenderer extends ModelRenderer {
     // Use dedicated mesh shader
     const program = GL.UseProgram('mesh');
 
-    // Bind vertex buffer
-    gl.bindBuffer(gl.ARRAY_BUFFER, clmodel.vbo);
-
-    // Setup vertex attributes (interleaved format)
-    // Position(3) + TexCoord(2) + Normal(3) + Tangent(3) + Bitangent(3) = 14 floats = 56 bytes
-    const stride = 56;
-
-    gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, stride, 0);
-    gl.vertexAttribPointer(program.aTexCoord.location, 2, gl.FLOAT, false, stride, 12);
-    gl.vertexAttribPointer(program.aNormal.location, 3, gl.FLOAT, false, stride, 20);
+    // Bind model VAO (captures VBO layout + IBO)
+    GL.BindVAO(clmodel.vao);
 
     // Setup uniforms
     const viewMatrix = e.lerp.angles.toRotationMatrix();
@@ -120,12 +112,10 @@ export class MeshModelRenderer extends ModelRenderer {
       R.notexture.bind(program.tTexture);
     }
 
-    // Bind index buffer
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, clmodel.ibo);
-
-    // Draw
+    // Draw (IBO is captured in the VAO)
     const indexType = clmodel.indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT;
     gl.drawElements(gl.TRIANGLES, clmodel.numTriangles * 3, indexType, 0);
+    GL.UnbindVAO();
 
     // Stats
     R.c_alias_draws++;
@@ -150,6 +140,10 @@ export class MeshModelRenderer extends ModelRenderer {
     if (m.ibo) {
       gl.deleteBuffer(m.ibo);
       m.ibo = null;
+    }
+    if (m.vao) {
+      gl.deleteVertexArray(m.vao);
+      m.vao = null;
     }
 
     if (!m.vertices || m.vertices.length === 0) {
@@ -231,6 +225,14 @@ export class MeshModelRenderer extends ModelRenderer {
     }
 
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+    // Create VAO capturing VBO layout + IBO binding
+    const stride = 56;
+    m.vao = GL.CreateVAO(m.vbo, [
+      { location: ATTRIB_LOCATIONS.aPosition, components: 3, type: gl.FLOAT, normalized: false, stride, offset: 0 },
+      { location: ATTRIB_LOCATIONS.aTexCoord, components: 2, type: gl.FLOAT, normalized: false, stride, offset: 12 },
+      { location: ATTRIB_LOCATIONS.aNormal, components: 3, type: gl.FLOAT, normalized: false, stride, offset: 20 },
+    ], m.ibo);
 
     Con.DPrint(`MeshModelRenderer.prepareModel: ${m.name} uploaded ${m.numVertices} vertices, ${m.numTriangles} triangles\n`);
 

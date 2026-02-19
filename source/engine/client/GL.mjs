@@ -45,8 +45,11 @@ class GL {
   /** @type {number[]} */
   static identity = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
 
+  /** @type {WebGLVertexArrayObject} Currently bound model VAO, or null for default (stream) */
+  static currentVAO = null;
+
   /**
-   * Binds a texture.
+   * Binds a 2D texture.
    * @param {number} target texture target
    * @param {WebGLTexture} texnum texture number
    * @param {boolean} flushStream flush the stream before binding
@@ -68,6 +71,21 @@ class GL {
 
     currentTextureTargets[target] = texnum;
     gl.bindTexture(gl.TEXTURE_2D, texnum);
+  }
+
+  /**
+   * Binds a 3D texture. Invalidates the 2D texture cache for this unit.
+   * @param {number} target texture unit (0-31)
+   * @param {WebGLTexture} texnum texture handle
+   */
+  static Bind3D(target, texnum) {
+    if (currentTextureTarget !== target) {
+      currentTextureTarget = target;
+      gl.activeTexture(gl.TEXTURE0 + target);
+    }
+
+    currentTextureTargets[target] = null;
+    gl.bindTexture(gl.TEXTURE_3D, texnum);
   }
 
   static Set2D() {
@@ -121,6 +139,14 @@ class GL {
 
     gl.attachShader(p, vsh);
     gl.attachShader(p, fsh);
+
+    // Bind standard attribute locations before linking so VAOs work across programs
+    for (let i = 0; i < attribs.length; i++) {
+      const name = attribs[i][0];
+      if (name in ATTRIB_LOCATIONS) {
+        gl.bindAttribLocation(p, ATTRIB_LOCATIONS[name], name);
+      }
+    }
 
     gl.linkProgram(p);
     if (gl.getProgramParameter(p, gl.LINK_STATUS) !== true) {
@@ -191,14 +217,20 @@ class GL {
       return null;
     }
 
+    GL.currentProgram = program;
+    gl.useProgram(program.program);
+
+    // When a model VAO is bound, it manages attribute state — skip enables
+    if (GL.currentVAO !== null) {
+      return program;
+    }
+
     let enableAttribs = program.attribBits;
     let disableAttribs = 0;
     if (currentProgram !== null) {
       enableAttribs &= ~currentProgram.attribBits;
       disableAttribs = currentProgram.attribBits & ~program.attribBits;
     }
-    GL.currentProgram = program;
-    gl.useProgram(program.program);
     for (let attrib = 0; enableAttribs !== 0 || disableAttribs !== 0; attrib++) {
       const mask = 1 << attrib;
       if ((enableAttribs & mask) !== 0) {
@@ -218,6 +250,9 @@ class GL {
       return;
     }
     GL.StreamFlush();
+    if (GL.currentVAO !== null) {
+      GL.UnbindVAO();
+    }
     let i;
     for (i = 0; i < GL.currentProgram.attribs.length; i++) {
       gl.disableVertexAttribArray(GL.currentProgram.attribs[i].location);
@@ -359,6 +394,60 @@ class GL {
     GL.StreamWriteFloat2(x2, y2);
     GL.StreamWriteUByte4(r, g, b, a);
   }
+
+  /**
+   * Bind a model VAO for static geometry rendering.
+   * Flushes the stream buffer and skips attribute management in UseProgram.
+   * @param {WebGLVertexArrayObject} vao the VAO to bind
+   */
+  static BindVAO(vao) {
+    GL.StreamFlush();
+    savedDefaultAttribBits = GL.currentProgram !== null ? GL.currentProgram.attribBits : 0;
+    gl.bindVertexArray(vao);
+    GL.currentVAO = vao;
+  }
+
+  /**
+   * Unbind the model VAO, returning to the default VAO for stream rendering.
+   * Disables stale attributes on the default VAO and invalidates the current
+   * program so the next UseProgram re-enables only the attributes it needs.
+   */
+  static UnbindVAO() {
+    gl.bindVertexArray(null);
+    GL.currentVAO = null;
+    GL.currentProgram = null;
+    // Disable attributes that were enabled on the default VAO before the
+    // model VAO was bound, preventing "no buffer bound" errors on drawArrays.
+    for (let bits = savedDefaultAttribBits, i = 0; bits !== 0; i++, bits >>>= 1) {
+      if (bits & 1) {
+        gl.disableVertexAttribArray(i);
+      }
+    }
+    savedDefaultAttribBits = 0;
+  }
+
+  /**
+   * Create a VAO for a static VBO with the given vertex attribute layout.
+   * The VAO captures the VBO binding, attribute pointer state, and optionally an IBO.
+   * @param {WebGLBuffer} vbo the VBO to bind in the VAO
+   * @param {Array<{location: number, components: number, type: number, normalized: boolean, stride: number, offset: number}>} attributes attribute descriptors
+   * @param {WebGLBuffer} [ibo] optional index buffer to bind in the VAO
+   * @returns {WebGLVertexArrayObject} the created VAO
+   */
+  static CreateVAO(vbo, attributes, ibo) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    for (const attr of attributes) {
+      gl.enableVertexAttribArray(attr.location);
+      gl.vertexAttribPointer(attr.location, attr.components, attr.type, attr.normalized, attr.stride, attr.offset);
+    }
+    if (ibo) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    }
+    gl.bindVertexArray(null);
+    return vao;
+  }
 }
 
 export default GL;
@@ -378,6 +467,29 @@ const textureModes = {};
 
 /** @type {string} */
 let currentTextureMode = 'GL_LINEAR_MIPMAP_LINEAR';
+
+/**
+ * Standard vertex attribute locations used across all shader programs.
+ * Consistent locations enable VAO reuse across different programs that
+ * share the same VBO layout (e.g., brush opaque, turbulent, fog-volume).
+ * @type {Record<string, number>}
+ */
+export const ATTRIB_LOCATIONS = {
+  aPosition: 0,
+  aOrigin: 0, // particle (same slot as aPosition)
+  aTexCoord: 1,
+  aCoord: 1, // particle (same slot as aTexCoord)
+  aLightStyle: 2,
+  aScale: 2, // particle (same slot as aLightStyle)
+  aNormal: 3,
+  aTangent: 4,
+  aColor: 5,
+  aPositionA: 6,
+  aPositionB: 7,
+};
+
+/** @type {number} Standard brush vertex stride (20 floats = 80 bytes) */
+export const BRUSH_VERTEX_STRIDE = 80;
 
 const ortho = [
   0.0, 0.0, 0.0, 0.0,
@@ -413,6 +525,9 @@ const currentTextureTargets = [];
 
 /** @type {number} */
 let currentTextureTarget = null;
+
+/** @type {number} Bitmask of attributes enabled on the default VAO before a model VAO was bound */
+let savedDefaultAttribBits = 0;
 
 export class GLTexture {
   /** @type {string} */
@@ -679,17 +794,17 @@ export class GLTexture {
     if (data instanceof ImageBitmap) {
       this.width = data.width;
       this.height = data.height;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, data);
       gl.generateMipmap(gl.TEXTURE_2D);
       GL.CheckError();
     } else if (data instanceof Uint8Array) {
       console.assert(data.length === this.width * this.height * 4, 'Texture data length must match width and height');
 
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
       gl.generateMipmap(gl.TEXTURE_2D);
       GL.CheckError();
     } else if (data === null) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }
 
     this._setTextureMode(this.#textureMode);
@@ -945,6 +1060,8 @@ function GL_Shutdown() {
 
   GL.programs.length = 0;
   GL.currentProgram = null;
+  GL.currentVAO = null;
+  savedDefaultAttribBits = 0;
 
   gl = null;
   eventBus.publish('gl.shutdown');

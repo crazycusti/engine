@@ -7,7 +7,7 @@ import { eventBus, registry } from '../registry.mjs';
 import Chase from './Chase.mjs';
 import W from '../common/W.mjs';
 import VID from './VID.mjs';
-import GL, { GLTexture } from './GL.mjs';
+import GL, { ATTRIB_LOCATIONS, GLTexture } from './GL.mjs';
 import { content, effect, EPSILON, gameCapabilities } from '../../shared/Defs.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer, LIGHTMAP_BLOCK_HEIGHT, LIGHTMAP_BLOCK_SIZE } from './renderer/BrushModelRenderer.mjs';
@@ -87,9 +87,9 @@ R.AnimateLight = function() {
     }
   }
   GL.Bind(0, R.lightstyle_texture_a);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 64, 1, 0, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_a);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 1, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_a);
   GL.Bind(0, R.lightstyle_texture_b);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 64, 1, 0, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_b);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, 1, gl.RED, gl.UNSIGNED_BYTE, R.lightstylevalue_b);
 };
 
 R.RenderDlights = function() {
@@ -99,8 +99,7 @@ R.RenderDlights = function() {
   R.dlightframecount++;
   gl.enable(gl.BLEND);
   const program = GL.UseProgram('dlight'); let a;
-  gl.bindBuffer(gl.ARRAY_BUFFER, R.dlightvecs);
-  gl.vertexAttribPointer(program.aPosition.location, 3, gl.FLOAT, false, 0, 0);
+  GL.BindVAO(R.dlightVAO);
   for (let i = 0; i < Def.limits.dlights; i++) {
     const l = CL.state.clientEntities.dlights[i];
     if ((l.die < CL.state.time) || (l.radius === 0.0)) {
@@ -119,6 +118,7 @@ R.RenderDlights = function() {
     gl.uniform1f(program.uRadius, l.radius);
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 18);
   }
+  GL.UnbindVAO();
   gl.disable(gl.BLEND);
 };
 
@@ -1264,27 +1264,32 @@ R.InitTextures = function() {
   GL.Bind(0, R.lightstyle_texture_a);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, 64, 1);
 
   R.lightstyle_texture_b = gl.createTexture();
   GL.Bind(0, R.lightstyle_texture_b);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, 64, 1);
 
   R.fullbright_texture = gl.createTexture();
   GL.Bind(0, R.fullbright_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 0]));
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 0]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
   R.null_texture = gl.createTexture();
   GL.Bind(0, R.null_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
   R.normal_up_texture = gl.createTexture();
   GL.Bind(0, R.normal_up_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
@@ -1395,7 +1400,7 @@ R.InitShaders = async function() {
       ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uGamma',
        'uFogVolumeColor', 'uFogVolumeDensity', 'uFogVolumeMaxOpacity',
        'uFogVolumeMins', 'uFogVolumeMaxs', 'uScreenSize',
-       'uLightProbeRes', 'uHasLightProbe', 'uDlightCount',
+       'uDlightCount',
        'uDlightPos[0]', 'uDlightPos[1]', 'uDlightPos[2]', 'uDlightPos[3]',
        'uDlightPos[4]', 'uDlightPos[5]', 'uDlightPos[6]', 'uDlightPos[7]',
        'uDlightColor[0]', 'uDlightColor[1]', 'uDlightColor[2]', 'uDlightColor[3]',
@@ -1466,6 +1471,10 @@ R.Init = async function() {
 
     return new Float32Array(positions);
   })(), gl.STATIC_DRAW);
+
+  R.dlightVAO = GL.CreateVAO(R.dlightvecs, [
+    { location: ATTRIB_LOCATIONS.aPosition, components: 3, type: gl.FLOAT, normalized: false, stride: 0, offset: 0 },
+  ]);
 
   R.ClearAll();
 };
