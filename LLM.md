@@ -24,6 +24,7 @@ Where’s what these tools have worked on in big chunks and my experience:
 | `MSG` into `SzBuffer` refactor | Played around with Claude Opus 4.5 and tasked it to merge the old C-style `MSG` functions into `SzBuffer` and it was 99% on point and it actually due to the asserts a couple of bugs I fixed myself afterwards. |
 | `PHS` and area portals | Tried out Claude Opus 4.6 to backport the ideas of portals and PHS from Quake 2+. It has been a long journey with lots of debugging and manual tweaking. Result: not working lol. |
 | Protocol 15 | I changed the network protocol quite a lot in order to support larger maps, incremental updates etc. I broke demo playback by doing so. I asked Claude Opus 4.6 to bring Protocol 15 back just enough to have demo playback working again. It was again a 90/10 result. |
+| WebGL 2 port | Claude Opus 4.6 is really excelling at coding, especially doing heavy leg work such as porting from WebGL 1 to WebGL 2. It would have taken me hours to get everything sorted out and optimized. |
 
 ## Conclusion
 
