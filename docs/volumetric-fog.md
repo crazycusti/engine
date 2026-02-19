@@ -64,6 +64,14 @@ QuakeShack automatically generates fog for water, slime, and lava volumes in you
 - `0.9+` creates nearly opaque fog (use sparingly!)
 - Lower values (`0.3-0.5`) for subtle effect layers
 
+**Good to know:**
+
+- Light sources will affect the volumes:
+  - Color values are sampled from the lightgrid, make sure to export it
+  - Dynamic lights might blast the fog
+- Use larger brushes to build a fog area:
+  - Smaller brushes will lead to chunked/overlapping fog areas
+
 ## Performance Notes
 
 Fog volumes are lightweight and shouldn't impact performance significantly. Feel free to use multiple fog volumes in the same map for different areas with different atmospheres.
