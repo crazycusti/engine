@@ -240,7 +240,7 @@ export default class ClientInput {
 
     const buf = new SzBuffer(16);
     buf.writeByte(Protocol.clc.move);
-    buf.writeByte(Math.round(Math.max(100, Host.frametime * 1000.0)));
+    buf.writeByte(Math.min(255, Math.max(1, Math.round(Host.frametime * 1000.0))));
     buf.writeAngleVector(CL.state.cmd.angles);
     buf.writeShort(CL.state.cmd.forwardmove);
     buf.writeShort(CL.state.cmd.sidemove);

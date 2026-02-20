@@ -78,6 +78,14 @@ export class Quaternion extends Array {
   }
 };
 
+/**
+ * 3D vector.
+ * This is the most commonly used vector type in the engine, and is used for positions, directions, angles, etc.
+ * It is different from Quake’s Vector macros (it doesn’t even has classes or functions most of the time),
+ * almost all of which are now instance methods here.
+ * While most methods are mutating, some return new Vectors for convenience.
+ * Make sure to read the JSDoc carefully.
+ */
 export default class Vector extends Float32Array {
   /** Vector origin constant */
   static origin = (new Vector()).freeze();

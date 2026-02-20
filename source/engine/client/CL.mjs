@@ -524,6 +524,8 @@ export default class CL {
 
     pmove.oldbuttons = from.oldbuttons;
     pmove.waterjumptime = from.waterjumptime;
+    pmove.pmFlags = from.pmFlags;
+    pmove.pmTime = from.pmTime;
     pmove.dead = false; // TODO: cl.stats[STAT_HEALTH] <= 0;
     pmove.spectator = false;
 
@@ -533,6 +535,8 @@ export default class CL {
 
     to.waterjumptime = pmove.waterjumptime;
     to.oldbuttons = pmove.cmd.buttons;
+    to.pmFlags = pmove.pmFlags;
+    to.pmTime = pmove.pmTime;
     to.origin.set(pmove.origin);
     to.velocity.set(pmove.velocity);
     to.angles.set(pmove.angles);

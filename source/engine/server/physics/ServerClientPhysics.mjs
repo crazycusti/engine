@@ -2,12 +2,10 @@ import Vector from '../../../shared/Vector.mjs';
 import * as Defs from '../../../shared/Defs.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import {
-  GROUND_ANGLE_THRESHOLD,
-  STEP_HEIGHT,
   VELOCITY_EPSILON,
-  WATER_SPEED_FACTOR,
 } from './Defs.mjs';
 import { ServerClient } from '../Client.mjs';
+import { PM_TYPE } from '../../common/Pmove.mjs';
 
 let { Host, SV, V } = registry;
 
@@ -18,86 +16,173 @@ eventBus.subscribe('registry.frozen', () => {
 });
 
 /**
- * Handles player-specific movement functions (walking, swimming, noclip, etc.)
+ * Handles player-specific physics using the shared PmovePlayer for deterministic
+ * client/server movement (Q2-style). All player movement (friction, acceleration,
+ * gravity, step-slide) is done by PmovePlayer.move() so that client prediction
+ * and server authoritative movement use the exact same code path.
  */
 export class ServerClientPhysics {
   constructor() {
   }
 
+  // =========================================================================
+  // Shared PmovePlayer integration
+  // =========================================================================
+
   /**
-   * @param {import('../Edict.mjs').ServerEdict} ent edict
+   * Populates SV.pmove physents with solid entities near the player.
+   * Must be called before running a PmovePlayer for a client.
+   * @param {import('../Edict.mjs').ServerEdict} playerEdict player edict (excluded from list)
    */
-  walkMove(ent) {
-    const oldonground = ent.entity.flags & Defs.flags.FL_ONGROUND;
-    ent.entity.flags ^= oldonground;
-    const oldorg = ent.entity.origin.copy();
-    const oldvel = ent.entity.velocity.copy();
-    let result = SV.physics.flyMove(ent, Host.frametime);
-    let clip = result.blocked;
-    if ((clip & 2) === 0) {
-      return;
-    }
-    if ((oldonground === 0) && (ent.entity.waterlevel === Defs.waterlevel.WATERLEVEL_NONE)) {
-      return;
-    }
-    if (ent.entity.movetype !== Defs.moveType.MOVETYPE_WALK) {
-      return;
-    }
-    if (ent.entity.waterjump_time) {
-      return;
-    }
-    if (SV.nostep.value !== 0.0) {
-      return;
-    }
-    const nosteporg = ent.entity.origin.copy();
-    const nostepvel = ent.entity.velocity.copy();
-    ent.entity.origin = ent.entity.origin.set(oldorg);
-    SV.physics.pushEntity(ent, new Vector(0.0, 0.0, STEP_HEIGHT));
-    ent.entity.velocity = new Vector(oldvel[0], oldvel[1], 0.0);
-    result = SV.physics.flyMove(ent, Host.frametime);
-    clip = result.blocked;
-    if (clip !== 0) {
-      const curorg = ent.entity.origin;
-      if (Math.abs(oldorg[1] - curorg[1]) < 0.03125 && Math.abs(oldorg[0] - curorg[0]) < 0.03125) {
-        clip = SV.physics.tryUnstick(ent, oldvel);
+  _setupPhysents(playerEdict) {
+    const pm = SV.pmove;
+    pm.clearEntities();
+
+    for (let i = 1; i < SV.server.num_edicts; i++) {
+      const edict = SV.server.edicts[i];
+      if (!edict || edict.isFree() || edict === playerEdict) {
+        continue;
       }
-      if ((clip & 2) !== 0) {
-        // Now properly handle the trace from flyMove
-        if (result.steptrace) {
-          SV.physics.wallFriction(ent, result.steptrace);
+
+      const entity = edict.entity;
+      if (!entity) {
+        continue;
+      }
+
+      const s = entity.solid;
+      if (s !== Defs.solid.SOLID_BSP && s !== Defs.solid.SOLID_BBOX && s !== Defs.solid.SOLID_SLIDEBOX) {
+        continue;
+      }
+
+      const model = (s === Defs.solid.SOLID_BSP && entity.modelindex)
+        ? SV.server.models[entity.modelindex]
+        : null;
+
+      pm.addEntity(entity, model);
+    }
+  }
+
+  /**
+   * Runs the shared PmovePlayer for a client, copying state in and out of
+   * the entity and client objects. This replaces the old server-side
+   * walkMove/airMove/waterMove/friction/accelerate code with the same
+   * movement code the client uses for prediction.
+   * @param {import('../Edict.mjs').ServerEdict} ent player edict
+   * @param {ServerClient} client client connection
+   */
+  _runSharedPmove(ent, client) {
+    const entity = ent.entity;
+    const pm = SV.pmove;
+
+    // --- Set up physents ---
+    this._setupPhysents(ent);
+
+    // --- Create a fresh player mover ---
+    const pmove = pm.newPlayerMove();
+
+    // --- Copy entity state → pmove ---
+    pmove.origin.set(entity.origin);
+    pmove.velocity.set(entity.velocity);
+    pmove.angles.set(entity.v_angle ?? entity.angles);
+
+    // Persistent PM state from the client connection
+    pmove.oldbuttons = client.pmOldButtons;
+    pmove.pmFlags = client.pmFlags;
+    pmove.pmTime = client.pmTime;
+    pmove.waterjumptime = entity.teleport_time > SV.server.time ? (entity.teleport_time - SV.server.time) : 0;
+    pmove.dead = entity.deadflag > 0;
+    pmove.spectator = false;
+
+    // Determine PM type
+    if (entity.deadflag > 0) {
+      pmove.pmType = PM_TYPE.DEAD;
+    } else if (entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
+      pmove.pmType = PM_TYPE.SPECTATOR;
+    } else {
+      pmove.pmType = PM_TYPE.NORMAL;
+    }
+
+    // On-ground from entity flags
+    if (entity.flags & Defs.flags.FL_ONGROUND) {
+      pmove.onground = 0; // world (generic ground)
+    } else {
+      pmove.onground = null; // airborne
+    }
+
+    // Water state from entity
+    pmove.waterlevel = entity.waterlevel ?? 0;
+    pmove.watertype = entity.watertype ?? -1;
+
+    // Set command — use server frametime, not the client's declared msec.
+    // The server runs PmovePlayer every physics frame, so we must use the
+    // actual elapsed time to avoid over-moving when cmd.msec > Host.frametime.
+    pmove.cmd.set(client.cmd);
+    pmove.cmd.msec = Math.min(255, Math.max(1, Math.round(Host.frametime * 1000.0)));
+
+    // --- Execute movement ---
+    pmove.move();
+
+    // --- Copy results back → entity ---
+    entity.origin = entity.origin.set(pmove.origin);
+    entity.velocity = entity.velocity.set(pmove.velocity);
+
+    // Ground entity
+    if (pmove.onground !== null) {
+      entity.flags |= Defs.flags.FL_ONGROUND;
+      if (pmove.onground > 0 && pmove.onground < pm.physents.length) {
+        const pe = pm.physents[pmove.onground];
+        if (pe.edictId !== undefined && pe.edictId < SV.server.num_edicts) {
+          entity.groundentity = SV.server.edicts[pe.edictId].entity;
+        } else {
+          entity.groundentity = null;
+        }
+      } else {
+        // onground === 0 means world: clear groundentity so pushMove
+        // won't mistakenly think we're riding a mover from a prior frame.
+        entity.groundentity = null;
+      }
+    } else {
+      entity.flags &= ~Defs.flags.FL_ONGROUND;
+      entity.groundentity = null;
+    }
+
+    // Water state
+    entity.waterlevel = pmove.waterlevel;
+    entity.watertype = pmove.watertype;
+
+    // Waterjump flag sync
+    if (pmove.waterjumptime > 0) {
+      entity.flags |= Defs.flags.FL_WATERJUMP;
+      entity.teleport_time = SV.server.time + pmove.waterjumptime;
+    } else {
+      entity.flags &= ~Defs.flags.FL_WATERJUMP;
+    }
+
+    // Persist PM state on client connection
+    client.pmOldButtons = pmove.oldbuttons;
+    client.pmFlags = pmove.pmFlags;
+    client.pmTime = pmove.pmTime;
+
+    // Touched entities — fire touch functions via SV.physics.impact
+    // to match the bidirectional touch semantics used by SV_FlyMove.
+    const touchedSet = new Set();
+    for (const idx of pmove.touchindices) {
+      if (idx > 0 && idx < pm.physents.length && !touchedSet.has(idx)) {
+        touchedSet.add(idx);
+        const pe = pm.physents[idx];
+        if (pe.edictId !== undefined && pe.edictId < SV.server.num_edicts) {
+          const touchEdict = SV.server.edicts[pe.edictId];
+          if (!touchEdict.isFree()) {
+            SV.physics.impact(ent, touchEdict, entity.velocity.copy());
+          }
         }
       }
     }
-    const downtrace = SV.physics.pushEntity(ent, new Vector(0.0, 0.0, oldvel[2] * Host.frametime - STEP_HEIGHT));
-    if (downtrace.plane.normal[2] > GROUND_ANGLE_THRESHOLD) {
-      if (downtrace.ent.entity.solid === Defs.solid.SOLID_BSP || downtrace.ent.entity.solid === Defs.solid.SOLID_BBOX) {
-        ent.entity.flags |= Defs.flags.FL_ONGROUND;
-        ent.entity.groundentity = downtrace.ent.entity;
-      }
-      return;
-    }
-    ent.entity.origin = ent.entity.origin.set(nosteporg);
-    ent.entity.velocity = ent.entity.velocity.set(nostepvel);
   }
 
-  /**
-   * Handles noclip movement for a player entity.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   * @param {import('../Client.mjs').ServerClient} client client connection
-   */
-  noclipMove(ent, client) {
-    const cmd = client.cmd;
-    const viewAngles = ent.entity.v_angle ?? ent.entity.angles;
-    const { forward, right } = viewAngles.angleVectors();
-
-    const wishvel = new Vector(
-      forward[0] * cmd.forwardmove + right[0] * cmd.sidemove,
-      forward[1] * cmd.forwardmove + right[1] * cmd.sidemove,
-      forward[2] * cmd.forwardmove + right[2] * cmd.sidemove,
-    );
-
-    ent.entity.velocity = ent.entity.velocity.set(wishvel.multiply(2.0));
-  }
+  // =========================================================================
+  // Visual angle helpers (server-only, not part of shared movement)
+  // =========================================================================
 
   /**
    * Updates the ideal pitch for a client when standing on the ground.
@@ -157,206 +242,25 @@ export class ServerClientPhysics {
     }
   }
 
-  /**
-   * Applies friction to a client, reducing horizontal velocity.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   */
-  userFriction(ent) {
-    if (!ent) {
-      return;
-    }
-
-    const vel = ent.entity.velocity;
-    const speed = Math.hypot(vel[0], vel[1]);
-
-    if (speed === 0.0) {
-      return;
-    }
-
-    const origin = ent.entity.origin;
-    const start = new Vector(origin[0] + vel[0] / speed * 16.0, origin[1] + vel[1] / speed * 16.0, origin[2] + ent.entity.mins[2]);
-    let friction = SV.friction.value;
-
-    if (SV.collision.move(start, Vector.origin, Vector.origin, new Vector(start[0], start[1], start[2] - 34.0), 1, ent).fraction === 1.0) {
-      friction *= SV.edgefriction.value;
-    }
-
-    let newspeed = speed - Host.frametime * (speed < SV.stopspeed.value ? SV.stopspeed.value : speed) * friction;
-
-    if (newspeed < 0.0) {
-      newspeed = 0.0;
-    }
-
-    newspeed /= speed;
-    ent.entity.velocity = ent.entity.velocity.multiply(newspeed);
-  }
+  // =========================================================================
+  // Client think — punchangle decay and visual angle setup
+  // =========================================================================
 
   /**
-   * Accelerates a client towards the desired velocity.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   * @param {Vector} wishvel target direction and speed
-   * @param {boolean} [air] whether the acceleration happens in air
-   */
-  accelerate(ent, wishvel, air = false) {
-    if (!ent) {
-      return;
-    }
-
-    const wishdir = wishvel.copy();
-    let wishspeed = wishdir.normalize();
-
-    if (air && wishspeed > 30.0) {
-      wishspeed = 30.0;
-    }
-
-    const addspeed = wishspeed - ent.entity.velocity.dot(wishdir);
-
-    if (addspeed <= 0.0) {
-      return;
-    }
-
-    const accelspeed = Math.min(SV.accelerate.value * Host.frametime * wishspeed, addspeed);
-    ent.entity.velocity = ent.entity.velocity.add(wishdir.multiply(accelspeed));
-  }
-
-  /**
-   * Handles movement for clients fully submerged in water.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   * @param {import('../Client.mjs').ServerClient} client client connection
-   */
-  waterMove(ent, client) {
-    if (!ent) {
-      return;
-    }
-
-    const cmd = client.cmd;
-    const viewAngles = ent.entity.v_angle ?? ent.entity.angles;
-    const { forward, right } = viewAngles.angleVectors();
-    const wishvel = new Vector(
-      forward[0] * cmd.forwardmove + right[0] * cmd.sidemove,
-      forward[1] * cmd.forwardmove + right[1] * cmd.sidemove,
-      forward[2] * cmd.forwardmove + right[2] * cmd.sidemove,
-    );
-
-    if ((cmd.forwardmove === 0.0) && (cmd.sidemove === 0.0) && (cmd.upmove === 0.0)) {
-      wishvel[2] -= 60.0;
-    } else {
-      wishvel[2] += cmd.upmove;
-    }
-
-    let wishspeed = wishvel.len();
-
-    if (wishspeed > SV.maxspeed.value) {
-      const scale = SV.maxspeed.value / wishspeed;
-      wishvel.multiply(scale);
-      wishspeed = SV.maxspeed.value;
-    }
-
-    wishspeed *= WATER_SPEED_FACTOR;
-    const speed = ent.entity.velocity.len();
-    let newspeed;
-
-    if (speed !== 0.0) {
-      newspeed = speed - Host.frametime * speed * SV.friction.value;
-
-      if (newspeed < 0.0) {
-        newspeed = 0.0;
-      }
-
-      const scale = newspeed / speed;
-      ent.entity.velocity = ent.entity.velocity.multiply(scale);
-    } else {
-      newspeed = 0.0;
-    }
-
-    if (wishspeed === 0.0) {
-      return;
-    }
-
-    const addspeed = wishspeed - newspeed;
-
-    if (addspeed <= 0.0) {
-      return;
-    }
-
-    const accelspeed = Math.min(SV.accelerate.value * wishspeed * Host.frametime, addspeed);
-    ent.entity.velocity = ent.entity.velocity.add(wishvel.multiply(accelspeed / wishspeed));
-  }
-
-  /**
-   * Handles water jump logic for a client.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   */
-  waterJump(ent) {
-    if (!ent) {
-      return;
-    }
-
-    if ((SV.server.time > ent.entity.teleport_time) || (ent.entity.waterlevel === Defs.waterlevel.WATERLEVEL_NONE)) {
-      ent.entity.flags &= ~Defs.flags.FL_WATERJUMP;
-      ent.entity.teleport_time = 0.0;
-    }
-
-    const nvelo = ent.entity.movedir.copy();
-    nvelo[2] = ent.entity.velocity[2];
-    ent.entity.velocity = nvelo;
-  }
-
-  /**
-   * Handles standard ground and air movement for a client.
-   * @param {import('../Edict.mjs').ServerEdict} ent player entity
-   * @param {import('../Client.mjs').ServerClient} client client connection
-   */
-  airMove(ent, client) {
-    if (!ent) {
-      return;
-    }
-
-    const cmd = client.cmd;
-    const { forward, right } = ent.entity.angles.angleVectors();
-    let fmove = cmd.forwardmove;
-    const smove = cmd.sidemove;
-
-    if ((SV.server.time < ent.entity.teleport_time) && (fmove < 0.0)) {
-      fmove = 0.0;
-    }
-
-    const wishvel = new Vector(
-      forward[0] * fmove + right[0] * smove,
-      forward[1] * fmove + right[1] * smove,
-      ent.entity.movetype !== Defs.moveType.MOVETYPE_WALK ? cmd.upmove : 0.0,
-    );
-
-    const wishdir = wishvel.copy();
-
-    if (wishdir.normalize() > SV.maxspeed.value) {
-      wishvel[0] = wishdir[0] * SV.maxspeed.value;
-      wishvel[1] = wishdir[1] * SV.maxspeed.value;
-      wishvel[2] = wishdir[2] * SV.maxspeed.value;
-    }
-
-    if (ent.entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
-      ent.entity.velocity = wishvel;
-    } else if ((ent.entity.flags & Defs.flags.FL_ONGROUND) !== 0) {
-      this.userFriction(ent);
-      this.accelerate(ent, wishvel);
-    } else {
-      this.accelerate(ent, wishvel, true);
-    }
-  }
-
-  /**
-   * Executes per-frame thinking for a client.
+   * Executes per-frame input processing for a client.
+   * Movement is NOT done here — it runs through PmovePlayer in physicsClient.
+   * This only handles punchangle decay and visual angle updates.
    * @param {import('../Edict.mjs').ServerEdict} edict client edict
-   * @param {import('../Client.mjs').ServerClient} client client connection
+   * @param {ServerClient} client client connection (unused, movement runs in physicsClient)
    */
-  clientThink(edict, client) {
+  clientThink(edict, client) { // eslint-disable-line no-unused-vars
     const entity = edict.entity;
 
     if (!edict || entity.movetype === Defs.moveType.MOVETYPE_NONE) {
       return;
     }
 
+    // Decay punch angle
     const punchangle = entity.punchangle.copy();
     let len = punchangle.normalize() - 10.0 * Host.frametime;
 
@@ -370,9 +274,10 @@ export class ServerClientPhysics {
       return;
     }
 
+    // Visual angle setup (for model rendering by other players)
     const angles = entity.angles;
     const viewAngles = entity.v_angle ?? entity.angles;
-    const v_angle = viewAngles.copy().add(punchangle);
+    const v_angle = viewAngles.copy().add(entity.punchangle);
 
     angles[2] = V.CalcRoll(angles, entity.velocity) * 4.0;
     if (!entity.fixangle) {
@@ -381,19 +286,16 @@ export class ServerClientPhysics {
     }
 
     entity.angles = angles;
-
-    if (entity.flags & Defs.flags.FL_WATERJUMP) {
-      this.waterJump(edict);
-    } else if (entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST && entity.movetype !== Defs.moveType.MOVETYPE_NOCLIP) {
-      this.waterMove(edict, client);
-    } else if (entity.movetype === Defs.moveType.MOVETYPE_NOCLIP) {
-      this.noclipMove(edict, client);
-    } else {
-      this.airMove(edict, client);
-    }
   }
 
+  // =========================================================================
+  // Per-frame physics dispatch
+  // =========================================================================
+
   /**
+   * Runs per-frame physics for a player entity.
+   * For MOVETYPE_WALK, uses the shared PmovePlayer for deterministic movement
+   * that matches client-side prediction exactly.
    * @param {import('../Edict.mjs').ServerEdict} ent edict
    */
   physicsClient(ent) {
@@ -417,18 +319,14 @@ export class ServerClientPhysics {
         case Defs.moveType.MOVETYPE_NONE:
           break;
         case Defs.moveType.MOVETYPE_WALK:
-          if (!SV.physics.checkWater(ent) && (ent.entity.flags & Defs.flags.FL_WATERJUMP) === 0) {
-            SV.physics.addGravity(ent);
-          }
-          SV.physics.checkStuck(ent);
-          this.walkMove(ent);
+        case Defs.moveType.MOVETYPE_NOCLIP:
+          // Shared PmovePlayer handles gravity, friction, acceleration,
+          // step-slide, water, and all movement — matching client prediction.
+          // NOCLIP is mapped to PM_TYPE.SPECTATOR which uses _flyMove().
+          this._runSharedPmove(ent, client);
           break;
         case Defs.moveType.MOVETYPE_FLY:
           SV.physics.flyMove(ent, Host.frametime);
-          break;
-        case Defs.moveType.MOVETYPE_NOCLIP:
-          ent.entity.angles = ent.entity.angles.add(ent.entity.avelocity.copy().multiply(Host.frametime));
-          ent.entity.origin = ent.entity.origin.add(ent.entity.velocity.copy().multiply(Host.frametime));
           break;
         default:
           throw new Error('SV.Physics_Client: bad movetype ' + movetype);

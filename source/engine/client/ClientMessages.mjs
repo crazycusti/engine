@@ -42,6 +42,11 @@ export class ClientPlayerState extends Protocol.EntityState {
     this.onground = null;
     this.oldbuttons = 0;
 
+    /** @type {number} Q2-style player movement flags (PMF bitmask) */
+    this.pmFlags = 0;
+    /** @type {number} Q2-style timing counter for special states */
+    this.pmTime = 0;
+
     this.pmove = pmove;
 
     Object.seal(this);

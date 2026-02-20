@@ -331,11 +331,11 @@ export class ServerPhysics {
     const rotation = pusher.entity.avelocity.copy().multiply(movetime);
     const mins = pusher.entity.absmin.copy().add(move);
     const maxs = pusher.entity.absmax.copy().add(move);
-    const pushorig = pusher.entity.origin.copy().add(move);
-    const pushangle = pusher.entity.angles.copy().add(rotation);
+    const pushorig = pusher.entity.origin.copy();
+    const pushangles = pusher.entity.angles.copy();
 
-    pusher.entity.origin = pushorig;
-    pusher.entity.angles = pushangle;
+    pusher.entity.origin = pusher.entity.origin.copy().add(move);
+    pusher.entity.angles = pusher.entity.angles.copy().add(rotation);
     pusher.entity.ltime += movetime;
     SV.area.linkEdict(pusher);
 
@@ -374,12 +374,11 @@ export class ServerPhysics {
       let finalMove = move.copy();
 
       if (!rotation.isOrigin()) {
-        const pusherOriginBefore = pushorig.copy().subtract(move);
-        const offset = check.entity.origin.copy().subtract(pusherOriginBefore);
+        const offset = check.entity.origin.copy().subtract(pushorig);
 
         if (rotation[1] !== 0) {
           const rotatedOffset = new Vector(0, 0, 1).rotatePointAroundVector(offset, rotation[1]);
-          const newPos = pusherOriginBefore.copy().add(rotatedOffset);
+          const newPos = pushorig.copy().add(rotatedOffset);
           finalMove = newPos.subtract(check.entity.origin);
         }
 
@@ -406,7 +405,8 @@ export class ServerPhysics {
         check.entity.origin = entorig;
         check.entity.angles = entangles;
         SV.area.linkEdict(check, true);
-        check.entity.origin = pushorig;
+        pusher.entity.origin = pusher.entity.origin.set(pushorig);
+        pusher.entity.angles = pusher.entity.angles.set(pushangles);
         SV.area.linkEdict(pusher);
         pusher.entity.ltime -= movetime;
         if (pusher.entity.blocked) {
