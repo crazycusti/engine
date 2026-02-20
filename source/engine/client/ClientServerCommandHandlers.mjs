@@ -1094,7 +1094,7 @@ export function parseServerMessage() {
     }
   }
 
-  CL.state.clientEntities.setSolidEntities(CL.pmove);
+  // CL.state.clientEntities.setSolidEntities(CL.pmove);
 
   if (CL.shownet.value === 2) {
     Con.Print('NET: (' + NET.message.cursize + ') ' + messages.join(', ') + '\n');

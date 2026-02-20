@@ -302,7 +302,7 @@ export class ClientEdict { // TODO: extends Protocol.EntityState
       const handler = ClientAPI.GetClientEdictHandler(this.classname);
 
       if (!handler) {
-        Con.DPrint('No ClientEdictHandler for entity: ' + this.classname + '\n');
+        // Con.DPrint('No ClientEdictHandler for entity: ' + this.classname + '\n');
         return null;
       }
 

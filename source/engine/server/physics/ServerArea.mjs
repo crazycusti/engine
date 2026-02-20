@@ -61,8 +61,10 @@ export class ServerArea {
    * @returns {*} the hull structure used for collision tests
    */
   hullForEntity(ent, mins, maxs, out_offset) {
+    const model = SV.server.models[ent.entity.modelindex];
     const origin = ent.entity.origin;
-    if (ent.entity.solid !== Defs.solid.SOLID_BSP) {
+
+    if (ent.entity.solid !== Defs.solid.SOLID_BSP || !(model instanceof BrushModel)) { // CR: don’t ask
       const emaxs = ent.entity.maxs;
       const emins = ent.entity.mins;
       SV.box_planes[0].dist = emaxs[0] - mins[0];
@@ -77,10 +79,6 @@ export class ServerArea {
 
     console.assert(ent.entity.movetype !== Defs.moveType.MOVETYPE_NONE,
       'requires SOLID_BSP with MOVETYPE_NONE, use MOVETYPE_PUSH instead');
-
-    const model = SV.server.models[ent.entity.modelindex];
-
-    console.assert(model && model instanceof BrushModel, 'model is null or not a brush');
 
     const size = maxs[0] - mins[0];
     let hull;
