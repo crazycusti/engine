@@ -1115,7 +1115,10 @@ export class PmovePlayer { // pmove_t (player state only)
       const trace = this._pmove.clipPlayerMove(this.origin, end);
 
       if (trace.allsolid) {
-        // trapped in solid
+        // trapped in solid — still record the touch so impact() fires
+        if (trace.ent !== null) {
+          this.touchindices.push(trace.ent);
+        }
         if (_dbg) {
           console.warn(`[_slideMove] ALLSOLID at bump ${bumpcount}, origin=${this.origin}, end=${end}`);
         }
@@ -1267,6 +1270,10 @@ export class PmovePlayer { // pmove_t (player state only)
     if (upTrace.allsolid) {
       return; // can't step up
     }
+    // Record touches from step-up check
+    if (upTrace.ent !== null) {
+      this.touchindices.push(upTrace.ent);
+    }
 
     // try sliding above
     this.origin.set(up);
@@ -1281,6 +1288,10 @@ export class PmovePlayer { // pmove_t (player state only)
     const downStepTrace = this._pmove.clipPlayerMove(this.origin, down);
     if (!downStepTrace.allsolid) {
       this.origin.set(downStepTrace.endpos);
+    }
+    // Record touches from step-down trace (ground entities, buttons at feet level)
+    if (downStepTrace.ent !== null) {
+      this.touchindices.push(downStepTrace.ent);
     }
 
     const upOrigin = this.origin.copy();
@@ -1694,6 +1705,7 @@ export class Pmove { // pmove_t
     console.assert(model.hulls instanceof Array, 'model hulls');
 
     this.physents.length = 0;
+    this.#modelHullsCache.clear();
 
     const pe = new PhysEnt(this);
 

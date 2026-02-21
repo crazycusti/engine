@@ -352,7 +352,7 @@ export class ServerPhysics {
         continue;
       }
 
-      if (((check.entity.flags & Defs.flags.FL_ONGROUND) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher)) {
+      if (((check.entity.flags & Defs.flags.FL_ONGROUND) === 0) || !check.entity.groundentity || !check.entity.groundentity.equals(pusher.entity)) {
         if (!check.entity.absmin.lt(maxs) || !check.entity.absmax.gt(mins)) {
           continue;
         }

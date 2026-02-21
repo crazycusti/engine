@@ -327,5 +327,6 @@ export class ClientMessages {
 
   clear() {
     this.mtime.fill(0.0);
+    this.playerstates.length = 0;
   }
 };
