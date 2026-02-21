@@ -828,7 +828,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
   /** Check for ladder / water jump opportunities. */
   _checkSpecialMovement() { // Q2: PM_CheckSpecialMovement
-    if (this.pmTime) {
+    if (this.pmFlags & PMF.TIME_WATERJUMP) {
       return;
     }
 
@@ -856,15 +856,22 @@ export class PmovePlayer { // pmove_t (player state only)
       return;
     }
 
-    const wjspot = this.origin.copy().add(flatforward.copy().multiply(30));
-    wjspot[2] += 4;
+    // Don't try to hop out while sinking fast (QW guard)
+    if (this.velocity[2] < -180) {
+      return;
+    }
+
+    // Probe forward for a solid wall, then check for empty space above it.
+    // QW uses 24 units forward, +8 for the wall check, +32 for empty above.
+    const wjspot = this.origin.copy().add(flatforward.copy().multiply(24));
+    wjspot[2] += 8;
 
     let cont = this._pmove.pointContents(wjspot);
     if (cont !== content.CONTENT_SOLID) {
       return;
     }
 
-    wjspot[2] += 16;
+    wjspot[2] += 24;
     cont = this._pmove.pointContents(wjspot);
     if (cont !== content.CONTENT_EMPTY) {
       return;
@@ -978,16 +985,15 @@ export class PmovePlayer { // pmove_t (player state only)
 
     let drop = 0;
 
-    // ground friction
-    if ((this.onground !== null && !this._ladder) || this._ladder) {
+    // Water friction and ground friction are mutually exclusive (QW behavior).
+    // When waist-deep or deeper, only water friction applies.
+    if (this.waterlevel >= 2 && !this._ladder) {
+      drop += speed * this._pmove.movevars.waterfriction * this.waterlevel * this.frametime;
+    } else if ((this.onground !== null && !this._ladder) || this._ladder) {
+      // ground friction
       const friction = this._pmove.movevars.friction;
       const control = speed < this._pmove.movevars.stopspeed ? this._pmove.movevars.stopspeed : speed;
       drop += control * friction * this.frametime;
-    }
-
-    // water friction
-    if (this.waterlevel && !this._ladder) {
-      drop += speed * this._pmove.movevars.waterfriction * this.waterlevel * this.frametime;
     }
 
     // scale the velocity
@@ -1403,7 +1409,7 @@ export class PmovePlayer { // pmove_t (player state only)
   }
 
   /** Water movement. */
-  _waterMove() { // Q2: PM_WaterMove
+  _waterMove() { // Q2: PM_WaterMove / QW: PM_WaterMove
     const forward = this._angleVectors.forward;
     const right = this._angleVectors.right;
 
@@ -1426,11 +1432,37 @@ export class PmovePlayer { // pmove_t (player state only)
       wishvel.multiply(this._pmove.movevars.maxspeed / wishspeed);
       wishspeed = this._pmove.movevars.maxspeed;
     }
-    wishspeed *= 0.5;
+    wishspeed *= 0.7;
 
     this._accelerate(wishdir, wishspeed, this._pmove.movevars.wateraccelerate);
 
-    this._stepSlideMove();
+    // QW-style water step-up: compute the intended destination, then trace
+    // from STEPSIZE+1 above it straight down. If the trace succeeds the
+    // player "steps up" onto a ledge or slope, allowing them to climb out
+    // of the water at low edges. Only fall back to slideMove on failure.
+    const dest = new Vector(
+      this.origin[0] + this.frametime * this.velocity[0],
+      this.origin[1] + this.frametime * this.velocity[1],
+      this.origin[2] + this.frametime * this.velocity[2],
+    );
+    const start = dest.copy();
+    start[2] += STEPSIZE + 1;
+
+    const trace = this._pmove.clipPlayerMove(start, dest);
+
+    if (!trace.startsolid && !trace.allsolid) {
+      // walked up the step
+      this.origin.set(trace.endpos);
+
+      if (trace.ent !== null) {
+        this.touchindices.push(trace.ent);
+      }
+
+      return;
+    }
+
+    // step-up failed — fall back to regular slide movement
+    this._slideMove();
   }
 
   /**
