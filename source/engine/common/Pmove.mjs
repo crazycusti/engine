@@ -593,6 +593,8 @@ export class PmovePlayer { // pmove_t (player state only)
 
     // spectator
     if (this.pmType === PM_TYPE.SPECTATOR) {
+      this.onground = null;
+      this.pmFlags &= ~PMF.ON_GROUND;
       this._flyMove();
       this._snapPosition();
       return;
