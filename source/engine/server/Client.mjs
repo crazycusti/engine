@@ -138,6 +138,9 @@ export class ServerClient {
     this._entityStates.clear();
     this.cmd.reset();
     this.lastcmd.reset();
+    this.pmFlags = 0;
+    this.pmTime = 0;
+    this.pmOldButtons = 0;
   }
 
   /**
