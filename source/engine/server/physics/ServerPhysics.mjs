@@ -682,7 +682,9 @@ export class ServerPhysics {
       if (ent.isFree()) {
         continue;
       }
-      if (SV.server.gameAPI.force_retouch-- > 0) {
+      // force_retouch: relink ALL entities so stationary objects re-check
+      // trigger contacts (e.g. telefrag triggers).
+      if (SV.server.gameAPI.force_retouch) {
         SV.area.linkEdict(ent, true);
       }
       if (ent.isClient()) {
@@ -712,6 +714,11 @@ export class ServerPhysics {
           throw new Error('SV.Physics: bad movetype ' + (ent.entity.movetype >> 0));
       }
     }
+
+    if (SV.server.gameAPI.force_retouch) {
+      SV.server.gameAPI.force_retouch--;
+    }
+
     SV.server.time += Host.frametime;
   }
 }

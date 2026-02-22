@@ -1877,12 +1877,7 @@ export class Pmove { // pmove_t
       pe.mins.set(entity.mins);
       pe.maxs.set(entity.maxs);
 
-      const hull = new BoxHull();
-      hull.setSize(pe.mins, pe.maxs);
-
-      // box hulls have a single hull used for all clipping purposes
-      pe.hulls.length = 3;
-      pe.hulls.fill(hull);
+      // do not create hulls here, getClippingHull() applies it at trace time
     }
 
     if ('edictId' in entity) {
