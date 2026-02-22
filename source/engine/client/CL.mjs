@@ -5,13 +5,14 @@ import Cmd, { ConsoleCommand } from '../common/Cmd.mjs';
 import Cvar from '../common/Cvar.mjs';
 import { Pmove, PmovePlayer } from '../common/Pmove.mjs';
 import { eventBus, registry } from '../registry.mjs';
-import { gameCapabilities } from '../../shared/Defs.mjs';
+import { gameCapabilities, solid } from '../../shared/Defs.mjs';
 import ClientDemos from './ClientDemos.mjs';
 import { ClientPlayerState } from './ClientMessages.mjs';
 import VID from './VID.mjs';
 import { clientRuntimeState, clientStaticState } from './ClientState.mjs';
 import ClientConnection from './ClientConnection.mjs';
 import ClientLifecycle from './ClientLifecycle.mjs';
+import { BrushModel } from '../common/Mod.mjs';
 // import { materialFlags, PBRMaterial, QuakeMaterial } from './renderer/Materials.mjs';
 /** @typedef {import('./Sound.mjs').SFX} SFX */
 
@@ -389,28 +390,28 @@ export default class CL {
   }
 
   static MoveAround_f() { // private
-    if (this.cls.state !== Def.clientConnectionState.connected) {
+    if (CL.cls.state !== Def.clientConnectionState.connected) {
       Con.Print('Can\'t "movearound", not connected\n');
       return;
     }
 
-    if (this.cls.signon !== 4) {
+    if (CL.cls.signon !== 4) {
       Con.Print('You must wait for the server to send you the map before moving around.\n');
       return;
     }
 
-    if (this.cls.movearound !== null) {
-      clearInterval(this.cls.movearound);
-      this.cls.movearound = null;
+    if (CL.cls.movearound !== null) {
+      clearInterval(CL.cls.movearound);
+      CL.cls.movearound = null;
       Con.Print('Stopped moving around.\n');
       return;
     }
 
-    this.cls.movearound = setInterval(() => {
-      if (this.cls.state !== Def.clientConnectionState.connected) {
+    CL.cls.movearound = setInterval(() => {
+      if (CL.cls.state !== Def.clientConnectionState.connected) {
         Con.Print('No longer connected, stopped moving around.\n');
-        clearInterval(this.cls.movearound);
-        this.cls.movearound = null;
+        clearInterval(CL.cls.movearound);
+        CL.cls.movearound = null;
         return;
       }
 
@@ -451,54 +452,110 @@ export default class CL {
 
   static PredictMove() { // public, by Host.js
     this.state.time = Host.realtime - this.state.latency;
+    this.state.predicted = false;
 
     if (this.nopred.value !== 0) {
       return;
     }
 
-    // const playerEntity = this.state.playerentity;
-    // if (!playerEntity) { // no player entity, nothing to predict
-    //   return;
-    // }
+    if (this.cls.demoplayback) {
+      return;
+    }
 
-    // const from = this.state.playerstate;
-    // if (!from) { // no player state, nothing to predict
-    //   return;
-    // }
+    const playerEntity = this.state.playerentity;
+    if (!playerEntity) {
+      return;
+    }
 
-    // from.origin.set(playerEntity.origin);
-    // from.angles.set(playerEntity.angles);
-    // from.velocity.set(playerEntity.velocity);
+    // ensure the pmove has the current worldmodel
+    if (!this.pmove.physents.length && this.state.worldmodel) {
+      this.pmove.setWorldmodel(this.state.worldmodel);
+    }
 
-    // const to = new ClientPlayerState(from.pmove);
+    if (!this.pmove.physents.length) {
+      return;
+    }
 
-    // to.origin.set(playerEntity.msg_origins[0]);
-    // to.angles.set(playerEntity.msg_angles[0]);
-    // to.velocity.set(playerEntity.msg_velocity[0]);
+    // figure out how many unacknowledged commands we need to replay
+    const current = this.state.moveSequence;
+    const ack = this.state.acknowledgedMoveSequence;
+    const pending = (current - ack) & 0xFF;
 
-    // CL.PredictUsercmd(from.pmove, from, to, CL.state.cmd);
+    if (pending === 0 || pending > Protocol.CMD_BUFFER_SIZE) {
+      // no pending commands or too many (something went wrong) — skip prediction
+      return;
+    }
 
-    // const f = 1;
+    // populate collision entities for prediction
+    CL.#setupPredictionPhysents();
 
-    // // console.log('f', f);
+    // get a player move instance
+    const pmove = this.pmove.newPlayerMove();
 
-    // if (playerEntity.origin.distanceTo(to.origin) > 100) {
-    //   Con.PrintWarning(`CL.PredictMove: player origin too far away from predicted origin: ${to.origin.toString()}, ${playerEntity.origin.toString()}\n`);
-    //   // return;
-    // }
+    // build the initial “from” state from the last server-confirmed position
+    const from = new ClientPlayerState(pmove);
+    from.origin.set(playerEntity.msg_origins[0]);
+    from.velocity.set(playerEntity.msg_velocity[0]);
+    from.onground = this.state.onground ? 0 : null;
+    from.pmFlags = this.state.playerstate?.pmFlags ?? 0;
+    from.pmTime = this.state.playerstate?.pmTime ?? 0;
+    from.oldbuttons = this.state.playerstate?.oldbuttons ?? 0;
+    from.waterjumptime = this.state.playerstate?.waterjumptime ?? 0;
 
-    // const o0 = playerEntity.origin;
-    // const o1 = to.origin;
+    const to = new ClientPlayerState(pmove);
 
-    // playerEntity.origin.setTo(
-    //   o1[0] + (o0[0] - o1[0]) * f,
-    //   o1[1] + (o0[1] - o1[1]) * f,
-    //   o1[2] + (o0[2] - o1[2]) * f,
-    // );
+    // replay each unacknowledged command
+    for (let i = 1; i <= pending; i++) {
+      const seq = (ack + i) & 0xFF;
+      const slot = this.state.cmdBuffer[seq & Protocol.CMD_BUFFER_MASK];
+      const cmd = slot.cmd;
 
-    // playerEntity.origin.set(to.origin);
-    // playerEntity.angles.set(to.angles);
-    // playerEntity.velocity.set(to.velocity);
+      CL.PredictUsercmd(pmove, from, to, cmd);
+
+      // swap from ← to for the next iteration
+      from.origin.set(to.origin);
+      from.velocity.set(to.velocity);
+      from.angles.set(to.angles);
+      from.onground = to.onground;
+      from.pmFlags = to.pmFlags;
+      from.pmTime = to.pmTime;
+      from.oldbuttons = to.oldbuttons;
+      from.waterjumptime = to.waterjumptime;
+    }
+
+    // apply predicted position to the player entity for rendering
+    playerEntity.origin.set(to.origin);
+    playerEntity.velocity.set(to.velocity);
+    this.state.predicted = true;
+  }
+
+  /**
+   * Populates CL.pmove with solid entities from the client entity list
+   * for collision detection during prediction.
+   */
+  static #setupPredictionPhysents() {
+    const pm = this.pmove;
+    pm.clearEntities();
+
+    const entities = this.state.clientEntities.entities;
+    const playerEntNum = this.state.viewentity;
+
+    for (let i = 1; i < entities.length; i++) {
+      const ent = entities[i];
+      if (!ent || ent.free || ent.num === playerEntNum) {
+        continue;
+      }
+
+      const s = ent.solid;
+      if (s !== solid.SOLID_BSP && s !== solid.SOLID_BBOX && s !== solid.SOLID_SLIDEBOX) {
+        continue;
+      }
+
+      const model = (s === solid.SOLID_BSP && ent.model instanceof BrushModel)
+        ? ent.model : null;
+
+      pm.addEntity(ent, model);
+    }
   }
 
   /**
@@ -526,7 +583,7 @@ export default class CL {
     pmove.waterjumptime = from.waterjumptime;
     pmove.pmFlags = from.pmFlags;
     pmove.pmTime = from.pmTime;
-    pmove.dead = false; // TODO: cl.stats[STAT_HEALTH] <= 0;
+    pmove.dead = CL.state.stats[Def.stat.health] <= 0; // TODO: use a proper player state field for this
     pmove.spectator = false;
 
     pmove.cmd.set(u);

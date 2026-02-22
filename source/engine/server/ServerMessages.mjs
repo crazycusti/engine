@@ -555,7 +555,8 @@ export class ServerMessages {
     return changes > 0;
   }
 
-  writeClientdataToMessage(clientEdict, msg) {
+  writeClientdataToMessage(client, msg) {
+    const clientEdict = client.edict;
     if ((clientEdict.entity.dmg_take || clientEdict.entity.dmg_save) && clientEdict.entity.dmg_inflictor) {
       const other = clientEdict.entity.dmg_inflictor.edict ? clientEdict.entity.dmg_inflictor.edict : clientEdict.entity.dmg_inflictor;
       const vec = !other.isFree() ? other.entity.origin.copy().add(other.entity.mins.copy().add(other.entity.maxs).multiply(0.5)) : clientEdict.entity.origin;
@@ -573,12 +574,12 @@ export class ServerMessages {
       clientEdict.entity.fixangle = false;
     }
 
-    let bits = Protocol.su.items + Protocol.su.weapon;
+    let bits = Protocol.su.items | Protocol.su.weapon | Protocol.su.moveack;
     if (clientEdict.entity.view_ofs[2] !== Protocol.default_viewheight) {
-      bits += Protocol.su.viewheight;
+      bits |= Protocol.su.viewheight;
     }
     if (clientEdict.entity.idealpitch !== 0.0) {
-      bits += Protocol.su.idealpitch;
+      bits |= Protocol.su.idealpitch;
     }
 
     const serverflags = SV.server.gameAPI?.serverflags ?? 0;
@@ -595,10 +596,10 @@ export class ServerMessages {
     }
 
     if (clientEdict.entity.flags & Defs.flags.FL_ONGROUND) {
-      bits += Protocol.su.onground;
+      bits |= Protocol.su.onground;
     }
     if (clientEdict.entity.waterlevel >= Defs.waterlevel.WATERLEVEL_WAIST) {
-      bits += Protocol.su.inwater;
+      bits |= Protocol.su.inwater;
     }
 
     const punchangle = clientEdict.entity.punchangle;
@@ -637,6 +638,10 @@ export class ServerMessages {
     }
     if ((bits & Protocol.su.punch3) !== 0) {
       msg.writeShort(punchangle[2] * 90.0);
+    }
+
+    if ((bits & Protocol.su.moveack) !== 0) {
+      msg.writeByte(client.lastMoveSequence);
     }
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_LEGACY)) {
@@ -738,7 +743,7 @@ export class ServerMessages {
       changes |= 1;
     }
 
-    changes |= this.writeClientdataToMessage(client.edict, msg) ? 1 : 0;
+    changes |= this.writeClientdataToMessage(client, msg) ? 1 : 0;
     changes |= this.writeEntitiesToClient(client.edict, msg) ? 1 : 0;
 
     if (client.state !== ServerClient.STATE.SPAWNED) {

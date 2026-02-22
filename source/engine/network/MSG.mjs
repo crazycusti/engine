@@ -188,6 +188,7 @@ export class SzBuffer {
   }
 
   writeCoord(f) {
+    // NOTE: when adjusting quantization of coordinates, make sure to update the snap/nudge position logic in Pmove as well
     this.writeLong(f * 8.0);
   }
 

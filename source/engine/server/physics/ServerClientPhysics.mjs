@@ -6,6 +6,7 @@ import {
 } from './Defs.mjs';
 import { ServerClient } from '../Client.mjs';
 import { PM_TYPE } from '../../common/Pmove.mjs';
+import { BrushModel } from '../../common/Mod.mjs';
 
 let { Host, SV, V } = registry;
 
@@ -50,6 +51,7 @@ export class ServerClientPhysics {
       }
 
       const s = entity.solid;
+
       if (s !== Defs.solid.SOLID_BSP && s !== Defs.solid.SOLID_BBOX && s !== Defs.solid.SOLID_SLIDEBOX) {
         continue;
       }
@@ -58,7 +60,7 @@ export class ServerClientPhysics {
         ? SV.server.models[entity.modelindex]
         : null;
 
-      pm.addEntity(entity, model);
+      pm.addEntity(entity, /** @type {BrushModel} */ (model instanceof BrushModel ? model : null));
     }
   }
 

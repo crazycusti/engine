@@ -729,7 +729,13 @@ export default class ClientEntities {
         continue;
       }
 
-      clent.updatePosition(clent.num !== CL.state.viewentity);
+      // skip position update for the player when prediction already set the correct position
+      if (CL.state.predicted && clent.num === CL.state.viewentity) {
+        // prediction already set origin/velocity, only update angles from server state
+        clent.angles.set(clent.msg_angles[0]);
+      } else {
+        clent.updatePosition(clent.num !== CL.state.viewentity);
+      }
 
       // if the entity is not visible, skip it
       if (!clent.model || (clent.effects & effect.EF_NODRAW)) {

@@ -22,18 +22,18 @@ export class ServerArea {
    * Initializes the temporary hull data used for axis-aligned clipping.
    */
   initBoxHull() {
-    SV.box_clipnodes = [];
-    SV.box_planes = [];
-    SV.box_hull = {
-      clipnodes: SV.box_clipnodes,
-      planes: SV.box_planes,
+    this.box_clipnodes = [];
+    this.box_planes = [];
+    this.box_hull = {
+      clipnodes: this.box_clipnodes,
+      planes: this.box_planes,
       firstclipnode: 0,
       lastclipnode: 5,
     };
 
     for (let i = 0; i <= 5; i++) {
       const node = {};
-      SV.box_clipnodes[i] = node;
+      this.box_clipnodes[i] = node;
       node.planenum = i;
       node.children = [];
       node.children[i & 1] = Defs.content.CONTENT_EMPTY;
@@ -44,7 +44,7 @@ export class ServerArea {
       }
 
       const plane = {};
-      SV.box_planes[i] = plane;
+      this.box_planes[i] = plane;
       plane.type = i >> 1;
       plane.normal = new Vector();
       plane.normal[i >> 1] = 1.0;
@@ -67,14 +67,15 @@ export class ServerArea {
     if (ent.entity.solid !== Defs.solid.SOLID_BSP || !(model instanceof BrushModel)) { // CR: don’t ask
       const emaxs = ent.entity.maxs;
       const emins = ent.entity.mins;
-      SV.box_planes[0].dist = emaxs[0] - mins[0];
-      SV.box_planes[1].dist = emins[0] - maxs[0];
-      SV.box_planes[2].dist = emaxs[1] - mins[1];
-      SV.box_planes[3].dist = emins[1] - maxs[1];
-      SV.box_planes[4].dist = emaxs[2] - mins[2];
-      SV.box_planes[5].dist = emins[2] - maxs[2];
+      // FIXME: create a new hull for this instead of mutating the box hull planes (which could cause issues if multiple entities use it at the same time)
+      this.box_planes[0].dist = emaxs[0] - mins[0];
+      this.box_planes[1].dist = emins[0] - maxs[0];
+      this.box_planes[2].dist = emaxs[1] - mins[1];
+      this.box_planes[3].dist = emins[1] - maxs[1];
+      this.box_planes[4].dist = emaxs[2] - mins[2];
+      this.box_planes[5].dist = emins[2] - maxs[2];
       out_offset.set(origin);
-      return SV.box_hull;
+      return this.box_hull;
     }
 
     console.assert(ent.entity.movetype !== Defs.moveType.MOVETYPE_NONE,

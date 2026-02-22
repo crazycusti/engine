@@ -1,15 +1,19 @@
 /*
- * Pmove — shared player movement code, designed to run identically on both
+ * Pmove: shared player movement code, designed to run identically on both
  * client (for prediction) and server (for authoritative simulation).
  *
- * Inspired by Quake 2's pmove.c with structural elements from QuakeWorld.
- * Original id Software sources: pmove.c, pmovetst.c (Q2), pmove.c (QW).
+ * Inspired by Quake 2’s pmove.c with structural elements from QuakeWorld.
+ *
+ * There are profiles to switch between QuakeWorld and Quake 2 parameters.
+ *
+ * Original sources: pmove.c, pmovetst.c (Q2), pmove.c (Q1).
  */
 
 import { eventBus, registry } from '../registry.mjs';
 import Vector from '../../shared/Vector.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { content, solid } from '../../shared/Defs.mjs';
+import { BrushModel } from './Mod.mjs';
 
 /** @typedef {import('../../shared/Vector.mjs').DirectionalVectors} DirectionalVectors */
 
@@ -27,7 +31,7 @@ export const DIST_EPSILON = 0.03125;
 export const STOP_EPSILON = 0.1;
 export const STEPSIZE = 18.0;
 
-/** Minimum ground normal Z component — slopes steeper than ~45° are not walkable */
+/** Minimum ground normal Z component - slopes steeper than ~45° are not walkable */
 export const MIN_STEP_NORMAL = 0.7;
 
 /** Maximum number of planes to clip against during slide moves */
@@ -62,20 +66,22 @@ export const PMF = Object.freeze({
 export const PM_TYPE = Object.freeze({
   /** Normal movement */
   NORMAL: 0,
-  /** Spectator noclip flight */
+  /** Spectator - noclip flight */
   SPECTATOR: 1,
-  /** Dead — reduced input, extra friction */
+  /** Dead – reduced input, extra friction */
   DEAD: 2,
-  /** Frozen — no movement at all */
+  /** Frozen – no movement at all */
   FREEZE: 3,
 });
 
 // ---------------------------------------------------------------------------
-// MoveVars — shared physics tuning knobs
+// MoveVars: shared physics tuning knobs
 // ---------------------------------------------------------------------------
 
 /**
- * Pmove variable defaults — physics tuning knobs shared between client and server.
+ * Pmove variable defaults.
+ *
+ * Physics tuning knobs shared between client and server.
  */
 export class MoveVars { // movevars_t
   constructor() {
@@ -84,7 +90,7 @@ export class MoveVars { // movevars_t
     /** @type {number} speed below which friction acts at full strength */
     this.stopspeed = 100;
     /** @type {number} maximum walking speed */
-    this.maxspeed = 320;
+    this.maxspeed = 320; // Q2: 300
     /** @type {number} maximum spectator speed */
     this.spectatormaxspeed = 500;
     /** @type {number} duck speed cap */
@@ -108,8 +114,63 @@ export class MoveVars { // movevars_t
   }
 };
 
+/**
+ * Pmove constant defaults.
+ *
+ * These will give player movement that feels more like Q1 (from QuakeWorld).
+ */
+export class PmoveConfiguration {
+  /** @type {number} distance to probe forward for water jump wall detection */
+  forwardProbe = 24;
+  /** @type {number} Z offset for wall check in water jump detection */
+  wallcheckZ = 8;
+  /** @type {number} Z offset for empty space check above wall in water jump */
+  emptycheckZ = 24;
+  /** @type {number} upward velocity when exiting water via water jump */
+  waterExitVelocity = 310;
+  /** @type {number} multiplier applied to wish speed when swimming */
+  waterspeedMultiplier = 0.7;
+  /** @type {number} overbounce factor for velocity clipping (1.0 = QW, 1.01 = Q2) */
+  overbounce = 1.0;
+  /** @type {number} distance below feet for ground detection trace */
+  groundCheckDepth = 1.0;
+  /** @type {number} pitch divisor for ground angle vectors (0 = no scaling, 3 = Q2-style) */
+  pitchDivisor = 0;
+  /** @type {boolean} clamp jump velocity to a minimum of 270 */
+  jumpMinClamp = false;
+  /** @type {boolean} apply landing cooldown (PMF_TIME_LAND) preventing immediate re-jump */
+  landingCooldown = false;
+  /** @type {boolean} prevent swimming jump when sinking faster than -300 */
+  swimJumpGuard = false;
+  /** @type {boolean} fall back to regular accelerate when airaccelerate is 0 */
+  airAccelFallback = false;
+  /** @type {boolean} apply edge friction when near dropoffs */
+  edgeFriction = true;
+};
+
+/**
+ * Quake 2 defaults.
+ *
+ * This will give player movement that original Quake 2 feeling.
+ */
+export class PmoveQuake2Configuration extends PmoveConfiguration {
+  forwardProbe = 30;
+  wallcheckZ = 4;
+  emptycheckZ = 16;
+  waterExitVelocity = 350;
+  waterspeedMultiplier = 0.5;
+  overbounce = 1.01;
+  groundCheckDepth = 0.25;
+  pitchDivisor = 3;
+  jumpMinClamp = true;
+  landingCooldown = true;
+  swimJumpGuard = true;
+  airAccelFallback = true;
+  edgeFriction = false;
+};
+
 // ---------------------------------------------------------------------------
-// Geometry primitives — Plane, Trace, ClipNode, Hull, BoxHull
+// Geometry primitives: Plane, Trace, ClipNode, Hull, BoxHull
 // ---------------------------------------------------------------------------
 
 export class Plane { // mplane_t
@@ -129,7 +190,7 @@ export class Trace { // pmtrace_t
     this.allsolid = true;
     /** if true, the initial point was in a solid area */
     this.startsolid = false;
-    /** time completed, 1.0 = didn't hit anything */
+    /** moving along the vector completed, 1.0 = didn’t hit anything */
     this.fraction = 1.0;
     /** final position */
     this.endpos = new Vector();
@@ -243,8 +304,8 @@ export class Hull { // hull_t
         d = plane.normal.dot(point) - plane.dist;
       }
 
-      // WinQuake: d < 0 → children[1], else children[0].
-      // Must match hull.check's `t1 >= 0 && t2 >= 0 → children[0]`
+      // Q1: d < 0 → children[1], else children[0].
+      // Must match hull.check’s `t1 >= 0 && t2 >= 0 → children[0]`
       // so that pointContents and check agree on boundary classification.
       num = node.children[d < 0 ? 1 : 0];
     }
@@ -327,7 +388,7 @@ export class Hull { // hull_t
     }
 
     while (this.pointContents(mid) === content.CONTENT_SOLID) {
-      // shouldn't really happen, but does occasionally
+      // shouldn’t really happen, but does occasionally
       frac -= 0.1;
       if (frac < 0.0) {
         trace.fraction = midf;
@@ -349,7 +410,7 @@ export class Hull { // hull_t
 };
 
 // ---------------------------------------------------------------------------
-// BoxHull — AABB → BSP conversion for non-BSP entity collision
+// BoxHull: AABB → BSP conversion for non-BSP entity collision
 // ---------------------------------------------------------------------------
 
 /**
@@ -391,7 +452,7 @@ export class BoxHull extends Hull {
       this.clipNodes[i].children[side ^ 1] = i !== 5 ? i + 1 : content.CONTENT_SOLID;
 
       this.planes[i].type = i >> 1;
-      // Axis-aligned unit normal — matches WinQuake: box_planes[i].normal[i>>1] = 1
+      // Axis-aligned unit normal, matches Q1: box_planes[i].normal[i>>1] = 1
       const normal = new Vector(0, 0, 0);
       normal[i >> 1] = 1;
       this.planes[i].normal = normal;
@@ -408,7 +469,7 @@ export class BoxHull extends Hull {
     console.assert(maxs instanceof Vector, 'maxs must be a Vector');
 
     // Even planes (0,2,4) use maxs; odd planes (1,3,5) use mins.
-    // Matches WinQuake's SV_HullForBox.
+    // Matches Q1’s SV_HullForBox.
     for (let i = 0; i < 6; i++) {
       this.planes[i].dist = (i & 1) ? mins[i >> 1] : maxs[i >> 1];
     }
@@ -418,7 +479,7 @@ export class BoxHull extends Hull {
 };
 
 // ---------------------------------------------------------------------------
-// PhysEnt — a physics entity stored in the Pmove world
+// PhysEnt: a physics entity stored in the Pmove world
 // ---------------------------------------------------------------------------
 
 export class PhysEnt { // physent_t
@@ -448,7 +509,7 @@ export class PhysEnt { // physent_t
 
   /**
    * Returns clipping hull for this entity.
-   * NOTE: This is not async/wait safe, since it will modify pmove's boxHull in-place.
+   * NOTE: This is not async/wait safe, since it will modify pmove’s boxHull in-place.
    * @returns {Hull} hull
    */
   getClippingHull() {
@@ -466,18 +527,18 @@ export class PhysEnt { // physent_t
 };
 
 // ---------------------------------------------------------------------------
-// PmovePlayer — the core player movement simulation
+// PmovePlayer: the core player movement simulation
 //
-// Follows Q2's Pmove() structure:
-//   1. ClampAngles         — resolve view angles from cmd + deltas
-//   2. CheckDuck           — set player bounds based on stance
-//   3. SnapPosition (init) — nudge into valid position
-//   4. CatagorizePosition  — determine ground entity, water level
-//   5. CheckSpecialMovement — ladders, water jumps
-//   6. Drop timing counter — pm_time for land/waterjump/teleport
-//   7. Movement dispatch   — jump, friction, then air/water/fly
-//   8. CatagorizePosition  — final ground + water check
-//   9. SnapPosition        — quantize for network
+// Follows Q2’s Pmove() structure:
+//   1. ClampAngles          – resolve view angles from cmd + deltas
+//   2. CheckDuck            – set player bounds based on stance
+//   3. SnapPosition (init)  – nudge into valid position
+//   4. CatagorizePosition   – determine ground entity, water level
+//   5. CheckSpecialMovement – ladders, water jumps
+//   6. Drop timing counter  – pm_time for land/waterjump/teleport
+//   7. Movement dispatch    – jump, friction, then air/water/fly
+//   8. CatagorizePosition   – final ground + water check
+//   9. SnapPosition         – quantize for network
 //
 // This class is designed to be called identically from both client
 // (for prediction) and server (for authoritative movement). It reads
@@ -486,14 +547,14 @@ export class PhysEnt { // physent_t
 // ---------------------------------------------------------------------------
 
 /**
- * Q2-style player movement simulation.
+ * Player movement simulation.
  *
- * Can be called by both server and client. All state lives on this object —
+ * Can be called by both server and client. All state lives on this object,
  * the caller is responsible for copying state in before `move()` and reading
  * it back after.
  */
 export class PmovePlayer { // pmove_t (player state only)
-  /** @type {boolean} Enable verbose movement debugging */
+  /** @type {boolean} enables verbose movement debugging */
   static DEBUG = false;
 
   /**
@@ -531,7 +592,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
     /** @type {number} remembered old buttons for edge detection */
     this.oldbuttons = 0;
-    /** @type {number} deprecated compat — waterjump time remaining */
+    /** @type {number} Q1 compat, waterjump time remaining */
     this.waterjumptime = 0.0;
     /** @type {boolean} backwards compat flag */
     this.spectator = false;
@@ -575,7 +636,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
     // derive frametime
     this.frametime = this.cmd.msec / 1000.0;
-    this.touchindices = [];
+    this.touchindices.length = 0;
 
     const _dbg = PmovePlayer.DEBUG;
     const _dbgOriginBefore = _dbg ? this.origin.copy() : null;
@@ -607,7 +668,7 @@ export class PmovePlayer { // pmove_t (player state only)
       this.cmd.upmove = 0;
     }
 
-    // frozen — no movement at all
+    // frozen, no movement at all
     if (this.pmType === PM_TYPE.FREEZE) {
       return;
     }
@@ -645,7 +706,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
     // movement dispatch
     if (this.pmFlags & PMF.TIME_TELEPORT) {
-      // teleport pause — no movement
+      // teleport pause, no movement
     } else if (this.pmFlags & PMF.TIME_WATERJUMP) {
       // waterjump: no control, but gravity applies
       this.velocity[2] -= this._pmove.movevars.gravity * this._pmove.movevars.entgravity * this.frametime;
@@ -661,14 +722,18 @@ export class PmovePlayer { // pmove_t (player state only)
       if (this.waterlevel >= 2) {
         this._waterMove();
       } else {
-        // scale pitch for ground movement (Q2 divides pitch by 3)
-        const pitchedAngles = this.angles.copy();
-        let pitch = pitchedAngles[0];
-        if (pitch > 180) {
-          pitch -= 360;
+        // Q2 divides pitch by 3 for ground angle vectors; Q1 does not scale
+        const divisor = this._pmove.configuration.pitchDivisor;
+
+        if (divisor) {
+          const pitchedAngles = this.angles.copy();
+          let pitch = pitchedAngles[0];
+          if (pitch > 180) {
+            pitch -= 360;
+          }
+          pitchedAngles[0] = pitch / divisor;
+          this._angleVectors = pitchedAngles.angleVectors();
         }
-        pitchedAngles[0] = pitch / 3.0;
-        this._angleVectors = pitchedAngles.angleVectors();
 
         this._airMove();
       }
@@ -729,9 +794,9 @@ export class PmovePlayer { // pmove_t (player state only)
     }
 
     if (this.pmFlags & PMF.DUCKED) {
-      this.viewheight = -2;
+      this.viewheight = -2; // TODO: config
     } else {
-      this.viewheight = 22;
+      this.viewheight = 22; // TODO: config
     }
   }
 
@@ -743,17 +808,17 @@ export class PmovePlayer { // pmove_t (player state only)
   _categorizePosition() { // Q2: PM_CatagorizePosition
     // --- Ground check ---
     const point = this.origin.copy();
-    point[2] -= 0.25; // Q2 uses 0.25 below feet
+    point[2] -= this._pmove.configuration.groundCheckDepth;
 
     if (this.velocity[2] > 180) {
-      // moving up fast enough — not on ground
+      // moving up fast enough, not on ground
       this.pmFlags &= ~PMF.ON_GROUND;
       this.onground = null;
     } else {
       const trace = this._pmove.clipPlayerMove(this.origin, point);
 
       if (!trace.ent && trace.ent !== 0) {
-        // didn't hit anything
+        // didn’t hit anything
         this.onground = null;
         this.pmFlags &= ~PMF.ON_GROUND;
       } else if (trace.plane.normal[2] < MIN_STEP_NORMAL && !trace.startsolid) {
@@ -770,10 +835,11 @@ export class PmovePlayer { // pmove_t (player state only)
         }
 
         if (!(this.pmFlags & PMF.ON_GROUND)) {
-          // just hit the ground — apply landing time
+          // just hit the ground
           this.pmFlags |= PMF.ON_GROUND;
 
-          if (this.velocity[2] < -200) {
+          // Q2: apply landing cooldown preventing immediate re-jump
+          if (this._pmove.configuration.landingCooldown && this.velocity[2] < -200) {
             this.pmFlags |= PMF.TIME_LAND;
             if (this.velocity[2] < -400) {
               this.pmTime = 25;
@@ -842,12 +908,13 @@ export class PmovePlayer { // pmove_t (player state only)
     let trace = this._pmove.clipPlayerMove(this.origin, spot);
 
     if (trace.fraction < 1) {
-      // Q2 checks trace.contents & CONTENTS_LADDER — we use content type
+      // Q2 checks trace.contents & CONTENTS_LADDER, we use content type
       const ladderPoint = trace.endpos.copy().add(flatforward.copy().multiply(0.5));
       const ladderContents = this._pmove.pointContents(ladderPoint);
       // In Q1 BSP, there is no CONTENTS_LADDER. Ladder detection should
       // be implemented via trigger_ladder entities or texture flags.
-      // For now this is a placeholder — ladder support requires map support.
+      // For now this is a placeholder, ladder support requires map support.
+      // TODO: Enable this via entities.
       void ladderContents;
     }
 
@@ -856,22 +923,21 @@ export class PmovePlayer { // pmove_t (player state only)
       return;
     }
 
-    // Don't try to hop out while sinking fast (QW guard)
+    // don’t try to hop out while sinking fast (Q1)
     if (this.velocity[2] < -180) {
       return;
     }
 
-    // Probe forward for a solid wall, then check for empty space above it.
-    // QW uses 24 units forward, +8 for the wall check, +32 for empty above.
-    const wjspot = this.origin.copy().add(flatforward.copy().multiply(24));
-    wjspot[2] += 8;
+    // probe forward for a solid wall, then check for empty space above it.
+    const wjspot = this.origin.copy().add(flatforward.copy().multiply(this._pmove.configuration.forwardProbe));
+    wjspot[2] += this._pmove.configuration.wallcheckZ;
 
     let cont = this._pmove.pointContents(wjspot);
     if (cont !== content.CONTENT_SOLID) {
       return;
     }
 
-    wjspot[2] += 24;
+    wjspot[2] += this._pmove.configuration.emptycheckZ;
     cont = this._pmove.pointContents(wjspot);
     if (cont !== content.CONTENT_EMPTY) {
       return;
@@ -879,7 +945,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
     // jump out of water
     this.velocity.set(flatforward).multiply(50);
-    this.velocity[2] = 350;
+    this.velocity[2] = this._pmove.configuration.waterExitVelocity;
 
     this.pmFlags |= PMF.TIME_WATERJUMP;
     this.pmTime = 255;
@@ -891,8 +957,8 @@ export class PmovePlayer { // pmove_t (player state only)
 
   /** Check and execute jump. */
   _checkJump() { // Q2: PM_CheckJump
-    if (this.pmFlags & PMF.TIME_LAND) {
-      // landing cooldown not expired
+    // Q2: landing cooldown prevents immediate re-jump after hard landing
+    if (this._pmove.configuration.landingCooldown && (this.pmFlags & PMF.TIME_LAND)) {
       return;
     }
 
@@ -915,7 +981,8 @@ export class PmovePlayer { // pmove_t (player state only)
     if (this.waterlevel >= 2) {
       this.onground = null;
 
-      if (this.velocity[2] <= -300) {
+      // Q2: prevent swimming jump when sinking fast
+      if (this._pmove.configuration.swimJumpGuard && this.velocity[2] <= -300) {
         return;
       }
 
@@ -932,7 +999,7 @@ export class PmovePlayer { // pmove_t (player state only)
       return;
     }
 
-    // not on ground — no effect
+    // not on ground, no effect
     if (this.onground === null) {
       return;
     }
@@ -942,7 +1009,9 @@ export class PmovePlayer { // pmove_t (player state only)
     this.onground = null;
     this.pmFlags &= ~PMF.ON_GROUND;
     this.velocity[2] += 270;
-    if (this.velocity[2] < 270) {
+
+    // Q2: clamp to minimum jump velocity
+    if (this._pmove.configuration.jumpMinClamp && this.velocity[2] < 270) {
       this.velocity[2] = 270;
     }
   }
@@ -985,13 +1054,28 @@ export class PmovePlayer { // pmove_t (player state only)
 
     let drop = 0;
 
-    // Water friction and ground friction are mutually exclusive (QW behavior).
+    // Water friction and ground friction are mutually exclusive (Q1 behavior).
     // When waist-deep or deeper, only water friction applies.
     if (this.waterlevel >= 2 && !this._ladder) {
       drop += speed * this._pmove.movevars.waterfriction * this.waterlevel * this.frametime;
     } else if ((this.onground !== null && !this._ladder) || this._ladder) {
       // ground friction
-      const friction = this._pmove.movevars.friction;
+      let friction = this._pmove.movevars.friction;
+
+      // Q1: if the leading edge is over a dropoff, increase friction
+      if (this._pmove.configuration.edgeFriction && this.onground !== null) {
+        const start = new Vector(
+          this.origin[0] + vel[0] / speed * 16,
+          this.origin[1] + vel[1] / speed * 16,
+          this.origin[2] + Pmove.PLAYER_MINS[2],
+        );
+        const stop = new Vector(start[0], start[1], start[2] - 34);
+        const edgeTrace = this._pmove.clipPlayerMove(start, stop);
+        if (edgeTrace.fraction === 1.0) {
+          friction *= this._pmove.movevars.edgefriction;
+        }
+      }
+
       const control = speed < this._pmove.movevars.stopspeed ? this._pmove.movevars.stopspeed : speed;
       drop += control * friction * this.frametime;
     }
@@ -1017,7 +1101,7 @@ export class PmovePlayer { // pmove_t (player state only)
    * @param {Vector} veloIn input velocity
    * @param {Vector} normal surface normal
    * @param {Vector} veloOut output velocity (may alias veloIn)
-   * @param {number} overbounce overbounce factor (typically 1.01)
+   * @param {number} overbounce overbounce factor (Q1: 1.0, Q2: 1.01)
    */
   _clipVelocity(veloIn, normal, veloOut, overbounce) { // Q2: PM_ClipVelocity
     const backoff = veloIn.dot(normal) * overbounce;
@@ -1059,7 +1143,7 @@ export class PmovePlayer { // pmove_t (player state only)
   }
 
   /**
-   * Air acceleration — preserves the Q1/Q2 air-strafe mechanic.
+   * Air acceleration, preserves the Q1/Q2 air-strafe mechanic.
    * wishspeed is capped at 30 for the addspeed check, but the uncapped
    * value is used for accelspeed. This allows bunny-hopping.
    * @param {Vector} wishdir desired direction (unit vector)
@@ -1078,7 +1162,7 @@ export class PmovePlayer { // pmove_t (player state only)
       return;
     }
 
-    // note: uses original wishspeed, not the capped wishspd
+    // NOTE: uses original wishspeed, not the capped wishspd
     let accelspeed = accel * wishspeed * this.frametime;
     if (accelspeed > addspeed) {
       accelspeed = addspeed;
@@ -1090,12 +1174,12 @@ export class PmovePlayer { // pmove_t (player state only)
   }
 
   // =========================================================================
-  // Core slide move (Q2: PM_StepSlideMove_ — inner loop)
+  // Core slide move (Q2: PM_StepSlideMove_ – inner loop)
   // =========================================================================
 
   /**
    * The basic solid body movement clip that slides along multiple planes.
-   * This is the inner loop — it does NOT attempt step-up.
+   * This is the inner loop, it does NOT attempt step-up.
    */
   _slideMove() { // Q1: SV_FlyMove / Q2: PM_StepSlideMove_
     const _dbg = PmovePlayer.DEBUG;
@@ -1114,16 +1198,12 @@ export class PmovePlayer { // pmove_t (player state only)
     let timeLeft = this.frametime;
 
     for (let bumpcount = 0; bumpcount < numbumps; bumpcount++) {
-      const end = new Vector(
-        this.origin[0] + timeLeft * this.velocity[0],
-        this.origin[1] + timeLeft * this.velocity[1],
-        this.origin[2] + timeLeft * this.velocity[2],
-      );
+      const end = this.velocity.copy().multiply(timeLeft).add(this.origin);
 
       const trace = this._pmove.clipPlayerMove(this.origin, end);
 
       if (trace.allsolid) {
-        // trapped in solid — still record the touch so impact() fires
+        // trapped in solid, still record the touch so impact() fires
         if (trace.ent !== null) {
           this.touchindices.push(trace.ent);
         }
@@ -1188,12 +1268,12 @@ export class PmovePlayer { // pmove_t (player state only)
 
       // Clip originalVelocity (Q1-style) so each plane attempt starts
       // from the same stable base. Q2 clips the current velocity in-place,
-      // but Q1's BSP hull traces need the original reference to avoid
-      // precision drift from re-clipping with the 1.01 overbounce.
+      // but Q1’s BSP hull traces need the original reference to avoid
+      // precision drift from re-clipping with the overbounce factor.
       let i, j;
       const clipVelocity = new Vector();
       for (i = 0; i < numplanes; i++) {
-        this._clipVelocity(originalVelocity, planes[i], clipVelocity, 1.01);
+        this._clipVelocity(originalVelocity, planes[i], clipVelocity, this._pmove.configuration.overbounce);
 
         for (j = 0; j < numplanes; j++) {
           if (j !== i) {
@@ -1252,7 +1332,7 @@ export class PmovePlayer { // pmove_t (player state only)
   }
 
   // =========================================================================
-  // Step + slide move (Q2: PM_StepSlideMove — outer wrapper)
+  // Step + slide move (Q2: PM_StepSlideMove – outer wrapper)
   // =========================================================================
 
   /**
@@ -1276,7 +1356,7 @@ export class PmovePlayer { // pmove_t (player state only)
 
     const upTrace = this._pmove.clipPlayerMove(up, up);
     if (upTrace.allsolid) {
-      return; // can't step up
+      return; // cannot step up
     }
     // Record touches from step-up check
     if (upTrace.ent !== null) {
@@ -1381,7 +1461,7 @@ export class PmovePlayer { // pmove_t (player state only)
       this.velocity[2] = 0;
       this._accelerate(wishdir, wishspeed, this._pmove.movevars.accelerate);
 
-      // apply gravity — handle negative gravity fields
+      // apply gravity, handle negative gravity fields
       if (this._pmove.movevars.gravity > 0) {
         this.velocity[2] = 0;
       } else {
@@ -1394,8 +1474,10 @@ export class PmovePlayer { // pmove_t (player state only)
 
       this._stepSlideMove();
     } else {
-      // in air — little effect on velocity
-      if (this._pmove.movevars.airaccelerate) {
+      // in air, little effect on velocity
+      // Q2: falls back to regular accelerate when airaccelerate is 0
+      // Q1: always uses airAccelerate
+      if (!this._pmove.configuration.airAccelFallback || this._pmove.movevars.airaccelerate) {
         this._airAccelerate(wishdir, wishspeed, this._pmove.movevars.accelerate);
       } else {
         this._accelerate(wishdir, wishspeed, 1);
@@ -1432,13 +1514,14 @@ export class PmovePlayer { // pmove_t (player state only)
       wishvel.multiply(this._pmove.movevars.maxspeed / wishspeed);
       wishspeed = this._pmove.movevars.maxspeed;
     }
-    wishspeed *= 0.7;
+
+    wishspeed *= this._pmove.configuration.waterspeedMultiplier;
 
     this._accelerate(wishdir, wishspeed, this._pmove.movevars.wateraccelerate);
 
     // QW-style water step-up: compute the intended destination, then trace
     // from STEPSIZE+1 above it straight down. If the trace succeeds the
-    // player "steps up" onto a ledge or slope, allowing them to climb out
+    // player “steps up” onto a ledge or slope, allowing them to climb out
     // of the water at low edges. Only fall back to slideMove on failure.
     const dest = new Vector(
       this.origin[0] + this.frametime * this.velocity[0],
@@ -1461,16 +1544,16 @@ export class PmovePlayer { // pmove_t (player state only)
       return;
     }
 
-    // step-up failed — fall back to regular slide movement
+    // step-up failed - fall back to regular slide movement
     this._slideMove();
   }
 
   /**
-   * Fly/spectator movement — noclip with friction.
+   * Fly/spectator movement - noclip with friction.
    * Can be called by spectators or noclip modes.
    */
   _flyMove() { // Q2: PM_FlyMove
-    this.viewheight = 22;
+    this.viewheight = 22; // TODO: config
 
     // friction
     const speed = this.velocity.len();
@@ -1511,9 +1594,9 @@ export class PmovePlayer { // pmove_t (player state only)
     const wishdir = wishvel.copy();
     let wishspeed = wishdir.normalize();
 
-    if (wishspeed > this._pmove.movevars.maxspeed) {
-      wishvel.multiply(this._pmove.movevars.maxspeed / wishspeed);
-      wishspeed = this._pmove.movevars.maxspeed;
+    if (wishspeed > this._pmove.movevars.spectatormaxspeed) {
+      wishvel.multiply(this._pmove.movevars.spectatormaxspeed / wishspeed);
+      wishspeed = this._pmove.movevars.spectatormaxspeed;
     }
 
     const currentspeed = this.velocity.dot(wishdir);
@@ -1546,7 +1629,7 @@ export class PmovePlayer { // pmove_t (player state only)
    * and nudge into a valid position.
    */
   _snapPosition() { // Q2: PM_SnapPosition
-    // snap velocity to 1/8 unit precision
+    // snap velocity to 1/8 unit precision (see SzBuffer)
     for (let i = 0; i < 3; i++) {
       this.velocity[i] = Math.round(this.velocity[i] * 8.0) / 8.0;
     }
@@ -1579,7 +1662,7 @@ export class PmovePlayer { // pmove_t (player state only)
       }
     }
 
-    // couldn't find a valid position — stay at snapped base
+    // couldn’t find a valid position - stay at snapped base
     if (PmovePlayer.DEBUG) {
       console.warn(`[_snapPosition] FAILED to find valid pos, stuck at base=${base}`);
     }
@@ -1617,7 +1700,7 @@ export class PmovePlayer { // pmove_t (player state only)
 };
 
 // ---------------------------------------------------------------------------
-// Pmove — the world container (physents, collision infrastructure)
+// Pmove: the world container (physents, collision infrastructure)
 // ---------------------------------------------------------------------------
 
 /**
@@ -1640,6 +1723,9 @@ export class Pmove { // pmove_t
 
   static MAX_PHYSENTS = 32;
 
+  /** @type {PmoveConfiguration} parameters for certain checks */
+  configuration = new PmoveConfiguration();
+
   /** @type {PhysEnt[]} 0 - world */
   physents = [];
   boxHull = new BoxHull();
@@ -1658,7 +1744,7 @@ export class Pmove { // pmove_t
   }
 
   /**
-   * @param {Vector} position player's origin
+   * @param {Vector} position player’s origin
    * @returns {boolean} Returns false if the given player position is not valid (in solid)
    */
   isValidPlayerPosition(position) {
@@ -1731,12 +1817,11 @@ export class Pmove { // pmove_t
   /**
    * Sets worldmodel.
    * This will automatically reset all physents.
-   * @param {*} model worldmodel
+   * @param {BrushModel} model worldmodel
    * @returns {Pmove} this
    */
   setWorldmodel(model) {
-    console.assert(model, 'model');
-    console.assert(model.hulls instanceof Array, 'model hulls');
+    console.assert(model instanceof BrushModel, 'model');
 
     this.physents.length = 0;
     this.#modelHullsCache.clear();
@@ -1763,13 +1848,14 @@ export class Pmove { // pmove_t
 
   /**
    * Adds an entity (client or server) to physents.
-   * @param {*} entity actual entity
-   * @param {*} model model must be provided when entity is SOLID_BSP
+   * @param {import('../server/Edict.mjs').BaseEntity|import('../client/ClientEntities.mjs').ClientEdict} entity actual entity
+   * @param {BrushModel} model model must be provided when entity is SOLID_BSP
    * @returns {Pmove} this
    */
   addEntity(entity, model = null) {
     const pe = new PhysEnt(this);
 
+    console.assert(model === null || model instanceof BrushModel, 'no model or brush model required');
     console.assert(entity.origin instanceof Vector, 'valid entity origin', entity.origin);
 
     pe.origin.set(entity.origin);
@@ -1790,10 +1876,21 @@ export class Pmove { // pmove_t
 
       pe.mins.set(entity.mins);
       pe.maxs.set(entity.maxs);
+
+      const hull = new BoxHull();
+      hull.setSize(pe.mins, pe.maxs);
+
+      // box hulls have a single hull used for all clipping purposes
+      pe.hulls.length = 3;
+      pe.hulls.fill(hull);
     }
 
-    if (entity.edictId !== undefined) {
+    if ('edictId' in entity) {
       pe.edictId = entity.edictId;
+    }
+
+    if ('num' in entity && entity.num > 0) {
+      pe.edictId = entity.num;
     }
 
     this.physents.push(pe);
@@ -1830,7 +1927,7 @@ export function TestServerside() {
   for (let i = 1; i < SV.server.num_edicts; i++) {
     const entity = SV.server.edicts[i].entity;
 
-    pm.addEntity(entity, entity.solid === solid.SOLID_BSP ? SV.server.models[entity.modelindex] : null);
+    pm.addEntity(entity, entity.solid === solid.SOLID_BSP ? /** @type {BrushModel} */ (SV.server.models[entity.modelindex]) : null);
 
     console.assert(pm.physents[i].origin.equals(entity.origin), 'origin must match');
     console.assert(pm.physents[i].edictId === i, 'edictId must match');

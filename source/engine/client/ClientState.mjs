@@ -139,6 +139,17 @@ class ClientRuntimeState {
   movemessages = 0;
   cmd = new Protocol.UserCmd();
   lastcmd = new Protocol.UserCmd();
+
+  // --- prediction state ---
+  /** @type {number} incrementing move sequence counter (wraps at 256) */
+  moveSequence = 0;
+  /** @type {number} last move sequence acknowledged by the server */
+  acknowledgedMoveSequence = 0;
+  /** @type {{cmd: Protocol.UserCmd, msec: number}[]} ring buffer of commands indexed by (moveSequence & CMD_BUFFER_MASK) */
+  cmdBuffer = ClientRuntimeState.#createCmdBuffer();
+  /** @type {boolean} true when prediction ran this frame (prevents emit from overwriting) */
+  predicted = false;
+
   stats = Object.values(Def.stat).map(() => 0);
   items = 0;
   item_gettime = new Array(32).fill(0.0);
@@ -176,6 +187,14 @@ class ClientRuntimeState {
   nodrift = false;
   /** @type {import('../../shared/GameInterfaces').ClientGameInterface|null} */
   gameAPI = null;
+
+  /** @returns {{cmd: Protocol.UserCmd, msec: number}[]} fresh command ring buffer */
+  static #createCmdBuffer() {
+    return new Array(Protocol.CMD_BUFFER_SIZE).fill(null).map(() => ({
+      cmd: new Protocol.UserCmd(),
+      msec: 0,
+    }));
+  }
   paused = false;
   /** event bus solely for engine-game communication */
   eventBus = new EventBus('client-game');
@@ -213,6 +232,10 @@ class ClientRuntimeState {
     this.movemessages = 0;
     this.cmd = new Protocol.UserCmd();
     this.lastcmd = new Protocol.UserCmd();
+    this.moveSequence = 0;
+    this.acknowledgedMoveSequence = 0;
+    this.cmdBuffer = ClientRuntimeState.#createCmdBuffer();
+    this.predicted = false;
     this.stats = Object.values(Def.stat).map(() => 0);
     this.items = 0;
     this.item_gettime.fill(0.0);

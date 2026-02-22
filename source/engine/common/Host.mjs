@@ -1338,7 +1338,7 @@ Host.Spawn_f = function() { // signon 2, step 3
   message.writeByte(Protocol.svc.setangle);
   message.writeAngleVector(ent.entity.angles);
 
-  SV.messages.writeClientdataToMessage(ent, message);
+  SV.messages.writeClientdataToMessage(client, message);
 
   message.writeByte(Protocol.svc.signonnum);
   message.writeByte(3);

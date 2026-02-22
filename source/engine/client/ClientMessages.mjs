@@ -153,6 +153,10 @@ export class ClientMessages {
 
     CL.state.onground = (bits & Protocol.su.onground) !== 0;
     CL.state.inwater = (bits & Protocol.su.inwater) !== 0;
+
+    if ((bits & Protocol.su.moveack) !== 0) {
+      CL.state.acknowledgedMoveSequence = NET.message.readByte();
+    }
   }
 
   /**

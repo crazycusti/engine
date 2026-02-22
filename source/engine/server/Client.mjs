@@ -81,6 +81,8 @@ export class ServerClient {
     this.pmTime = 0;
     /** @type {number} previous frame button state for edge detection */
     this.pmOldButtons = 0;
+    /** @type {number} last received move command sequence (0-255, for prediction ack) */
+    this.lastMoveSequence = 0;
 
     // Object.seal(this);
   }
@@ -117,6 +119,7 @@ export class ServerClient {
     this.pmFlags = 0;
     this.pmTime = 0;
     this.pmOldButtons = 0;
+    this.lastMoveSequence = 0;
 
     if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
       this.spawn_parms = new Array(16);
@@ -141,6 +144,7 @@ export class ServerClient {
     this.pmFlags = 0;
     this.pmTime = 0;
     this.pmOldButtons = 0;
+    this.lastMoveSequence = 0;
   }
 
   /**

@@ -198,11 +198,6 @@ export default class SV {
     },
   };
 
-  // Physics box hull (used for collision detection)
-  static box_clipnodes = null;
-  static box_planes = null;
-  static box_hull = null;
-
   // Class instances for modular functionality
   static physics = new ServerPhysics();
   static clientPhysics = new ServerClientPhysics();
@@ -599,7 +594,7 @@ export default class SV {
     if (client.cmd.impulse !== 0) {
       client.edict.entity.impulse = client.cmd.impulse; // QuakeC
     }
-    // console.log('client.cmd', client.cmd);
+    client.lastMoveSequence = NET.message.readByte();
   }
 
   /**
@@ -644,7 +639,7 @@ export default class SV {
       const ret = NET.GetMessage(client.netconnection);
 
       if (ret === -1) {
-        Con.Print('SV.ReadClientMessage: NET.GetMessage failed\n');
+        Con.DPrint(`SV.ReadClientMessage: NET.GetMessage from ${client.name} (${client.netconnection.address}) failed\n`);
         return false;
       }
 

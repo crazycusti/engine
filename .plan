@@ -43,7 +43,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Network improvements
 
-- [_] port QuakeWorld netcode
+- [X] port QuakeWorld netcode
 - [_] flush messages more often, increase update rate
 - [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 
@@ -53,7 +53,7 @@ Grouped by sections and then sorted by priority (more or less).
 
 ### Rendering improvements
 
-- [_] lerp view model animations
+- [X] lerp view model animations
 - [_] water transparency should be configured through other means such as worldspawnInfo (wateralpha, lavaalpha, telealpha, slimealpha)
 - [X] texture cache can return wrong textures when they share the same name across maps but are actually different
 - [_] more interesting warp: https://www.shadertoy.com/view/ctXyW8
@@ -75,11 +75,16 @@ Grouped by sections and then sorted by priority (more or less).
 - [X] add fog support (basically read out the worldspawnInfo and configure the distance correctly)
 - [_] try to get QuakeC’s progs.dat going
 
+### Game experience breaking/degrading issues
+
+- [X] Platforms/doors are sometimes losing the player which gets unstuck into the void
+- [X] Telefragging the boss monster is not working
+
 ### Quake 2 Port
 
 - [_] BSP38 loader
-- [_] port physics code from Quake 2 (there are a bunch of fixes)
-  - [_] fixing physics (walking over entities etc.)
+- [X] port physics code from Quake 2 (there are a bunch of fixes)
+  - [X] fixing physics (walking over entities etc.), essentially Q2’s pmove.c
   - [_] rotating brushes
 - [_] add PHS support to sound subsystem and area portals
 - [_] PCX loader
@@ -151,6 +156,11 @@ Grouped by sections and then sorted by priority (more or less).
 - https://mus1n.github.io/Quake-3-Skybox/ 360 to skybox
 
 ## Log
+
+### 2026-02-22
+
+- Pmove implementation, what a mess
+  - added configuration profiles for QuakeWorld and Quake 2
 
 ### 2026-02-19
 
