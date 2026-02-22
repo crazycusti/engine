@@ -642,6 +642,11 @@ export class ServerMessages {
 
     if ((bits & Protocol.su.moveack) !== 0) {
       msg.writeByte(client.lastMoveSequence);
+      // send authoritative PM state alongside the move ack so the client
+      // can start prediction replay from the correct pmFlags / pmTime
+      msg.writeByte(client.pmFlags);
+      msg.writeByte(client.pmTime);
+      msg.writeByte(client.pmOldButtons);
     }
 
     if (SV.server.gameCapabilities.includes(Defs.gameCapabilities.CAP_CLIENTDATA_LEGACY)) {

@@ -115,14 +115,26 @@ export class ServerClientPhysics {
     pmove.waterlevel = entity.waterlevel ?? 0;
     pmove.watertype = entity.watertype ?? -1;
 
-    // Set command — use server frametime, not the client's declared msec.
-    // The server runs PmovePlayer every physics frame, so we must use the
-    // actual elapsed time to avoid over-moving when cmd.msec > Host.frametime.
+    // Use the client’s declared msec so the server movement matches
+    // what the client predicted (QW-style: host_frametime = ucmd->msec * 0.001).
+    // Clamp to [1, 200] to prevent speed exploits.
     pmove.cmd.set(client.cmd);
-    pmove.cmd.msec = Math.min(255, Math.max(1, Math.round(Host.frametime * 1000.0)));
+    pmove.cmd.msec = Math.min(200, Math.max(1, client.cmd.msec));
 
-    // --- Execute movement ---
-    pmove.move();
+    // --- Execute movement (split long commands like QW’s SV_RunCmd) ---
+    // Use float division (/2) to match the client’s PredictUsercmd split
+    // (split.msec /= 2) so both sides compute identical time steps.
+    if (pmove.cmd.msec > 50) {
+      const halfMsec = pmove.cmd.msec / 2;
+      pmove.cmd.msec = halfMsec;
+      pmove.move();
+      // second half, no impulse, carry forward state
+      pmove.cmd.impulse = 0;
+      pmove.cmd.msec = halfMsec;
+      pmove.move();
+    } else {
+      pmove.move();
+    }
 
     // --- Copy results back → entity ---
     entity.origin = entity.origin.set(pmove.origin);
@@ -298,6 +310,11 @@ export class ServerClientPhysics {
    * Runs per-frame physics for a player entity.
    * For MOVETYPE_WALK, uses the shared PmovePlayer for deterministic movement
    * that matches client-side prediction exactly.
+   *
+   * When the client runs at a higher frame rate than the server, multiple
+   * move commands can arrive in a single server frame. We process each
+   * queued command individually with its original msec so the server
+   * movement matches the client-side prediction (QW-style).
    * @param {import('../Edict.mjs').ServerEdict} ent edict
    */
   physicsClient(ent) {
@@ -322,10 +339,19 @@ export class ServerClientPhysics {
           break;
         case Defs.moveType.MOVETYPE_WALK:
         case Defs.moveType.MOVETYPE_NOCLIP:
-          // Shared PmovePlayer handles gravity, friction, acceleration,
-          // step-slide, water, and all movement — matching client prediction.
-          // NOCLIP is mapped to PM_TYPE.SPECTATOR which uses _flyMove().
-          this._runSharedPmove(ent, client);
+          // Process every queued command individually so each command’s msec
+          // and input match what the client predicted (QW-style SV_RunCmd).
+          // Only run movement for commands that actually arrived.
+          // When no commands are queued (packet delay / jitter), skip
+          // movement entirely, client-side prediction keeps the view
+          // smooth and the next packet will catch up. Running with the
+          // last known cmd would add phantom movement, making the
+          // remote player appear to move faster than the host.
+          for (const cmd of client.pendingCmds) {
+            client.cmd.set(cmd);
+            this._runSharedPmove(ent, client);
+          }
+          client.pendingCmds.length = 0;
           break;
         case Defs.moveType.MOVETYPE_FLY:
           SV.physics.flyMove(ent, Host.frametime);

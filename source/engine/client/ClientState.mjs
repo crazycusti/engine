@@ -150,6 +150,13 @@ class ClientRuntimeState {
   /** @type {boolean} true when prediction ran this frame (prevents emit from overwriting) */
   predicted = false;
 
+  /** @type {number} server-acknowledged pmFlags (PMF bitmask) */
+  ackedPmFlags = 0;
+  /** @type {number} server-acknowledged pmTime (timing counter) */
+  ackedPmTime = 0;
+  /** @type {number} server-acknowledged old button state */
+  ackedPmOldButtons = 0;
+
   stats = Object.values(Def.stat).map(() => 0);
   items = 0;
   item_gettime = new Array(32).fill(0.0);
@@ -236,6 +243,9 @@ class ClientRuntimeState {
     this.acknowledgedMoveSequence = 0;
     this.cmdBuffer = ClientRuntimeState.#createCmdBuffer();
     this.predicted = false;
+    this.ackedPmFlags = 0;
+    this.ackedPmTime = 0;
+    this.ackedPmOldButtons = 0;
     this.stats = Object.values(Def.stat).map(() => 0);
     this.items = 0;
     this.item_gettime.fill(0.0);

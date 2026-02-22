@@ -35,7 +35,7 @@ Grouped by sections and then sorted by priority (more or less).
 - [_] SV: cleanup the `SV.WriteEntitiesToClient` mess a bit, make it more flexible
 - [_] cleanup `charCodeAt` everywhere
 - [_] completely get rid of `Host.client`
-- [_] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
+- [X] refactor `MSG`/`SZ` especially in regards to `NET.message` and `client[…].message`
 - [_] `CL.state.intermission`/`ExitIntermission`: unsure what happens next on DS
 - [_] remove C style code that is almost verbatim from Quake
 - [X] Mod.ForName and bmodel/submodels smells a bit funny, should be a bit more streamlined with the Async stuff
@@ -44,7 +44,6 @@ Grouped by sections and then sorted by priority (more or less).
 ### Network improvements
 
 - [X] port QuakeWorld netcode
-- [_] flush messages more often, increase update rate
 - [_] look into that weird sluggish feel when ping is >100 ms (especially on Firefox)
 
 ### Life improvements
@@ -161,6 +160,11 @@ Grouped by sections and then sorted by priority (more or less).
 
 - Pmove implementation, what a mess
   - added configuration profiles for QuakeWorld and Quake 2
+  - added client-side prediction as well
+- version bump to 1.1.8, because:
+  - Pmove
+  - client-side prediction
+  - bunch of fixes
 
 ### 2026-02-19
 

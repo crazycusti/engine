@@ -14,7 +14,6 @@ eventBus.subscribe('registry.frozen', () => {
 });
 
 /** @typedef {import('./Edict.mjs').ServerEdict} ServerEdict */
-/** @typedef {import('./Server.mjs').ServerEntityState} ServerEntityState */
 /** @typedef {import('../../shared/GameInterfaces').PlayerEntitySpawnParamsDynamic} PlayerEntitySpawnParamsDynamic */
 
 export class ServerClient {
@@ -70,6 +69,16 @@ export class ServerClient {
     this.lastcmd = new Protocol.UserCmd();
     this.frames = [];
 
+    /**
+     * Queued move commands received since the last physics tick.
+     * In remote multiplayer the client may send several commands between
+     * server frames, each is pushed here and drained by physicsClient
+     * so that every command is simulated with its original msec,
+     * matching client-side prediction exactly (QW-style).
+     * @type {Protocol.UserCmd[]}
+     */
+    this.pendingCmds = [];
+
     /** @type {Map<string,ServerEntityState>} olds entity states for this player only @private */
     this._entityStates = new Map();
 
@@ -113,6 +122,7 @@ export class ServerClient {
     this.ping_times.fill(0);
     this.cmd.reset();
     this.lastcmd.reset();
+    this.pendingCmds.length = 0;
     this.last_update = 0.0;
     this.sync_time = 0;
     this._entityStates = new Map();
@@ -141,6 +151,7 @@ export class ServerClient {
     this._entityStates.clear();
     this.cmd.reset();
     this.lastcmd.reset();
+    this.pendingCmds.length = 0;
     this.pmFlags = 0;
     this.pmTime = 0;
     this.pmOldButtons = 0;

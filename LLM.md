@@ -25,6 +25,7 @@ Where’s what these tools have worked on in big chunks and my experience:
 | `PHS` and area portals | Tried out Claude Opus 4.6 to backport the ideas of portals and PHS from Quake 2+. It has been a long journey with lots of debugging and manual tweaking. Result: not working lol. |
 | Protocol 15 | I changed the network protocol quite a lot in order to support larger maps, incremental updates etc. I broke demo playback by doing so. I asked Claude Opus 4.6 to bring Protocol 15 back just enough to have demo playback working again. It was again a 90/10 result. |
 | WebGL 2 port | Claude Opus 4.6 is really excelling at coding, especially doing heavy leg work such as porting from WebGL 1 to WebGL 2. It would have taken me hours to get everything sorted out and optimized. |
+| Pmove improvements | I did an 80% port of pmove.c from QuakeWorld, together with Claude Opus 4.6 I implemented Q1 and Q2 movement profiles as well as wired up the whole code with client-side prediction and some other shenanigans. |
 
 ## Conclusion
 

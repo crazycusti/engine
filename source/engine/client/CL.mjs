@@ -497,9 +497,12 @@ export default class CL {
     from.origin.set(playerEntity.msg_origins[0]);
     from.velocity.set(playerEntity.msg_velocity[0]);
     from.onground = this.state.onground ? 0 : null;
-    from.pmFlags = this.state.playerstate?.pmFlags ?? 0;
-    from.pmTime = this.state.playerstate?.pmTime ?? 0;
-    from.oldbuttons = this.state.playerstate?.oldbuttons ?? 0;
+    // use server-acknowledged PM state for prediction base — these arrive
+    // alongside the move ack in clientdata and are more reliable than the
+    // playerstate array (which may not be populated for the local player)
+    from.pmFlags = this.state.ackedPmFlags;
+    from.pmTime = this.state.ackedPmTime;
+    from.oldbuttons = this.state.ackedPmOldButtons;
     from.waterjumptime = this.state.playerstate?.waterjumptime ?? 0;
 
     const to = new ClientPlayerState(pmove);

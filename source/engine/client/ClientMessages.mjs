@@ -156,6 +156,11 @@ export class ClientMessages {
 
     if ((bits & Protocol.su.moveack) !== 0) {
       CL.state.acknowledgedMoveSequence = NET.message.readByte();
+      // server sends authoritative PM state alongside the move ack so
+      // client-side prediction replays from the correct pmFlags / pmTime
+      CL.state.ackedPmFlags = NET.message.readByte();
+      CL.state.ackedPmTime = NET.message.readByte();
+      CL.state.ackedPmOldButtons = NET.message.readByte();
     }
   }
 

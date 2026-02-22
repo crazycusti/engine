@@ -579,22 +579,33 @@ export default class SV {
    * @param {ServerClient} client client
    */
   static ReadClientMove(client) {
-    client.cmd.msec = NET.message.readByte();
-    client.cmd.angles = NET.message.readAngleVector();
-    client.cmd.forwardmove = NET.message.readShort();
-    client.cmd.sidemove = NET.message.readShort();
-    client.cmd.upmove = NET.message.readShort();
-    // CR: we could restructure this a bit and let the ServerGameAPI handle the rest
-    client.cmd.buttons = NET.message.readByte();
-    client.edict.entity.button0 = (client.cmd.buttons & Protocol.button.attack) === 1; // QuakeC
-    client.edict.entity.button1 = ((client.cmd.buttons & Protocol.button.use) >> 2) === 1; // QuakeC
-    client.edict.entity.button2 = ((client.cmd.buttons & Protocol.button.jump) >> 1) === 1; // QuakeC
-    client.edict.entity.v_angle = client.cmd.angles;
-    client.cmd.impulse = NET.message.readByte();
-    if (client.cmd.impulse !== 0) {
-      client.edict.entity.impulse = client.cmd.impulse; // QuakeC
+    const cmd = new Protocol.UserCmd();
+    cmd.msec = NET.message.readByte();
+    cmd.angles = NET.message.readAngleVector();
+    cmd.forwardmove = NET.message.readShort();
+    cmd.sidemove = NET.message.readShort();
+    cmd.upmove = NET.message.readShort();
+    cmd.buttons = NET.message.readByte();
+    cmd.impulse = NET.message.readByte();
+    const seq = NET.message.readByte();
+
+    // Apply entity-side fields from the latest command (QuakeC compatibility)
+    client.edict.entity.button0 = (cmd.buttons & Protocol.button.attack) === 1;
+    client.edict.entity.button1 = ((cmd.buttons & Protocol.button.use) >> 2) === 1;
+    client.edict.entity.button2 = ((cmd.buttons & Protocol.button.jump) >> 1) === 1;
+    client.edict.entity.v_angle = cmd.angles;
+    if (cmd.impulse !== 0) {
+      client.edict.entity.impulse = cmd.impulse;
     }
-    client.lastMoveSequence = NET.message.readByte();
+
+    // Queue the command for per-command processing in physicsClient
+    // (QW-style: each command is simulated individually so msec matches
+    // what the client predicted, even when multiple arrive in one frame).
+    client.pendingCmds.push(cmd);
+
+    // Keep client.cmd as the latest for backwards-compat code paths
+    client.cmd.set(cmd);
+    client.lastMoveSequence = seq;
   }
 
   /**
