@@ -75,6 +75,15 @@ export class ServerClient {
 
     this.wishdir = new Vector();
 
+    /** @type {number} Q2-style player movement flags (PMF bitmask), persisted across frames */
+    this.pmFlags = 0;
+    /** @type {number} Q2-style timing counter for special states (msec/8 units) */
+    this.pmTime = 0;
+    /** @type {number} previous frame button state for edge detection */
+    this.pmOldButtons = 0;
+    /** @type {number} last received move command sequence (0-255, for prediction ack) */
+    this.lastMoveSequence = 0;
+
     // Object.seal(this);
   }
 
@@ -107,6 +116,10 @@ export class ServerClient {
     this.last_update = 0.0;
     this.sync_time = 0;
     this._entityStates = new Map();
+    this.pmFlags = 0;
+    this.pmTime = 0;
+    this.pmOldButtons = 0;
+    this.lastMoveSequence = 0;
 
     if (SV.server.gameCapabilities.includes(gameCapabilities.CAP_SPAWNPARMS_LEGACY)) {
       this.spawn_parms = new Array(16);
@@ -128,6 +141,10 @@ export class ServerClient {
     this._entityStates.clear();
     this.cmd.reset();
     this.lastcmd.reset();
+    this.pmFlags = 0;
+    this.pmTime = 0;
+    this.pmOldButtons = 0;
+    this.lastMoveSequence = 0;
   }
 
   /**

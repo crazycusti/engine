@@ -440,8 +440,8 @@ export class ServerCollision {
       }
 
       if (clip.passedict) {
-        if (clip.passedict.entity.size !== 0.0 && touch.entity.size === 0.0) {
-          continue;
+        if (clip.passedict.entity.size[0] && !touch.entity.size[0]) {
+          continue; // points never interact
         }
       }
 

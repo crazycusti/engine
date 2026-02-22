@@ -1,5 +1,5 @@
 import Cvar from '../common/Cvar.mjs';
-import { MoveVars } from '../common/Pmove.mjs';
+import { MoveVars, Pmove } from '../common/Pmove.mjs';
 import Vector from '../../shared/Vector.mjs';
 import { SzBuffer } from '../network/MSG.mjs';
 import * as Protocol from '../network/Protocol.mjs';
@@ -198,11 +198,6 @@ export default class SV {
     },
   };
 
-  // Physics box hull (used for collision detection)
-  static box_clipnodes = null;
-  static box_planes = null;
-  static box_hull = null;
-
   // Class instances for modular functionality
   static physics = new ServerPhysics();
   static clientPhysics = new ServerClientPhysics();
@@ -210,6 +205,9 @@ export default class SV {
   static movement = new ServerMovement();
   static area = new ServerArea();
   static collision = new ServerCollision();
+
+  /** @type {?Pmove} shared player-move collision context */
+  static pmove = null;
 
   // Cvars (initialized in Init())
   static maxvelocity = null;
@@ -236,7 +234,8 @@ export default class SV {
   // ===== STATIC METHODS =====
 
   static InitPmove() {
-    // TODO: pmove
+    SV.pmove = new Pmove();
+    SV.pmove.movevars = new PlayerMoveCvars();
   }
 
   static Init() {
@@ -430,6 +429,9 @@ export default class SV {
       return false;
     }
 
+    // Initialize shared player-move collision context
+    SV.pmove.setWorldmodel(SV.server.worldmodel);
+
     // Setup area nodes for spatial partitioning
     SV.area.initOctree(SV.server.worldmodel.mins, SV.server.worldmodel.maxs);
 
@@ -592,7 +594,7 @@ export default class SV {
     if (client.cmd.impulse !== 0) {
       client.edict.entity.impulse = client.cmd.impulse; // QuakeC
     }
-    // console.log('client.cmd', client.cmd);
+    client.lastMoveSequence = NET.message.readByte();
   }
 
   /**
@@ -637,7 +639,7 @@ export default class SV {
       const ret = NET.GetMessage(client.netconnection);
 
       if (ret === -1) {
-        Con.Print('SV.ReadClientMessage: NET.GetMessage failed\n');
+        Con.DPrint(`SV.ReadClientMessage: NET.GetMessage from ${client.name} (${client.netconnection.address}) failed\n`);
         return false;
       }
 
@@ -1057,6 +1059,8 @@ class PlayerMoveCvars extends MoveVars {
   get friction() { return SV.friction.value; }
   // @ts-ignore
   get waterfriction() { return SV.waterfriction.value; }
+  // @ts-ignore
+  get edgefriction() { return SV.edgefriction.value; }
 
   set gravity(_value) { }
   set stopspeed(_value) { }
@@ -1067,6 +1071,7 @@ class PlayerMoveCvars extends MoveVars {
   set wateraccelerate(_value) { }
   set friction(_value) { }
   set waterfriction(_value) { }
+  set edgefriction(_value) { }
 
   /**
    * Writes the movevars to the client.

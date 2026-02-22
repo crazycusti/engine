@@ -234,19 +234,24 @@ export default class ClientInput {
     }
     kbuttons[kbutton.use].state &= 5;
 
-    if (CL.state.cmd.equals(CL.state.lastcmd)) {
-      return; // nothing new happened
-    }
+    // --- prediction: always buffer the current command ---
+    const msec = Math.min(255, Math.max(1, Math.round(Host.frametime * 1000.0)));
+    CL.state.cmd.msec = msec;
+    CL.state.moveSequence = (CL.state.moveSequence + 1) & 0xFF;
+    const slot = CL.state.cmdBuffer[CL.state.moveSequence & Protocol.CMD_BUFFER_MASK];
+    slot.cmd.set(CL.state.cmd);
+    slot.msec = msec;
 
-    const buf = new SzBuffer(16);
+    const buf = new SzBuffer(20);
     buf.writeByte(Protocol.clc.move);
-    buf.writeByte(Math.round(Math.max(100, Host.frametime * 1000.0)));
+    buf.writeByte(msec);
     buf.writeAngleVector(CL.state.cmd.angles);
     buf.writeShort(CL.state.cmd.forwardmove);
     buf.writeShort(CL.state.cmd.sidemove);
     buf.writeShort(CL.state.cmd.upmove);
     buf.writeByte(CL.state.cmd.buttons);
     buf.writeByte(CL.state.cmd.impulse);
+    buf.writeByte(CL.state.moveSequence);
 
     if (CL.cls.demoplayback === true) {
       return;

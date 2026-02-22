@@ -42,6 +42,11 @@ export class ClientPlayerState extends Protocol.EntityState {
     this.onground = null;
     this.oldbuttons = 0;
 
+    /** @type {number} Q2-style player movement flags (PMF bitmask) */
+    this.pmFlags = 0;
+    /** @type {number} Q2-style timing counter for special states */
+    this.pmTime = 0;
+
     this.pmove = pmove;
 
     Object.seal(this);
@@ -148,6 +153,10 @@ export class ClientMessages {
 
     CL.state.onground = (bits & Protocol.su.onground) !== 0;
     CL.state.inwater = (bits & Protocol.su.inwater) !== 0;
+
+    if ((bits & Protocol.su.moveack) !== 0) {
+      CL.state.acknowledgedMoveSequence = NET.message.readByte();
+    }
   }
 
   /**
@@ -322,5 +331,6 @@ export class ClientMessages {
 
   clear() {
     this.mtime.fill(0.0);
+    this.playerstates.length = 0;
   }
 };

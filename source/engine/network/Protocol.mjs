@@ -41,6 +41,8 @@ export const su = Object.freeze({
   velocity1: 1 << 5,
   velocity2: 1 << 6,
   velocity3: 1 << 7,
+  /** server acknowledges the last received move command sequence */
+  moveack: 1 << 8,
   items: 1 << 9,
   onground: 1 << 10,
   inwater: 1 << 11,
@@ -48,6 +50,10 @@ export const su = Object.freeze({
   armor: 1 << 13,
   weapon: 1 << 14,
 });
+
+/** number of user commands buffered for client-side prediction replay */
+export const CMD_BUFFER_SIZE = 64;
+export const CMD_BUFFER_MASK = CMD_BUFFER_SIZE - 1;
 
 export const default_viewheight = 22;
 
