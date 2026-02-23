@@ -14,6 +14,7 @@ import Vector from '../../shared/Vector.mjs';
 import * as Protocol from '../network/Protocol.mjs';
 import { content, solid } from '../../shared/Defs.mjs';
 import { BrushModel } from './Mod.mjs';
+import Cvar from './Cvar.mjs';
 
 /** @typedef {import('../../shared/Vector.mjs').DirectionalVectors} DirectionalVectors */
 
@@ -555,7 +556,9 @@ export class PhysEnt { // physent_t
  */
 export class PmovePlayer { // pmove_t (player state only)
   /** @type {boolean} enables verbose movement debugging */
-  static DEBUG = false;
+  static get DEBUG() {
+    return Pmove.debug?.value !== 0;
+  }
 
   /**
    * @param {Pmove} pmove pmove instance (world + physents)
@@ -1343,9 +1346,28 @@ export class PmovePlayer { // pmove_t (player state only)
   _stepSlideMove() { // Q2: PM_StepSlideMove
     const startOrigin = this.origin.copy();
     const startVelocity = this.velocity.copy();
+    const wasOnGround = this.onground !== null;
 
     // try sliding at current height first
     this._slideMove();
+
+    // Slope descent fix: when the player was on the ground, the purely
+    // horizontal slide can leave us floating above the slope surface.
+    // Trace down by STEPSIZE to maintain ground contact and prevent
+    // per-frame ground/air oscillation (“stutter”) on downward slopes.
+    if (wasOnGround) {
+      const stickTarget = this.origin.copy();
+      stickTarget[2] -= STEPSIZE;
+      const stickTrace = this._pmove.clipPlayerMove(this.origin, stickTarget);
+      if (!stickTrace.allsolid && stickTrace.fraction < 1.0
+          && stickTrace.plane.normal[2] >= MIN_STEP_NORMAL
+          && stickTrace.endpos[2] < this.origin[2] - DIST_EPSILON) {
+        this.origin.set(stickTrace.endpos);
+        if (stickTrace.ent !== null) {
+          this.touchindices.push(stickTrace.ent);
+        }
+      }
+    }
 
     const downOrigin = this.origin.copy();
     const downVelocity = this.velocity.copy();
@@ -1369,9 +1391,18 @@ export class PmovePlayer { // pmove_t (player state only)
 
     this._slideMove();
 
-    // push down the final amount
+    // Push down after step-up slide. When walking on a descending slope
+    // the floor can be below startOrigin, so we need to trace further
+    // down (startOrigin[2] - STEPSIZE) to find it. During a jump or
+    // fall (not on ground, or upward velocity) the original range
+    // (origin[2] - STEPSIZE) is correct — the extended range would yank
+    // the player back to the ground, cancelling the jump.
     const down = this.origin.copy();
-    down[2] -= STEPSIZE;
+    if (wasOnGround && startVelocity[2] <= 0) {
+      down[2] = startOrigin[2] - STEPSIZE;
+    } else {
+      down[2] -= STEPSIZE;
+    }
 
     const downStepTrace = this._pmove.clipPlayerMove(this.origin, down);
     if (!downStepTrace.allsolid) {
@@ -1722,6 +1753,18 @@ export class Pmove { // pmove_t
   static PLAYER_MAXS = new Vector(16.0, 16.0, 32.0);
 
   static MAX_PHYSENTS = 32;
+
+  /** @type {Cvar} */
+  static debug = null;
+
+  static Init() {
+    Pmove.debug = new Cvar('pm_debug', '0', Cvar.FLAG.NONE, 'pmove debug output');
+  }
+
+  static Shutdown() {
+    Pmove.debug.free();
+    Pmove.debug = null;
+  }
 
   /** @type {PmoveConfiguration} parameters for certain checks */
   configuration = new PmoveConfiguration();

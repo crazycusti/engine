@@ -14,6 +14,7 @@ import CDAudio from '../client/CDAudio.mjs';
 import * as Defs from '../../shared/Defs.mjs';
 import { content, gameCapabilities } from '../../shared/Defs.mjs';
 import ClientLifecycle from '../client/ClientLifecycle.mjs';
+import { Pmove } from './Pmove.mjs';
 
 const Host = {};
 
@@ -476,6 +477,7 @@ Host.Init = async function() {
   await PR.Init();
   Mod.Init();
   NET.Init();
+  Pmove.Init();
   SV.Init();
 
   if (!registry.isDedicatedServer) {
@@ -521,6 +523,7 @@ Host.Shutdown = function() {
     IN.Shutdown();
     VID.Shutdown();
   }
+  Pmove.Shutdown();
   Cmd.Shutdown();
   Cvar.Shutdown();
   eventBus.publish('host.shutdown');
