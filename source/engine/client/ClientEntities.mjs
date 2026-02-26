@@ -496,7 +496,14 @@ export default class ClientEntities {
         continue;
       }
 
-      pmove.addEntity(clent, clent.solid === solid.SOLID_BSP ? clent.model : null);
+      // Only solid entities participate in player movement collision.
+      // SOLID_TRIGGER and SOLID_NOT entities must not block the player.
+      const s = clent.solid;
+      if (s !== solid.SOLID_BSP && s !== solid.SOLID_BBOX && s !== solid.SOLID_SLIDEBOX) {
+        continue;
+      }
+
+      pmove.addEntity(clent, s === solid.SOLID_BSP ? clent.model : null);
     }
   }
 

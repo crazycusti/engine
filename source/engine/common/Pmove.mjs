@@ -480,6 +480,562 @@ export class BoxHull extends Hull {
 };
 
 // ---------------------------------------------------------------------------
+// BrushTrace: Q2-style brush-based collision tracing
+//
+// Used when the BSP has brush/brushside/leafbrush data (Q2 maps, or Q1 maps
+// with BSPX BRUSHLIST extension). This replaces Q1’s hull-based traces and
+// gives exact collision against the actual brush geometry rather than
+// pre-expanded clipnode trees.
+//
+// Architecture: traverse the BSP node tree (with extents offset for the
+// player box). At each leaf, test every brush in that leaf via
+// clipBoxToBrush. This is the standard Quake 2 approach from cmodel.c.
+// ---------------------------------------------------------------------------
+
+/**
+ * Q2-style brush-based collision tracing.
+ *
+ * Provides exact collision against brush geometry, replacing the Q1 hull-based
+ * traces for maps that include brush data.
+ */
+export class BrushTrace {
+  /** @type {number} monotonically increasing counter to avoid testing the same brush twice */
+  static _checkCount = 0;
+
+  /**
+   * Trace a box from start to end through the BSP tree, testing individual brushes.
+   * Equivalent to Q2’s CM_BoxTrace.
+   * @param {BrushModel} worldModel - world model owning the BSP data
+   * @param {number} headNode - BSP node index to start traversal from
+   * @param {Vector} start - start position
+   * @param {Vector} end - end position
+   * @param {Vector} mins - box mins (typically PLAYER_MINS)
+   * @param {Vector} maxs - box maxs (typically PLAYER_MAXS)
+   * @returns {Trace} trace result
+   */
+  static boxTrace(worldModel, headNode, start, end, mins, maxs) {
+    const trace = new Trace();
+
+    if (!worldModel.nodes || worldModel.nodes.length === 0) {
+      return trace;
+    }
+
+    const isPoint = (mins[0] === 0 && mins[1] === 0 && mins[2] === 0
+                  && maxs[0] === 0 && maxs[1] === 0 && maxs[2] === 0);
+    const extents = isPoint ? new Vector() : new Vector(
+      -mins[0] > maxs[0] ? -mins[0] : maxs[0],
+      -mins[1] > maxs[1] ? -mins[1] : maxs[1],
+      -mins[2] > maxs[2] ? -mins[2] : maxs[2],
+    );
+
+    const checkCount = ++BrushTrace._checkCount;
+
+    /** @type {BrushTraceContext} */
+    const ctx = { worldModel, trace, mins, maxs, isPoint, extents, start, end, checkCount };
+
+    const rootNode = worldModel.nodes[headNode];
+
+    if (!rootNode) {
+      return trace;
+    }
+
+    BrushTrace._recursiveHullCheck(ctx, rootNode, 0, 1, start, end);
+
+    if (trace.fraction === 1.0) {
+      trace.endpos.set(end);
+    } else {
+      for (let i = 0; i < 3; i++) {
+        trace.endpos[i] = start[i] + trace.fraction * (end[i] - start[i]);
+      }
+    }
+
+    return trace;
+  }
+
+  /**
+   * Test if a player-sized box at the given position overlaps any solid brush.
+   * Equivalent to Q2’s CM_BoxTrace position-test special case.
+   * @param {BrushModel} worldModel - world model owning the BSP data
+   * @param {number} headNode - BSP node index to start traversal from
+   * @param {Vector} position - position to test
+   * @param {Vector} mins - box mins (typically PLAYER_MINS)
+   * @param {Vector} maxs - box maxs (typically PLAYER_MAXS)
+   * @returns {boolean} true if position is valid (not stuck in solid)
+   */
+  static testPosition(worldModel, headNode, position, mins, maxs) {
+    if (!worldModel.nodes || worldModel.nodes.length === 0) {
+      return true;
+    }
+
+    const checkCount = ++BrushTrace._checkCount;
+
+    // Find the leaf containing the position
+    let node = worldModel.nodes[headNode];
+
+    while (node && node.contents >= 0) {
+      const plane = node.plane;
+      const d = (plane.type < 3)
+        ? position[plane.type] - plane.dist
+        : plane.normal.dot(position) - plane.dist;
+      node = d >= 0 ? node.children[0] : node.children[1];
+    }
+
+    if (!node) {
+      return true;
+    }
+
+    // Check all brushes in this leaf
+    return !BrushTrace._testLeafSolid(worldModel, node, position, mins, maxs, checkCount);
+  }
+
+  /**
+   * Trace a box from start to end against a submodel's brush range (brute-force).
+   * Unlike boxTrace which walks the BSP tree, this tests every brush in the
+   * submodel's range directly. Used for submodel entities (doors, plats, etc.)
+   * whose brushes are NOT inserted into the world BSP leaf-brush index.
+   * @param {BrushModel} model - submodel with brush data (shared arrays from world)
+   * @param {Vector} start - start position (local to entity)
+   * @param {Vector} end - end position (local to entity)
+   * @param {Vector} mins - box mins
+   * @param {Vector} maxs - box maxs
+   * @returns {Trace} trace result
+   */
+  static boxTraceModel(model, start, end, mins, maxs) {
+    const trace = new Trace();
+
+    // Brute-force path: no BSP tree walk, so no leaf visits to clear allsolid.
+    // Default Trace has allsolid=true; we must clear it here so that traces
+    // that miss all brushes correctly report "not in solid" instead of falsely
+    // blocking all movement. _clipBoxToBrush will set allsolid=true if the
+    // trace is genuinely embedded inside a brush.
+    trace.allsolid = false;
+
+    if (!model.brushes || model.numBrushes === 0) {
+      return trace;
+    }
+
+    const isPoint = (mins[0] === 0 && mins[1] === 0 && mins[2] === 0
+                  && maxs[0] === 0 && maxs[1] === 0 && maxs[2] === 0);
+    const extents = isPoint ? new Vector() : new Vector(
+      -mins[0] > maxs[0] ? -mins[0] : maxs[0],
+      -mins[1] > maxs[1] ? -mins[1] : maxs[1],
+      -mins[2] > maxs[2] ? -mins[2] : maxs[2],
+    );
+
+    const checkCount = ++BrushTrace._checkCount;
+
+    /** @type {BrushTraceContext} */
+    const ctx = { worldModel: model, trace, mins, maxs, isPoint, extents, start, end, checkCount };
+
+    const brushes = model.brushes;
+    const lastBrush = model.firstBrush + model.numBrushes;
+
+    for (let i = model.firstBrush; i < lastBrush; i++) {
+      const brush = brushes[i];
+
+      if (!brush || brush.numsides === 0) {
+        continue;
+      }
+
+      // Only collide with solid/clip brushes
+      if (brush.contents !== content.CONTENT_SOLID
+        && (brush.contents !== content.CONTENT_CLIP || isPoint)) {
+        continue;
+      }
+
+      BrushTrace._clipBoxToBrush(ctx, brush);
+
+      if (trace.fraction === 0) {
+        break;
+      }
+    }
+
+    if (trace.fraction === 1.0) {
+      trace.endpos.set(end);
+    } else {
+      for (let i = 0; i < 3; i++) {
+        trace.endpos[i] = start[i] + trace.fraction * (end[i] - start[i]);
+      }
+    }
+
+    return trace;
+  }
+
+  /**
+   * Test if a player-sized box at position overlaps any solid brush in
+   * a submodel's brush range (brute-force). Used for submodel entities
+   * whose brushes are NOT in the BSP leaf-brush index.
+   * @param {BrushModel} model - submodel with brush data
+   * @param {Vector} position - position to test (local to entity)
+   * @param {Vector} mins - box mins
+   * @param {Vector} maxs - box maxs
+   * @returns {boolean} true if position is valid (not in solid)
+   */
+  static testPositionModel(model, position, mins, maxs) {
+    if (!model.brushes || model.numBrushes === 0) {
+      return true;
+    }
+
+    const isPoint = (mins[0] === 0 && mins[1] === 0 && mins[2] === 0
+                  && maxs[0] === 0 && maxs[1] === 0 && maxs[2] === 0);
+
+    const brushes = model.brushes;
+    const lastBrush = model.firstBrush + model.numBrushes;
+
+    for (let i = model.firstBrush; i < lastBrush; i++) {
+      const brush = brushes[i];
+
+      if (!brush || brush.numsides === 0) {
+        continue;
+      }
+
+      if (brush.contents !== content.CONTENT_SOLID
+        && (brush.contents !== content.CONTENT_CLIP || isPoint)) {
+        continue;
+      }
+
+      if (BrushTrace._testBoxInBrush(model, brush, position, mins, maxs)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Test if a player-sized box overlaps any solid brush in a leaf.
+   * @param {BrushModel} worldModel - world model
+   * @param {import('./model/BSP.mjs').Node} leaf - leaf node
+   * @param {Vector} position - position to test
+   * @param {Vector} mins - box mins
+   * @param {Vector} maxs - box maxs
+   * @param {number} checkCount - dedup counter
+   * @returns {boolean} true if solid overlap found
+   */
+  static _testLeafSolid(worldModel, leaf, position, mins, maxs, checkCount) {
+    const brushes = worldModel.brushes;
+    const leafbrushes = worldModel.leafbrushes;
+
+    if (!brushes || !leafbrushes) {
+      return false;
+    }
+
+    const isPoint = (mins[0] === 0 && mins[1] === 0 && mins[2] === 0
+                  && maxs[0] === 0 && maxs[1] === 0 && maxs[2] === 0);
+
+    for (let k = 0; k < leaf.numleafbrushes; k++) {
+      const brushNum = leafbrushes[leaf.firstleafbrush + k];
+      const brush = brushes[brushNum];
+
+      if (!brush || brush.numsides === 0) {
+        continue;
+      }
+
+      if (brush._brushTraceCheck === checkCount) {
+        continue;
+      }
+      brush._brushTraceCheck = checkCount;
+
+      // CONTENT_CLIP blocks entities with size (non-zero mins/maxs)
+      if (brush.contents !== content.CONTENT_SOLID
+        && (brush.contents !== content.CONTENT_CLIP || isPoint)) {
+        continue;
+      }
+
+      if (BrushTrace._testBoxInBrush(worldModel, brush, position, mins, maxs)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Test if a box at origin is inside a brush. Equivalent to Q2’s CM_TestBoxInBrush.
+   * @param {BrushModel} worldModel - world model
+   * @param {import('./model/BSP.mjs').Brush} brush - brush to test
+   * @param {Vector} position - box center position
+   * @param {Vector} mins - box mins
+   * @param {Vector} maxs - box maxs
+   * @returns {boolean} true if the box is inside the brush
+   */
+  static _testBoxInBrush(worldModel, brush, position, mins, maxs) {
+    const brushsides = worldModel.brushsides;
+    const planes = worldModel.planes;
+
+    for (let i = 0; i < brush.numsides; i++) {
+      const side = brushsides[brush.firstside + i];
+      const plane = planes[side.planenum];
+
+      // Push the plane out for box extents (Minkowski expansion)
+      let dist = plane.dist;
+      for (let j = 0; j < 3; j++) {
+        dist -= (plane.normal[j] < 0 ? maxs[j] : mins[j]) * plane.normal[j];
+      }
+
+      const d1 = plane.normal.dot(position) - dist;
+
+      // If completely in front of any face, not inside
+      if (d1 > 0) {
+        return false;
+      }
+    }
+
+    // Inside all brush planes
+    return true;
+  }
+
+  /**
+   * Recursively traverse the BSP node tree, expanding by trace extents.
+   * At leaf nodes, test all brushes. Equivalent to Q2’s CM_RecursiveHullCheck.
+   * @param {BrushTraceContext} ctx - trace context
+   * @param {import('./model/BSP.mjs').Node} node - current BSP node (or leaf)
+   * @param {number} p1f - fraction at p1
+   * @param {number} p2f - fraction at p2
+   * @param {Vector} p1 - start of segment
+   * @param {Vector} p2 - end of segment
+   */
+  static _recursiveHullCheck(ctx, node, p1f, p2f, p1, p2) {
+    if (ctx.trace.fraction <= p1f) {
+      return; // already hit something nearer
+    }
+
+    // Leaf node: test brushes
+    if (node.contents < 0) {
+      BrushTrace._traceToLeaf(ctx, node);
+      return;
+    }
+
+    // Internal node: find the point distances to the splitting plane
+    const plane = node.plane;
+    let t1, t2, offset;
+
+    if (plane.type < 3) {
+      t1 = p1[plane.type] - plane.dist;
+      t2 = p2[plane.type] - plane.dist;
+      offset = ctx.extents[plane.type];
+    } else {
+      t1 = plane.normal.dot(p1) - plane.dist;
+      t2 = plane.normal.dot(p2) - plane.dist;
+      if (ctx.isPoint) {
+        offset = 0;
+      } else {
+        offset = Math.abs(ctx.extents[0] * plane.normal[0])
+               + Math.abs(ctx.extents[1] * plane.normal[1])
+               + Math.abs(ctx.extents[2] * plane.normal[2]);
+      }
+    }
+
+    // Both on front side
+    if (t1 >= offset && t2 >= offset) {
+      BrushTrace._recursiveHullCheck(ctx, node.children[0], p1f, p2f, p1, p2);
+      return;
+    }
+
+    // Both on back side
+    if (t1 < -offset && t2 < -offset) {
+      BrushTrace._recursiveHullCheck(ctx, node.children[1], p1f, p2f, p1, p2);
+      return;
+    }
+
+    // The trace crosses the plane. Compute entry and exit fractions.
+    let frac, frac2;
+    let side;
+    const idist = 1.0 / (t1 - t2);
+
+    if (t1 < t2) {
+      side = 1;
+      frac = Math.min(1.0, Math.max(0.0, (t1 - offset + DIST_EPSILON) * idist));
+      frac2 = Math.min(1.0, Math.max(0.0, (t1 + offset + DIST_EPSILON) * idist));
+    } else if (t1 > t2) {
+      side = 0;
+      frac = Math.min(1.0, Math.max(0.0, (t1 + offset + DIST_EPSILON) * idist));
+      frac2 = Math.min(1.0, Math.max(0.0, (t1 - offset - DIST_EPSILON) * idist));
+    } else {
+      side = 0;
+      frac = 1;
+      frac2 = 0;
+    }
+
+    // Move up to the node
+    const midf = p1f + (p2f - p1f) * frac;
+    const mid = new Vector(
+      p1[0] + frac * (p2[0] - p1[0]),
+      p1[1] + frac * (p2[1] - p1[1]),
+      p1[2] + frac * (p2[2] - p1[2]),
+    );
+
+    BrushTrace._recursiveHullCheck(ctx, node.children[side], p1f, midf, p1, mid);
+
+    // Go past the node
+    const midf2 = p1f + (p2f - p1f) * frac2;
+    const mid2 = new Vector(
+      p1[0] + frac2 * (p2[0] - p1[0]),
+      p1[1] + frac2 * (p2[1] - p1[1]),
+      p1[2] + frac2 * (p2[2] - p1[2]),
+    );
+
+    BrushTrace._recursiveHullCheck(ctx, node.children[side ^ 1], midf2, p2f, mid2, p2);
+  }
+
+  /**
+   * Test all brushes in a leaf against the current trace.
+   * Equivalent to Q2’s CM_TraceToLeaf.
+   * @param {BrushTraceContext} ctx - trace context
+   * @param {import('./model/BSP.mjs').Node} leaf - leaf node
+   */
+  static _traceToLeaf(ctx, leaf) {
+    // Q1 content classification for trace flags
+    if (leaf.contents !== content.CONTENT_SOLID) {
+      ctx.trace.allsolid = false;
+      if (leaf.contents === content.CONTENT_EMPTY) {
+        ctx.trace.inopen = true;
+      } else if (leaf.contents <= content.CONTENT_WATER) {
+        ctx.trace.inwater = true;
+      }
+    }
+
+    const brushes = ctx.worldModel.brushes;
+    const leafbrushes = ctx.worldModel.leafbrushes;
+
+    if (!brushes || !leafbrushes) {
+      return;
+    }
+
+    for (let k = 0; k < leaf.numleafbrushes; k++) {
+      const brushNum = leafbrushes[leaf.firstleafbrush + k];
+      const brush = brushes[brushNum];
+
+      if (!brush || brush.numsides === 0) {
+        continue;
+      }
+
+      // Skip already-tested brushes (same brush can appear in multiple leaves)
+      if (brush._brushTraceCheck === ctx.checkCount) {
+        continue;
+      }
+      brush._brushTraceCheck = ctx.checkCount;
+
+      // Only collide with solid/clip brushes for movement traces.
+      // CONTENT_CLIP blocks entities with size but not point traces.
+      if (brush.contents !== content.CONTENT_SOLID
+        && (brush.contents !== content.CONTENT_CLIP || ctx.isPoint)) {
+        continue;
+      }
+
+      BrushTrace._clipBoxToBrush(ctx, brush);
+
+      if (ctx.trace.fraction === 0) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * Clip the trace against a single brush’s planes.
+   * Equivalent to Q2’s CM_ClipBoxToBrush.
+   * @param {BrushTraceContext} ctx - trace context
+   * @param {import('./model/BSP.mjs').Brush} brush - brush to clip against
+   */
+  static _clipBoxToBrush(ctx, brush) {
+    const brushsides = ctx.worldModel.brushsides;
+    const planes = ctx.worldModel.planes;
+
+    let enterfrac = -1;
+    let leavefrac = 1;
+    /** @type {import('./model/BaseModel.mjs').Plane|null} */
+    let clipplane = null;
+
+    let getout = false;
+    let startout = false;
+
+    for (let i = 0; i < brush.numsides; i++) {
+      const side = brushsides[brush.firstside + i];
+      const plane = planes[side.planenum];
+
+      // Compute distance adjusted for box extents (Minkowski expansion)
+      let dist;
+      if (!ctx.isPoint) {
+        // Push the plane out appropriately for mins/maxs
+        let ofs0 = 0, ofs1 = 0, ofs2 = 0;
+        if (plane.normal[0] < 0) { ofs0 = ctx.maxs[0]; } else { ofs0 = ctx.mins[0]; }
+        if (plane.normal[1] < 0) { ofs1 = ctx.maxs[1]; } else { ofs1 = ctx.mins[1]; }
+        if (plane.normal[2] < 0) { ofs2 = ctx.maxs[2]; } else { ofs2 = ctx.mins[2]; }
+        dist = plane.dist - (ofs0 * plane.normal[0] + ofs1 * plane.normal[1] + ofs2 * plane.normal[2]);
+      } else {
+        dist = plane.dist;
+      }
+
+      const d1 = plane.normal.dot(ctx.start) - dist;
+      const d2 = plane.normal.dot(ctx.end) - dist;
+
+      if (d2 > 0) { getout = true; }
+      if (d1 > 0) { startout = true; }
+
+      // If completely in front of face, no intersection with this brush
+      if (d1 > 0 && d2 >= d1) {
+        return;
+      }
+
+      // Both behind this face - continue to next face
+      if (d1 <= 0 && d2 <= 0) {
+        continue;
+      }
+
+      // Crosses face
+      if (d1 > d2) {
+        // Enter
+        const f = (d1 - DIST_EPSILON) / (d1 - d2);
+        if (f > enterfrac) {
+          enterfrac = f;
+          clipplane = plane;
+        }
+      } else {
+        // Leave
+        const f = (d1 + DIST_EPSILON) / (d1 - d2);
+        if (f < leavefrac) {
+          leavefrac = f;
+        }
+      }
+    }
+
+    if (!startout) {
+      // Original point was inside brush
+      ctx.trace.startsolid = true;
+      if (!getout) {
+        ctx.trace.allsolid = true;
+        ctx.trace.fraction = 0;
+      }
+      return;
+    }
+
+    if (enterfrac < leavefrac) {
+      if (enterfrac > -1 && enterfrac < ctx.trace.fraction) {
+        if (enterfrac < 0) {
+          enterfrac = 0;
+        }
+        ctx.trace.fraction = enterfrac;
+        ctx.trace.plane.normal.set(clipplane.normal);
+        ctx.trace.plane.dist = clipplane.dist;
+      }
+    }
+  }
+}
+
+/**
+ * @typedef {object} BrushTraceContext
+ * @property {BrushModel} worldModel - world model with BSP data
+ * @property {Trace} trace - trace result being accumulated
+ * @property {Vector} mins - player box mins
+ * @property {Vector} maxs - player box maxs
+ * @property {boolean} isPoint - true if mins/maxs are zero (point trace)
+ * @property {Vector} extents - absolute half-extents of the player box
+ * @property {Vector} start - trace start position
+ * @property {Vector} end - trace end position
+ * @property {number} checkCount - dedup counter for brush testing
+ */
+
+// ---------------------------------------------------------------------------
 // PhysEnt: a physics entity stored in the Pmove world
 // ---------------------------------------------------------------------------
 
@@ -488,7 +1044,7 @@ export class PhysEnt { // physent_t
    * @param {Pmove} pmove parent pmove instance
    */
   constructor(pmove) {
-    /** only for bsp models @type {Hull[]} */
+    /** only for bsp models (legacy Q1 hull-based collision) @type {Hull[]} */
     this.hulls = [];
     /** origin */
     this.origin = new Vector();
@@ -498,6 +1054,32 @@ export class PhysEnt { // physent_t
     this.maxs = new Vector();
     /** actual edict index, used to map back to edicts @type {?number} */
     this.edictId = null;
+
+    /**
+     * Reference to the world model for brush-based collision.
+     * The world model owns nodes, leafs, planes, brushes, brushsides, leafbrushes.
+     * Submodels reference the same world model (shared BSP tree).
+     * @type {BrushModel|null}
+     */
+    this.brushWorldModel = null;
+
+    /**
+     * BSP node index for brush collision traversal root.
+     * For the world entity this is the world headnode.
+     * Not used for submodel entities (they use brute-force brush testing).
+     * @type {number}
+     */
+    this.brushHeadNode = -1;
+
+    /**
+     * Submodel reference for brute-force brush collision.
+     * Set for submodel entities (doors, plats, etc.) whose brushes are
+     * NOT in the BSP leaf-brush index. When set, tracing iterates this
+     * model's firstBrush..firstBrush+numBrushes directly.
+     * Null for the world entity (which uses BSP tree walk via brushHeadNode).
+     * @type {BrushModel|null}
+     */
+    this.brushModel = null;
 
     /** @type {WeakRef<Pmove>} @private */
     this._pmove_wf = new WeakRef(pmove);
@@ -509,7 +1091,16 @@ export class PhysEnt { // physent_t
   }
 
   /**
-   * Returns clipping hull for this entity.
+   * Whether this entity uses brush-based collision (Q2-style).
+   * When false, falls back to legacy hull-based collision (Q1-style).
+   * @returns {boolean} true if brush-based collision is available
+   */
+  get usesBrushTracing() {
+    return this.brushWorldModel !== null && this.brushWorldModel.hasBrushData;
+  }
+
+  /**
+   * Returns clipping hull for this entity (legacy Q1 hull-based path).
    * NOTE: This is not async/wait safe, since it will modify pmove’s boxHull in-place.
    * @returns {Hull} hull
    */
@@ -522,6 +1113,78 @@ export class PhysEnt { // physent_t
     const maxs = this.maxs.copy().subtract(Pmove.PLAYER_MINS);
 
     return this._pmove.boxHull.setSize(mins, maxs);
+  }
+
+  /**
+   * Trace a player-sized box from start to end using the appropriate collision method.
+   * For brush-based entities, uses Q2-style brush tracing.
+   * For hull-based entities, uses Q1-style hull tracing.
+   * @param {Vector} start start position (local to entity)
+   * @param {Vector} end end position (local to entity)
+   * @returns {Trace} trace result (positions local to entity)
+   */
+  tracePlayerMove(start, end) {
+    if (this.usesBrushTracing) {
+      // Submodel entities: brute-force test the submodel's brush range
+      if (this.brushModel !== null) {
+        return BrushTrace.boxTraceModel(
+          this.brushModel,
+          start,
+          end,
+          Pmove.PLAYER_MINS,
+          Pmove.PLAYER_MAXS,
+        );
+      }
+
+      // World entity: walk the BSP tree via leafbrush index
+      return BrushTrace.boxTrace(
+        this.brushWorldModel,
+        this.brushHeadNode,
+        start,
+        end,
+        Pmove.PLAYER_MINS,
+        Pmove.PLAYER_MAXS,
+      );
+    }
+
+    // Legacy hull-based trace
+    const hull = this.getClippingHull();
+    const trace = new Trace();
+    trace.endpos.set(end);
+    hull.check(0.0, 1.0, start, end, trace);
+    return trace;
+  }
+
+  /**
+   * Test if a player-sized box at position is inside solid.
+   * @param {Vector} position position to test (local to entity)
+   * @returns {boolean} true if position is valid (not in solid)
+   */
+  testPlayerPosition(position) {
+    if (this.usesBrushTracing) {
+      // Submodel entities: brute-force test the submodel's brush range
+      if (this.brushModel !== null) {
+        return BrushTrace.testPositionModel(
+          this.brushModel,
+          position,
+          Pmove.PLAYER_MINS,
+          Pmove.PLAYER_MAXS,
+        );
+      }
+
+      // World entity: walk the BSP tree via leafbrush index
+      return BrushTrace.testPosition(
+        this.brushWorldModel,
+        this.brushHeadNode,
+        position,
+        Pmove.PLAYER_MINS,
+        Pmove.PLAYER_MAXS,
+      );
+    }
+
+    // Legacy hull-based point test
+    const hull = this.getClippingHull();
+    return hull.pointContents(position) !== content.CONTENT_SOLID;
   }
 
   // CR: we can add getClippingHullCrouch() for BSP30 hulls here later
@@ -1355,12 +2018,19 @@ export class PmovePlayer { // pmove_t (player state only)
     // horizontal slide can leave us floating above the slope surface.
     // Trace down by STEPSIZE to maintain ground contact and prevent
     // per-frame ground/air oscillation (“stutter”) on downward slopes.
+    //
+    // Only snap to actual slopes (normal[2] < 1.0), NOT flat surfaces.
+    // On stairs, the step surfaces are perfectly horizontal (normal[2] = 1.0);
+    // snapping to them would yank the player down an entire step instantly.
+    // Stair descent is instead handled naturally by the step-up mechanism
+    // below, which steps up, slides forward, then steps down to the next step.
     if (wasOnGround) {
       const stickTarget = this.origin.copy();
       stickTarget[2] -= STEPSIZE;
       const stickTrace = this._pmove.clipPlayerMove(this.origin, stickTarget);
       if (!stickTrace.allsolid && stickTrace.fraction < 1.0
           && stickTrace.plane.normal[2] >= MIN_STEP_NORMAL
+          && stickTrace.plane.normal[2] < 1.0 // slope, not flat stair surface
           && stickTrace.endpos[2] < this.origin[2] - DIST_EPSILON) {
         this.origin.set(stickTrace.endpos);
         if (stickTrace.ent !== null) {
@@ -1391,18 +2061,14 @@ export class PmovePlayer { // pmove_t (player state only)
 
     this._slideMove();
 
-    // Push down after step-up slide. When walking on a descending slope
-    // the floor can be below startOrigin, so we need to trace further
-    // down (startOrigin[2] - STEPSIZE) to find it. During a jump or
-    // fall (not on ground, or upward velocity) the original range
-    // (origin[2] - STEPSIZE) is correct — the extended range would yank
-    // the player back to the ground, cancelling the jump.
+    // Push down after step-up slide (standard Q2 range).
+    // Descending slope stutter is handled by the slope descent fix above
+    // (first-path snap with normal[2] < 1.0 guard), so the step-up path
+    // uses the standard STEPSIZE-below-origin range. The previous extended
+    // range (startOrigin[2] - STEPSIZE) caused instant snapping on stairs
+    // by tracing 2×STEPSIZE (36 units) down, finding the next step below.
     const down = this.origin.copy();
-    if (wasOnGround && startVelocity[2] <= 0) {
-      down[2] = startOrigin[2] - STEPSIZE;
-    } else {
-      down[2] -= STEPSIZE;
-    }
+    down[2] -= STEPSIZE;
 
     const downStepTrace = this._pmove.clipPlayerMove(this.origin, down);
     if (!downStepTrace.allsolid) {
@@ -1792,12 +2458,9 @@ export class Pmove { // pmove_t
    */
   isValidPlayerPosition(position) {
     for (const pe of this.physents) {
-      const hull = pe.getClippingHull();
-      console.assert(hull instanceof Hull, 'physent hull');
-
       const test = position.copy().subtract(pe.origin);
 
-      if (hull.pointContents(test) === content.CONTENT_SOLID) {
+      if (!pe.testPlayerPosition(test)) {
         return false;
       }
     }
@@ -1819,20 +2482,14 @@ export class Pmove { // pmove_t
 
     for (let i = 0; i < this.physents.length; i++) {
       const pe = this.physents[i];
-      const hull = pe.getClippingHull();
-      console.assert(hull instanceof Hull, 'physent hull');
 
       const offset = pe.origin.copy();
 
       const start_l = start.copy().subtract(offset);
       const end_l = end.copy().subtract(offset);
 
-      // fill in a default trace
-      const trace = new Trace();
-      trace.endpos.set(end);
-
-      // trace a line through the apropriate clipping hull
-      hull.check(0.0, 1.0, start_l, end_l, trace);
+      // trace a line through the appropriate collision path (brush or hull)
+      const trace = pe.tracePlayerMove(start_l, end_l);
 
       if (trace.allsolid) {
         trace.startsolid = true;
@@ -1840,8 +2497,14 @@ export class Pmove { // pmove_t
 
       if (trace.startsolid) {
         trace.fraction = 0.0;
+        // When startsolid forces fraction to 0, endpos must match: the
+        // player stays at the start position. Without this, boxTraceModel
+        // (and boxTrace) leave endpos at the trace end (computed when
+        // fraction was still 1.0), causing _stepSlideMove to teleport the
+        // player into wrong locations and eventually producing NaN origins.
+        trace.endpos.set(start_l);
         if (PmovePlayer.DEBUG) {
-          console.warn(`[clipPlayerMove] startsolid at physent ${i} (edictId=${pe.edictId}), start_l=${start_l}, hull=${pe.hulls.length > 0 ? 'BSP' : 'box'}`);
+          console.warn(`[clipPlayerMove] startsolid at physent ${i} (edictId=${pe.edictId}), mode=${pe.usesBrushTracing ? 'brush' : 'hull'}`);
         }
       }
 
@@ -1871,8 +2534,15 @@ export class Pmove { // pmove_t
 
     const pe = new PhysEnt(this);
 
+    // Always set up hulls (hull0 needed for pointContents regardless of mode)
     for (const modelHull of model.hulls) {
       pe.hulls.push(Hull.fromModelHull(modelHull));
+    }
+
+    // Enable brush-based collision when the map has brush data
+    if (model.hasBrushData) {
+      pe.brushWorldModel = model;
+      pe.brushHeadNode = model.hulls[0]?.firstclipnode ?? 0;
     }
 
     this.physents.push(pe);
@@ -1904,7 +2574,19 @@ export class Pmove { // pmove_t
     pe.origin.set(entity.origin);
 
     if (model !== null) {
-      // use cached hulls, generating pm hulls from mod hulls is quite expensive (~3ms per model)
+      // Check if the world model has brush data and this entity should use it
+      const worldPe = this.physents[0];
+      const worldHasBrushData = worldPe?.brushWorldModel?.hasBrushData;
+
+      if (worldHasBrushData && model.numBrushes > 0) {
+        // Brush-based collision: submodels use brute-force brush testing.
+        // Their brushes are NOT in the BSP leaf-brush index (only world
+        // brushes are), so we iterate the submodel's brush range directly.
+        pe.brushWorldModel = worldPe.brushWorldModel;
+        pe.brushModel = model;
+      }
+
+      // Always set up hull data as fallback (and for hull0 pointContents)
       if (this.#modelHullsCache.has(model.name)) {
         pe.hulls = this.#modelHullsCache.get(model.name);
       } else {
@@ -1921,6 +2603,7 @@ export class Pmove { // pmove_t
       pe.maxs.set(entity.maxs);
 
       // do not create hulls here, getClippingHull() applies it at trace time
+      // For non-BSP entities, hull-based collision is always used (BoxHull)
     }
 
     if ('edictId' in entity) {

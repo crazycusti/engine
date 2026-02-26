@@ -7,7 +7,7 @@ import { CRC16CCITT } from '../../CRC.mjs';
 import { CorruptedResourceError } from '../../Errors.mjs';
 import { eventBus, registry } from '../../../registry.mjs';
 import { ModelLoader } from '../ModelLoader.mjs';
-import { BrushModel, Node } from '../BSP.mjs';
+import { Brush, BrushModel, BrushSide, Node } from '../BSP.mjs';
 import { Face, Plane } from '../BaseModel.mjs';
 import { materialFlags, noTextureMaterial, PBRMaterial, QuakeMaterial } from '../../../client/renderer/Materials.mjs';
 import { Quake1Sky, SimpleSkyBox } from '../../../client/renderer/Sky.mjs';
@@ -102,6 +102,7 @@ export class BSP29Loader extends ModelLoader {
     this._loadClipnodes(loadmodel, buffer);
     this._makeHull0(loadmodel);
     this._loadBSPX(loadmodel, buffer);
+    this._loadBrushList(loadmodel, buffer);
     this._loadLightingRGB(loadmodel, buffer);
     this._loadDeluxeMap(loadmodel, buffer);
     this._loadLightgridOctree(loadmodel, buffer);
@@ -1974,6 +1975,23 @@ export class BSP29Loader extends ModelLoader {
       out.faces = loadmodel.faces;
       out.firstface = view.getUint32(fileofs + 56, true);
       out.numfaces = view.getUint32(fileofs + 60, true);
+
+      // Propagate brush data from world model to submodels (shared arrays)
+      if (loadmodel.hasBrushData) {
+        out.brushes = loadmodel.brushes;
+        out.brushsides = loadmodel.brushsides;
+        out.leafbrushes = loadmodel.leafbrushes;
+        out.nodes = loadmodel.nodes;
+        out.planes = loadmodel.planes;
+
+        // Set per-submodel brush range from BRUSHLIST data
+        const brushRange = loadmodel._brushRanges?.get(i);
+        if (brushRange) {
+          out.firstBrush = brushRange.firstBrush;
+          out.numBrushes = brushRange.numBrushes;
+        }
+      }
+
       loadmodel.submodels[i - 1] = out;
       fileofs += 64;
 
@@ -2015,6 +2033,314 @@ export class BSP29Loader extends ModelLoader {
       bspxLumps[name] = { fileofs, filelen };
     }
     loadmodel.bspxlumps = bspxLumps;
+  }
+
+  /**
+   * Load BSPX BRUSHLIST lump if available.
+   * Parses per-model brush data from the BSPX extension, creates Brush and
+   * BrushSide objects, generates the 6 axial planes that the spec says must
+   * be inferred from each brush's mins/maxs, and inserts brushes into BSP
+   * leaf nodes so that BrushTrace can find them during collision testing.
+   * @protected
+   * @param {BrushModel} loadmodel - The world model being loaded
+   * @param {ArrayBuffer} buf - The BSP file buffer
+   */
+  _loadBrushList(loadmodel, buf) {
+    if (!loadmodel.bspxlumps || !loadmodel.bspxlumps['BRUSHLIST']) {
+      return;
+    }
+
+    const { fileofs, filelen } = loadmodel.bspxlumps['BRUSHLIST'];
+
+    if (filelen === 0) {
+      return;
+    }
+
+    const view = new DataView(buf);
+    let offset = fileofs;
+    const endOffset = fileofs + filelen;
+
+    /** @type {Brush[]} all brushes across all models */
+    const allBrushes = [];
+    /** @type {BrushSide[]} all brush sides across all models */
+    const allBrushSides = [];
+    /** @type {Plane[]} planes generated for brush collision (separate from BSP planes) */
+    const allBrushPlanes = [];
+
+    /**
+     * Create a Plane with type and signbits set.
+     * type: 0=X, 1=Y, 2=Z for axial, 3/4/5 for non-axial dominant axis.
+     * @param {Vector} normal plane normal
+     * @param {number} dist plane distance
+     * @returns {Plane} plane with type and signbits computed
+     */
+    const makePlane = (normal, dist) => {
+      const p = new Plane(normal, dist);
+      const ax = Math.abs(normal[0]);
+      const ay = Math.abs(normal[1]);
+      const az = Math.abs(normal[2]);
+      if (ax === 1 && ay === 0 && az === 0) {
+        p.type = 0;
+      } else if (ax === 0 && ay === 1 && az === 0) {
+        p.type = 1;
+      } else if (ax === 0 && ay === 0 && az === 1) {
+        p.type = 2;
+      } else if (ax >= ay && ax >= az) {
+        p.type = 3;
+      } else if (ay >= ax && ay >= az) {
+        p.type = 4;
+      } else {
+        p.type = 5;
+      }
+      if (normal[0] < 0) { p.signbits |= 1; }
+      if (normal[1] < 0) { p.signbits |= 2; }
+      if (normal[2] < 0) { p.signbits |= 4; }
+      return p;
+    };
+
+    // Track per-model brush ranges for submodel assignment
+    /** @type {Map<number, { firstBrush: number, numBrushes: number }>} */
+    const modelBrushRanges = new Map();
+
+    while (offset + 16 <= endOffset) {
+      const ver = view.getUint32(offset, true);
+      offset += 4;
+
+      if (ver !== 1) {
+        Con.Print(`BSP29Loader: unsupported BRUSHLIST version ${ver}\n`);
+        return;
+      }
+
+      const modelnum = view.getUint32(offset, true);
+      offset += 4;
+      const numbrushes = view.getUint32(offset, true);
+      offset += 4;
+      const numplanes = view.getUint32(offset, true);
+      offset += 4;
+
+      const firstBrush = allBrushes.length;
+
+      let planesRead = 0;
+
+      for (let b = 0; b < numbrushes; b++) {
+        if (offset + 28 > endOffset) {
+          Con.Print('BSP29Loader: BRUSHLIST lump truncated at brush header\n');
+          return;
+        }
+
+        // Parse brush header: vec3 mins (12) + vec3 maxs (12) + short contents (2) + ushort numplanes (2) = 28 bytes
+        // Actually: vec_t mins is 3 floats, vec_t maxs is 3 floats
+        const bmins = new Vector(
+          view.getFloat32(offset, true),
+          view.getFloat32(offset + 4, true),
+          view.getFloat32(offset + 8, true),
+        );
+        offset += 12;
+
+        const bmaxs = new Vector(
+          view.getFloat32(offset, true),
+          view.getFloat32(offset + 4, true),
+          view.getFloat32(offset + 8, true),
+        );
+        offset += 12;
+
+        const brushContents = view.getInt16(offset, true);
+        offset += 2;
+        const brushNumPlanes = view.getUint16(offset, true);
+        offset += 2;
+
+        const firstside = allBrushSides.length;
+
+        // Generate the 6 axial planes inferred from mins/maxs.
+        // Per the BSPX spec: "Axial planes MUST NOT be written - they will be
+        // inferred from the brush's mins+maxs."
+        // +X, -X, +Y, -Y, +Z, -Z
+        /** @type {[Vector, number][]} */
+        const axialDefs = [
+          [new Vector(1, 0, 0), bmaxs[0]],
+          [new Vector(-1, 0, 0), -bmins[0]],
+          [new Vector(0, 1, 0), bmaxs[1]],
+          [new Vector(0, -1, 0), -bmins[1]],
+          [new Vector(0, 0, 1), bmaxs[2]],
+          [new Vector(0, 0, -1), -bmins[2]],
+        ];
+
+        for (const [normal, dist] of axialDefs) {
+          const planeIdx = allBrushPlanes.length;
+          allBrushPlanes.push(makePlane(normal, dist));
+
+          const side = new BrushSide(loadmodel);
+          side.planenum = planeIdx;
+          allBrushSides.push(side);
+        }
+
+        // Parse the non-axial planes from the lump
+        if (offset + brushNumPlanes * 16 > endOffset) {
+          Con.Print('BSP29Loader: BRUSHLIST lump truncated at brush planes\n');
+          return;
+        }
+
+        for (let p = 0; p < brushNumPlanes; p++) {
+          const normal = new Vector(
+            view.getFloat32(offset, true),
+            view.getFloat32(offset + 4, true),
+            view.getFloat32(offset + 8, true),
+          );
+          const dist = view.getFloat32(offset + 12, true);
+          offset += 16;
+
+          const planeIdx = allBrushPlanes.length;
+          allBrushPlanes.push(makePlane(normal, dist));
+
+          const side = new BrushSide(loadmodel);
+          side.planenum = planeIdx;
+          allBrushSides.push(side);
+        }
+
+        planesRead += brushNumPlanes;
+
+        const brush = new Brush(loadmodel);
+        brush.firstside = firstside;
+        brush.numsides = 6 + brushNumPlanes; // axial + explicit
+        brush.contents = brushContents;
+        brush.mins = bmins;
+        brush.maxs = bmaxs;
+        allBrushes.push(brush);
+      }
+
+      if (planesRead !== numplanes) {
+        Con.Print(`BSP29Loader: BRUSHLIST plane count mismatch for model ${modelnum}: expected ${numplanes}, got ${planesRead}\n`);
+      }
+
+      modelBrushRanges.set(modelnum, { firstBrush, numBrushes: numbrushes });
+    }
+
+    if (allBrushes.length === 0) {
+      return;
+    }
+
+    // Assign brush data to the world model
+    loadmodel.brushes = allBrushes;
+    loadmodel.brushsides = allBrushSides;
+
+    // Use allBrushPlanes as a separate plane array for brush collision.
+    // These are stored alongside BSP planes but indexed separately by brushsides.
+    // We store them on the world model where BrushTrace can reference them.
+    loadmodel.planes = loadmodel.planes.concat(allBrushPlanes);
+
+    // Remap brushside plane indices to account for the offset into the combined array
+    const planeOffset = loadmodel.planes.length - allBrushPlanes.length;
+    for (const side of allBrushSides) {
+      side.planenum += planeOffset;
+    }
+
+    // Insert brushes into BSP leaf nodes by walking the node tree.
+    // Each model's brushes are only inserted under that model's headnode,
+    // so that world traces don't collide with submodel brushes (func_plat,
+    // trigger_*, func_door, etc.) and vice versa.
+
+    /** @type {Map<Node, number>} leaf-to-index lookup for fast insertion */
+    const leafIndexMap = new Map();
+    for (let i = 0; i < loadmodel.leafs.length; i++) {
+      leafIndexMap.set(loadmodel.leafs[i], i);
+    }
+
+    /** @type {number[][]} per-leaf brush index lists */
+    const leafBrushLists = new Array(loadmodel.leafs.length);
+    for (let i = 0; i < loadmodel.leafs.length; i++) {
+      leafBrushLists[i] = [];
+    }
+
+    /**
+     * Recursively insert a brush into BSP leaf nodes whose bounds overlap.
+     * @param {Node} node - current BSP node
+     * @param {number} brushIdx - index into allBrushes
+     * @param {Brush} brush - the brush being inserted
+     */
+    const insertBrushRecursive = (node, brushIdx, brush) => {
+      // Leaf node: add the brush here
+      if (node.contents < 0) {
+        const leafIndex = leafIndexMap.get(node);
+        if (leafIndex !== undefined) {
+          leafBrushLists[leafIndex].push(brushIdx);
+        }
+        return;
+      }
+
+      // Internal node: test brush AABB against splitting plane
+      const plane = node.plane;
+      let d1, d2;
+
+      if (plane.type < 3) {
+        // Axial plane: fast path
+        d1 = brush.maxs[plane.type] - plane.dist;
+        d2 = brush.mins[plane.type] - plane.dist;
+      } else {
+        // General plane: compute support points using worst-case AABB corners
+        const nx = plane.normal[0];
+        const ny = plane.normal[1];
+        const nz = plane.normal[2];
+
+        d1 = nx * (nx >= 0 ? brush.maxs[0] : brush.mins[0])
+           + ny * (ny >= 0 ? brush.maxs[1] : brush.mins[1])
+           + nz * (nz >= 0 ? brush.maxs[2] : brush.mins[2])
+           - plane.dist;
+        d2 = nx * (nx >= 0 ? brush.mins[0] : brush.maxs[0])
+           + ny * (ny >= 0 ? brush.mins[1] : brush.maxs[1])
+           + nz * (nz >= 0 ? brush.mins[2] : brush.maxs[2])
+           - plane.dist;
+      }
+
+      if (d1 >= 0) {
+        insertBrushRecursive(node.children[0], brushIdx, brush);
+      }
+      if (d2 < 0) {
+        insertBrushRecursive(node.children[1], brushIdx, brush);
+      }
+    };
+
+    // Only insert world (model 0) brushes into leaf nodes.
+    // Submodel brushes must NOT be inserted into the BSP leaf-brush index
+    // because Q1 BSP leaf nodes are shared between the world tree and
+    // submodel subtrees — inserting submodel brushes would make them
+    // appear in world traces, causing phantom collisions with triggers,
+    // removed entities (func_fog), etc.
+    // Submodel collision is handled by brute-force testing against the
+    // submodel's brush range (see BrushTrace.boxTraceModel).
+    const worldRange = modelBrushRanges.get(0);
+    if (worldRange) {
+      const rootNode = loadmodel.nodes[0];
+      if (rootNode) {
+        for (let brushIdx = worldRange.firstBrush; brushIdx < worldRange.firstBrush + worldRange.numBrushes; brushIdx++) {
+          insertBrushRecursive(rootNode, brushIdx, allBrushes[brushIdx]);
+        }
+      }
+    }
+
+    // Store brush ranges on the world model for submodel propagation
+    loadmodel._brushRanges = modelBrushRanges;
+    if (worldRange) {
+      loadmodel.firstBrush = worldRange.firstBrush;
+      loadmodel.numBrushes = worldRange.numBrushes;
+    }
+
+    // Build the flat leafbrushes array from per-leaf lists
+    /** @type {number[]} */
+    const leafbrushes = [];
+
+    for (let i = 0; i < loadmodel.leafs.length; i++) {
+      const leaf = loadmodel.leafs[i];
+      const list = leafBrushLists[i];
+      leaf.firstleafbrush = leafbrushes.length;
+      leaf.numleafbrushes = list.length;
+      for (const brushIdx of list) {
+        leafbrushes.push(brushIdx);
+      }
+    }
+
+    loadmodel.leafbrushes = leafbrushes;
+
+    Con.DPrint(`BSP29Loader: loaded BRUSHLIST with ${allBrushes.length} brushes, ${allBrushSides.length} sides, ${leafbrushes.length} leaf-brush refs\n`);
   }
 
   /**

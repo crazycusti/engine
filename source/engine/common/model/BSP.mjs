@@ -338,6 +338,12 @@ export class Brush extends BrushModelComponent {
   numsides = 0;
   /** @type {number} contents flags, see Def.contents */
   contents = 0;
+  /** @type {Vector|null} axis-aligned bounding box minimum */
+  mins = null;
+  /** @type {Vector|null} axis-aligned bounding box maximum */
+  maxs = null;
+  /** @type {number} BrushTrace dedup counter to avoid testing the same brush twice */
+  _brushTraceCheck = 0;
 
   *sidesIter() {
     for (let i = 0; i < this.numsides; i++) {
@@ -479,6 +485,25 @@ export class BrushModel extends BaseModel {
 
   /** @type {Brush[]|null} Brushes (optional) */
   brushes = null;
+
+  /** @type {number} First brush index in the shared brushes array for this model */
+  firstBrush = 0;
+
+  /** @type {number} Number of brushes belonging to this model */
+  numBrushes = 0;
+
+  /**
+   * Whether this model has complete brush-based collision data.
+   * When true, Q2-style brush tracing can be used instead of Q1-style hull tracing.
+   * Requires brushes, brushsides, leafbrushes arrays plus nodes with leaf brush references.
+   * @returns {boolean} true if brush data is available for Q2-style tracing
+   */
+  get hasBrushData() {
+    return this.brushes !== null
+      && this.brushsides !== null
+      && this.leafbrushes !== null
+      && this.brushes.length > 0;
+  }
 
   type = 0; // Mod.type.brush;
 
