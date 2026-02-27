@@ -20,6 +20,7 @@ Added features include but not limited to:
   * `LIGHTINGDIR`: used for per-pixel lighting on supported materials.
   * `RGBLIGHTING`: used for colorful lightmaps.
   * `LIGHTGRID_OCTREE`: used for smoothly lighting dynamically moving objects.
+  * `BRUSHLIST`: used for non-hull collision detection using Quake 2 based Pmove code path
 * Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
 * BSP2 format support for large maps.
 * Static skybox support, like in Half-Life 1 and Quake 2.

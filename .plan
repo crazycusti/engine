@@ -156,6 +156,13 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-02-26
+
+- Pmove implementation, what a mess
+  - chased down a few NaN issues within the client-side prediction code
+  - found a few more edge cases that needed to be ironed out
+  - we got BSPX BRUSHLIST support
+
 ### 2026-02-22
 
 - Pmove implementation, what a mess
