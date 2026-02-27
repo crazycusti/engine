@@ -314,6 +314,9 @@ export class Hull { // hull_t
     return num;
   }
 
+  /** @type {Vector[]} */
+  static _midPool = Array.from({ length: 64 }, () => new Vector());
+
   /**
    * Check against hull.
    * @param {number} p1f fraction at p1 (usually 0.0)
@@ -322,9 +325,10 @@ export class Hull { // hull_t
    * @param {Vector} p2 end point
    * @param {Trace} trace object to store trace results
    * @param {number} num starting clipnode number (typically hull.firstclipnode)
+   * @param {number} depth recursion depth
    * @returns {boolean} true means going down, false means going up
    */
-  check(p1f, p2f, p1, p2, trace, num = this.firstClipNode) {
+  check(p1f, p2f, p1, p2, trace, num = this.firstClipNode, depth = 0) {
     // check for empty
     if (num < 0) {
       if (num !== content.CONTENT_SOLID) {
@@ -350,28 +354,34 @@ export class Hull { // hull_t
 
     // checking children on side 1
     if (t1 >= 0.0 && t2 >= 0.0) {
-      return this.check(p1f, p2f, p1, p2, trace, node.children[0]);
+      return this.check(p1f, p2f, p1, p2, trace, node.children[0], depth + 1);
     }
 
     // checking children on side 2
     if (t1 < 0.0 && t2 < 0.0) {
-      return this.check(p1f, p2f, p1, p2, trace, node.children[1]);
+      return this.check(p1f, p2f, p1, p2, trace, node.children[1], depth + 1);
     }
 
     // put the crosspoint DIST_EPSILON pixels on the near side
     let frac = Math.max(0.0, Math.min(1.0, (t1 + (t1 < 0.0 ? DIST_EPSILON : -DIST_EPSILON)) / (t1 - t2))); // epsilon value of 0.03125 = 1/32
     let midf = p1f + (p2f - p1f) * frac;
-    const mid = new Vector(p1[0] + frac * (p2[0] - p1[0]), p1[1] + frac * (p2[1] - p1[1]), p1[2] + frac * (p2[2] - p1[2]));
+    if (depth >= Hull._midPool.length) {
+      Hull._midPool.push(new Vector());
+    }
+    const mid = Hull._midPool[depth];
+    mid[0] = p1[0] + frac * (p2[0] - p1[0]);
+    mid[1] = p1[1] + frac * (p2[1] - p1[1]);
+    mid[2] = p1[2] + frac * (p2[2] - p1[2]);
     const side = t1 < 0.0 ? 1 : 0;
 
     // move up to the node
-    if (!this.check(p1f, midf, p1, mid, trace, node.children[side])) {
+    if (!this.check(p1f, midf, p1, mid, trace, node.children[side], depth + 1)) {
       return false;
     }
 
     // go past the node
     if (this.pointContents(mid, node.children[1 - side]) !== content.CONTENT_SOLID) {
-      return this.check(midf, p2f, mid, p2, trace, node.children[1 - side]);
+      return this.check(midf, p2f, mid, p2, trace, node.children[1 - side], depth + 1);
     }
 
     // never got out of the solid area
@@ -381,10 +391,10 @@ export class Hull { // hull_t
 
     // the other side of the node is solid, this is the impact point
     if (side === 0) {
-      trace.plane.normal = plane.normal.copy();
+      trace.plane.normal.set(plane.normal);
       trace.plane.dist = plane.dist;
     } else {
-      trace.plane.normal = plane.normal.copy().multiply(-1);
+      trace.plane.normal.set(plane.normal).multiply(-1);
       trace.plane.dist = -plane.dist;
     }
 
@@ -393,7 +403,7 @@ export class Hull { // hull_t
       frac -= 0.1;
       if (frac < 0.0) {
         trace.fraction = midf;
-        trace.endpos = mid.copy();
+        trace.endpos.set(mid);
         console.warn('fraction < 0.0', frac, trace);
         return false;
       }
@@ -404,7 +414,7 @@ export class Hull { // hull_t
     }
 
     trace.fraction = midf;
-    trace.endpos = mid.copy();
+    trace.endpos.set(mid);
 
     return false;
   }
@@ -863,6 +873,11 @@ export class BrushTrace {
     return true;
   }
 
+  /** @type {Vector[]} */
+  static _midPool = Array.from({ length: 64 }, () => new Vector());
+  /** @type {Vector[]} */
+  static _mid2Pool = Array.from({ length: 64 }, () => new Vector());
+
   /**
    * Recursively traverse the BSP node tree, expanding by trace extents.
    * At leaf nodes, test all brushes. Equivalent to Q2’s CM_RecursiveHullCheck.
@@ -872,8 +887,9 @@ export class BrushTrace {
    * @param {number} p2f - fraction at p2
    * @param {Vector} p1 - start of segment
    * @param {Vector} p2 - end of segment
+   * @param {number} depth - recursion depth
    */
-  static _recursiveHullCheck(ctx, node, p1f, p2f, p1, p2) {
+  static _recursiveHullCheck(ctx, node, p1f, p2f, p1, p2, depth = 0) {
     if (ctx.trace.fraction <= p1f) {
       return; // already hit something nearer
     }
@@ -906,13 +922,13 @@ export class BrushTrace {
 
     // Both on front side
     if (t1 >= offset && t2 >= offset) {
-      BrushTrace._recursiveHullCheck(ctx, node.children[0], p1f, p2f, p1, p2);
+      BrushTrace._recursiveHullCheck(ctx, node.children[0], p1f, p2f, p1, p2, depth + 1);
       return;
     }
 
     // Both on back side
     if (t1 < -offset && t2 < -offset) {
-      BrushTrace._recursiveHullCheck(ctx, node.children[1], p1f, p2f, p1, p2);
+      BrushTrace._recursiveHullCheck(ctx, node.children[1], p1f, p2f, p1, p2, depth + 1);
       return;
     }
 
@@ -935,25 +951,28 @@ export class BrushTrace {
       frac2 = 0;
     }
 
+    if (depth >= BrushTrace._midPool.length) {
+      BrushTrace._midPool.push(new Vector());
+      BrushTrace._mid2Pool.push(new Vector());
+    }
+
     // Move up to the node
     const midf = p1f + (p2f - p1f) * frac;
-    const mid = new Vector(
-      p1[0] + frac * (p2[0] - p1[0]),
-      p1[1] + frac * (p2[1] - p1[1]),
-      p1[2] + frac * (p2[2] - p1[2]),
-    );
+    const mid = BrushTrace._midPool[depth];
+    mid[0] = p1[0] + frac * (p2[0] - p1[0]);
+    mid[1] = p1[1] + frac * (p2[1] - p1[1]);
+    mid[2] = p1[2] + frac * (p2[2] - p1[2]);
 
-    BrushTrace._recursiveHullCheck(ctx, node.children[side], p1f, midf, p1, mid);
+    BrushTrace._recursiveHullCheck(ctx, node.children[side], p1f, midf, p1, mid, depth + 1);
 
     // Go past the node
     const midf2 = p1f + (p2f - p1f) * frac2;
-    const mid2 = new Vector(
-      p1[0] + frac2 * (p2[0] - p1[0]),
-      p1[1] + frac2 * (p2[1] - p1[1]),
-      p1[2] + frac2 * (p2[2] - p1[2]),
-    );
+    const mid2 = BrushTrace._mid2Pool[depth];
+    mid2[0] = p1[0] + frac2 * (p2[0] - p1[0]);
+    mid2[1] = p1[1] + frac2 * (p2[1] - p1[1]);
+    mid2[2] = p1[2] + frac2 * (p2[2] - p1[2]);
 
-    BrushTrace._recursiveHullCheck(ctx, node.children[side ^ 1], midf2, p2f, mid2, p2);
+    BrushTrace._recursiveHullCheck(ctx, node.children[side ^ 1], midf2, p2f, mid2, p2, depth + 1);
   }
 
   /**
@@ -1177,6 +1196,9 @@ export class PhysEnt { // physent_t
     return this.brushWorldModel !== null && this.brushWorldModel.hasBrushData;
   }
 
+  #hullMinsScratch = new Vector();
+  #hullMaxsScratch = new Vector();
+
   /**
    * Returns clipping hull for this entity (legacy Q1 hull-based path).
    * NOTE: This is not async/wait safe, since it will modify pmove’s boxHull in-place.
@@ -1187,8 +1209,8 @@ export class PhysEnt { // physent_t
       return this.hulls[1]; // player hull
     }
 
-    const mins = this.mins.copy().subtract(Pmove.PLAYER_MAXS);
-    const maxs = this.maxs.copy().subtract(Pmove.PLAYER_MINS);
+    const mins = this.#hullMinsScratch.set(this.mins).subtract(Pmove.PLAYER_MAXS);
+    const maxs = this.#hullMaxsScratch.set(this.maxs).subtract(Pmove.PLAYER_MINS);
 
     return this._pmove.boxHull.setSize(mins, maxs);
   }
@@ -2014,6 +2036,14 @@ export class PmovePlayer { // pmove_t (player state only)
   // Core slide move (Q2: PM_StepSlideMove_ – inner loop)
   // =========================================================================
 
+  // --- Scratch Vectors for _slideMove ---
+  #slideOriginalVelocity = new Vector();
+  #slidePrimalVelocity = new Vector();
+  #slideEnd = new Vector();
+  #slideClipVelocity = new Vector();
+  #slideCreaseDir = new Vector();
+  #slidePlanes = Array.from({ length: MAX_CLIP_PLANES }, () => new Vector());
+
   /**
    * The basic solid body movement clip that slides along multiple planes.
    * This is the inner loop, it does NOT attempt step-up.
@@ -2023,19 +2053,21 @@ export class PmovePlayer { // pmove_t (player state only)
     const _dbgStartOrigin = _dbg ? this.origin.copy() : null;
     const _dbgStartVelocity = _dbg ? this.velocity.copy() : null;
     const numbumps = 4;
-    const primalVelocity = this.velocity.copy();
+    const primalVelocity = this.#slidePrimalVelocity.set(this.velocity);
     // Q1-style: snapshot velocity at the last point of actual movement.
     // The clip loop always clips from this stable reference, not from an
     // already-clipped result. This avoids precision drift when re-clipping
     // against the same BSP hull plane with the 1.01 overbounce factor.
-    let originalVelocity = this.velocity.copy();
+    const originalVelocity = this.#slideOriginalVelocity.set(this.velocity);
     let numplanes = 0;
     /** @type {Vector[]} */
-    const planes = [];
+    const planes = this.#slidePlanes;
     let timeLeft = this.frametime;
+    const end = this.#slideEnd;
+    const clipVelocity = this.#slideClipVelocity;
 
     for (let bumpcount = 0; bumpcount < numbumps; bumpcount++) {
-      const end = this.velocity.copy().multiply(timeLeft).add(this.origin);
+      end.set(this.velocity).multiply(timeLeft).add(this.origin);
 
       const trace = this._pmove.clipPlayerMove(this.origin, end);
 
@@ -2054,7 +2086,7 @@ export class PmovePlayer { // pmove_t (player state only)
       if (trace.fraction > 0) {
         // actually moved some distance
         this.origin.set(trace.endpos);
-        originalVelocity = this.velocity.copy();
+        originalVelocity.set(this.velocity);
         numplanes = 0;
       }
 
@@ -2100,7 +2132,7 @@ export class PmovePlayer { // pmove_t (player state only)
         continue;
       }
 
-      planes[numplanes] = traceNormal.copy();
+      planes[numplanes].set(traceNormal);
       numplanes++;
 
       // Clip originalVelocity (Q1-style) so each plane attempt starts
@@ -2108,7 +2140,6 @@ export class PmovePlayer { // pmove_t (player state only)
       // but Q1’s BSP hull traces need the original reference to avoid
       // precision drift from re-clipping with the overbounce factor.
       let i, j;
-      const clipVelocity = new Vector();
       for (i = 0; i < numplanes; i++) {
         this._clipVelocity(originalVelocity, planes[i], clipVelocity, this._pmove.configuration.overbounce);
 
@@ -2140,9 +2171,9 @@ export class PmovePlayer { // pmove_t (player state only)
           break;
         }
 
-        const dir = planes[0].cross(planes[1]);
+        const dir = this.#slideCreaseDir.set(planes[0]).cross(planes[1]);
         const d = dir.dot(this.velocity);
-        this.velocity.set(dir.copy().multiply(d));
+        this.velocity.set(dir).multiply(d);
         if (_dbg) {
           console.log(`[_slideMove]   crease vel=${this.velocity}`);
         }
@@ -2172,14 +2203,24 @@ export class PmovePlayer { // pmove_t (player state only)
   // Step + slide move (Q2: PM_StepSlideMove – outer wrapper)
   // =========================================================================
 
+  // --- Scratch Vectors for _stepSlideMove ---
+  #stepStartOrigin = new Vector();
+  #stepStartVelocity = new Vector();
+  #stepDownOrigin = new Vector();
+  #stepDownVelocity = new Vector();
+  #stepUpOrigin = new Vector();
+  #stepStickTarget = new Vector();
+  #stepUp = new Vector();
+  #stepDown = new Vector();
+
   /**
    * Each intersection will try to step over the obstruction instead of
    * sliding along it. This calls _slideMove twice: once without step-up,
    * once with step-up, and picks whichever went farther horizontally.
    */
   _stepSlideMove() { // Q2: PM_StepSlideMove
-    const startOrigin = this.origin.copy();
-    const startVelocity = this.velocity.copy();
+    const startOrigin = this.#stepStartOrigin.set(this.origin);
+    const startVelocity = this.#stepStartVelocity.set(this.velocity);
     const wasOnGround = this.onground !== null;
 
     // try sliding at current height first
@@ -2196,7 +2237,7 @@ export class PmovePlayer { // pmove_t (player state only)
     // Stair descent is instead handled naturally by the step-up mechanism
     // below, which steps up, slides forward, then steps down to the next step.
     if (wasOnGround) {
-      const stickTarget = this.origin.copy();
+      const stickTarget = this.#stepStickTarget.set(this.origin);
       stickTarget[2] -= STEPSIZE;
       const stickTrace = this._pmove.clipPlayerMove(this.origin, stickTarget);
       if (!stickTrace.allsolid && stickTrace.fraction < 1.0
@@ -2210,11 +2251,11 @@ export class PmovePlayer { // pmove_t (player state only)
       }
     }
 
-    const downOrigin = this.origin.copy();
-    const downVelocity = this.velocity.copy();
+    const downOrigin = this.#stepDownOrigin.set(this.origin);
+    const downVelocity = this.#stepDownVelocity.set(this.velocity);
 
     // try stepping up
-    const up = startOrigin.copy();
+    const up = this.#stepUp.set(startOrigin);
     up[2] += STEPSIZE;
 
     const upTrace = this._pmove.clipPlayerMove(up, up);
@@ -2238,7 +2279,7 @@ export class PmovePlayer { // pmove_t (player state only)
     // uses the standard STEPSIZE-below-origin range. The previous extended
     // range (startOrigin[2] - STEPSIZE) caused instant snapping on stairs
     // by tracing 2×STEPSIZE (36 units) down, finding the next step below.
-    const down = this.origin.copy();
+    const down = this.#stepDown.set(this.origin);
     down[2] -= STEPSIZE;
 
     const downStepTrace = this._pmove.clipPlayerMove(this.origin, down);
@@ -2250,7 +2291,7 @@ export class PmovePlayer { // pmove_t (player state only)
       this.touchindices.push(downStepTrace.ent);
     }
 
-    const upOrigin = this.origin.copy();
+    const upOrigin = this.#stepUpOrigin.set(this.origin);
 
     // decide which one went farther (2D distance)
     const downDist =
@@ -2623,6 +2664,8 @@ export class Pmove { // pmove_t
     return hull.pointContents(point);
   }
 
+  #validPosTestScratch = new Vector();
+
   /**
    * @param {Vector} position player’s origin
    * @returns {boolean} Returns false if the given player position is not valid (in solid)
@@ -2630,7 +2673,7 @@ export class Pmove { // pmove_t
   isValidPlayerPosition(position) {
     for (let i = 0; i < this.physents.length; i++) {
       const pe = this.physents[i];
-      const test = position.copy().subtract(pe.origin);
+      const test = this.#validPosTestScratch.set(position).subtract(pe.origin);
 
       if (!pe.testPlayerPosition(test)) {
         if (PmovePlayer.DEBUG) {
@@ -2650,6 +2693,10 @@ export class Pmove { // pmove_t
 
     return true;
   }
+
+  #clipOffsetScratch = new Vector();
+  #clipStartLScratch = new Vector();
+  #clipEndLScratch = new Vector();
 
   /**
    * Attempts to move the player from start to end.
@@ -2673,10 +2720,10 @@ export class Pmove { // pmove_t
       console.assert(!Number.isNaN(pe.origin[1]), 'NaN origin y');
       console.assert(!Number.isNaN(pe.origin[2]), 'NaN origin z');
 
-      const offset = pe.origin.copy();
+      const offset = this.#clipOffsetScratch.set(pe.origin);
 
-      const start_l = start.copy().subtract(offset);
-      const end_l = end.copy().subtract(offset);
+      const start_l = this.#clipStartLScratch.set(start).subtract(offset);
+      const end_l = this.#clipEndLScratch.set(end).subtract(offset);
 
       // trace a line through the appropriate collision path (brush or hull)
       const trace = pe.tracePlayerMove(start_l, end_l);
