@@ -549,6 +549,11 @@ export default class CL {
         continue;
       }
 
+      // nothing to predict here, skip (otherwise Pmove will hail with NaNs and Infinities)
+      if (ent.origin.isInfinite() || ent.angles.isInfinite()) {
+        continue;
+      }
+
       const s = ent.solid;
       if (s !== solid.SOLID_BSP && s !== solid.SOLID_BBOX && s !== solid.SOLID_SLIDEBOX) {
         continue;
