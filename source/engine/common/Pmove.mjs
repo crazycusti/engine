@@ -2255,14 +2255,23 @@ export class PmovePlayer { // pmove_t (player state only)
     const downVelocity = this.#stepDownVelocity.set(this.velocity);
 
     // try stepping up
+    // Trace the actual upward movement rather than point-testing at the
+    // full STEPSIZE height. In hallways with a low ceiling, the position
+    // at startOrigin + STEPSIZE may be in solid even though the player
+    // has enough room to step up onto the next stair step. Tracing the
+    // upward movement lets us use however far we can actually reach —
+    // partial step-ups still clear shorter stairs.
     const up = this.#stepUp.set(startOrigin);
     up[2] += STEPSIZE;
 
-    const upTrace = this._pmove.clipPlayerMove(up, up);
+    const upTrace = this._pmove.clipPlayerMove(startOrigin, up);
     if (upTrace.allsolid) {
-      return; // cannot step up
+      return; // cannot step up at all (starting position is in solid)
     }
-    // Record touches from step-up check
+    // Use however far up we could actually move
+    up.set(upTrace.endpos);
+
+    // Record touches from step-up check (e.g. ceiling)
     if (upTrace.ent !== null) {
       this.touchindices.push(upTrace.ent);
     }
@@ -2273,14 +2282,25 @@ export class PmovePlayer { // pmove_t (player state only)
 
     this._slideMove();
 
-    // Push down after step-up slide (standard Q2 range).
+    // Push down after step-up slide.
     // Descending slope stutter is handled by the slope descent fix above
     // (first-path snap with normal[2] < 1.0 guard), so the step-up path
     // uses the standard STEPSIZE-below-origin range. The previous extended
     // range (startOrigin[2] - STEPSIZE) caused instant snapping on stairs
     // by tracing 2×STEPSIZE (36 units) down, finding the next step below.
+    //
+    // Floor limit: when a ceiling forced a partial step-up, the step-down
+    // must not go below startOrigin. Without this, a partial step-up of N
+    // followed by a full STEPSIZE step-down could descend (STEPSIZE - N)
+    // units below the starting position, potentially snapping to a lower
+    // step or a pit. With the full STEPSIZE step-up this floor is a no-op
+    // since STEPSIZE - STEPSIZE = 0.
     const down = this.#stepDown.set(this.origin);
     down[2] -= STEPSIZE;
+    const stepDownFloor = startOrigin[2] - DIST_EPSILON;
+    if (down[2] < stepDownFloor) {
+      down[2] = stepDownFloor;
+    }
 
     const downStepTrace = this._pmove.clipPlayerMove(this.origin, down);
     if (!downStepTrace.allsolid) {
