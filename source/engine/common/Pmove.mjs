@@ -516,6 +516,9 @@ export class BrushTrace {
   static boxTrace(worldModel, headNode, start, end, mins, maxs) {
     const trace = new Trace();
 
+    console.assert(!Number.isNaN(start[0]) && !Number.isNaN(start[1]) && !Number.isNaN(start[2]), 'NaN start');
+    console.assert(!Number.isNaN(end[0]) && !Number.isNaN(end[1]) && !Number.isNaN(end[2]), 'NaN end');
+
     if (!worldModel.nodes || worldModel.nodes.length === 0) {
       return trace;
     }
@@ -544,7 +547,12 @@ export class BrushTrace {
     if (trace.fraction === 1.0) {
       trace.endpos.set(end);
     } else {
+      console.assert(!Number.isNaN(trace.fraction), 'NaN fraction');
+
       for (let i = 0; i < 3; i++) {
+        console.assert(!Number.isNaN(start[i]), 'NaN start');
+        console.assert(!Number.isNaN(end[i]), 'NaN end');
+
         trace.endpos[i] = start[i] + trace.fraction * (end[i] - start[i]);
       }
     }
@@ -569,23 +577,89 @@ export class BrushTrace {
 
     const checkCount = ++BrushTrace._checkCount;
 
-    // Find the leaf containing the position
-    let node = worldModel.nodes[headNode];
+    const isPoint = (mins[0] === 0 && mins[1] === 0 && mins[2] === 0
+                  && maxs[0] === 0 && maxs[1] === 0 && maxs[2] === 0);
+    const extents = isPoint ? new Vector() : new Vector(
+      -mins[0] > maxs[0] ? -mins[0] : maxs[0],
+      -mins[1] > maxs[1] ? -mins[1] : maxs[1],
+      -mins[2] > maxs[2] ? -mins[2] : maxs[2],
+    );
 
-    while (node && node.contents >= 0) {
-      const plane = node.plane;
-      const d = (plane.type < 3)
-        ? position[plane.type] - plane.dist
-        : plane.normal.dot(position) - plane.dist;
-      node = d >= 0 ? node.children[0] : node.children[1];
-    }
-
-    if (!node) {
+    const rootNode = worldModel.nodes[headNode];
+    if (!rootNode) {
       return true;
     }
 
-    // Check all brushes in this leaf
-    return !BrushTrace._testLeafSolid(worldModel, node, position, mins, maxs, checkCount);
+    // Walk the BSP tree recursively, expanding by box extents at each
+    // splitting plane so we visit ALL leaves the player box overlaps.
+    // The old code only walked to a single leaf using the center point,
+    // which missed brushes in adjacent leaves that the box extends into.
+    return !BrushTrace._testPositionRecursive(
+      worldModel, rootNode, position, mins, maxs, extents, isPoint, checkCount,
+    );
+  }
+
+  /**
+   * Recursively walk the BSP tree for position testing, expanding by box
+   * extents to visit all leaves the player box overlaps.
+   * @param {BrushModel} worldModel - world model
+   * @param {import('./model/BSP.mjs').Node} node - current node
+   * @param {Vector} position - test position
+   * @param {Vector} mins - box mins
+   * @param {Vector} maxs - box maxs
+   * @param {Vector} extents - absolute half-extents
+   * @param {boolean} isPoint - true if point trace
+   * @param {number} checkCount - dedup counter
+   * @returns {boolean} true if solid overlap found
+   */
+  static _testPositionRecursive(worldModel, node, position, mins, maxs, extents, isPoint, checkCount) {
+    // Leaf node: test all brushes in this leaf
+    if (node.contents < 0) {
+      return BrushTrace._testLeafSolid(worldModel, node, position, mins, maxs, checkCount);
+    }
+
+    // Internal node: test which side(s) of the splitting plane the box is on
+    const plane = node.plane;
+    let d, offset;
+
+    if (plane.type < 3) {
+      d = position[plane.type] - plane.dist;
+      offset = extents[plane.type];
+    } else {
+      d = plane.normal.dot(position) - plane.dist;
+      if (isPoint) {
+        offset = 0;
+      } else {
+        offset = Math.abs(extents[0] * plane.normal[0])
+               + Math.abs(extents[1] * plane.normal[1])
+               + Math.abs(extents[2] * plane.normal[2]);
+      }
+    }
+
+    // Entirely on front side
+    if (d >= offset) {
+      return BrushTrace._testPositionRecursive(
+        worldModel, node.children[0], position, mins, maxs, extents, isPoint, checkCount,
+      );
+    }
+
+    // Entirely on back side
+    if (d < -offset) {
+      return BrushTrace._testPositionRecursive(
+        worldModel, node.children[1], position, mins, maxs, extents, isPoint, checkCount,
+      );
+    }
+
+    // Box straddles the plane: test both sides
+    if (BrushTrace._testPositionRecursive(
+      worldModel, node.children[0], position, mins, maxs, extents, isPoint, checkCount,
+    )) {
+      return true;
+    }
+
+    return BrushTrace._testPositionRecursive(
+      worldModel, node.children[1], position, mins, maxs, extents, isPoint, checkCount,
+    );
   }
 
   /**
@@ -653,7 +727,11 @@ export class BrushTrace {
     if (trace.fraction === 1.0) {
       trace.endpos.set(end);
     } else {
+      console.assert(!Number.isNaN(trace.fraction), 'NaN fraction');
+
       for (let i = 0; i < 3; i++) {
+        console.assert(!Number.isNaN(start[i]), 'NaN start');
+        console.assert(!Number.isNaN(end[i]), 'NaN end');
         trace.endpos[i] = start[i] + trace.fraction * (end[i] - start[i]);
       }
     }
@@ -1125,10 +1203,22 @@ export class PhysEnt { // physent_t
    */
   tracePlayerMove(start, end) {
     if (this.usesBrushTracing) {
+      let brushTrace;
+
       // Submodel entities: brute-force test the submodel's brush range
       if (this.brushModel !== null) {
-        return BrushTrace.boxTraceModel(
+        brushTrace = BrushTrace.boxTraceModel(
           this.brushModel,
+          start,
+          end,
+          Pmove.PLAYER_MINS,
+          Pmove.PLAYER_MAXS,
+        );
+      } else {
+        // World entity: walk the BSP tree via leafbrush index
+        brushTrace = BrushTrace.boxTrace(
+          this.brushWorldModel,
+          this.brushHeadNode,
           start,
           end,
           Pmove.PLAYER_MINS,
@@ -1136,15 +1226,43 @@ export class PhysEnt { // physent_t
         );
       }
 
-      // World entity: walk the BSP tree via leafbrush index
-      return BrushTrace.boxTrace(
-        this.brushWorldModel,
-        this.brushHeadNode,
-        start,
-        end,
-        Pmove.PLAYER_MINS,
-        Pmove.PLAYER_MAXS,
-      );
+      // DEBUG: compare brush result with hull result when pm_debug is on
+      if (PmovePlayer.DEBUG && this.hulls.length > 0) {
+        const hull = this.getClippingHull();
+        const hullTrace = new Trace();
+        hullTrace.endpos.set(end);
+        hull.check(0.0, 1.0, start, end, hullTrace);
+
+        const brushBlocks = brushTrace.fraction < 1.0 || brushTrace.startsolid || brushTrace.allsolid;
+        const hullBlocks = hullTrace.fraction < 1.0 || hullTrace.startsolid || hullTrace.allsolid;
+
+        if (brushBlocks !== hullBlocks) {
+          const model = this.brushModel;
+          console.warn(
+            `[Pmove MISMATCH] edictId=${this.edictId} model=${model?.name ?? 'world'}`,
+            `\n  brush: frac=${brushTrace.fraction.toFixed(4)} startsolid=${brushTrace.startsolid} allsolid=${brushTrace.allsolid}`,
+            `\n  hull:  frac=${hullTrace.fraction.toFixed(4)} startsolid=${hullTrace.startsolid} allsolid=${hullTrace.allsolid}`,
+            `\n  start=${start} end=${end}`,
+            model ? `\n  brushRange: first=${model.firstBrush} num=${model.numBrushes}` : '',
+          );
+
+          if (brushBlocks && !hullBlocks && model) {
+            // Brush blocks but hull doesn't — log which specific brush is the culprit
+            const brushes = model.brushes;
+            const last = model.firstBrush + model.numBrushes;
+            for (let bi = model.firstBrush; bi < last; bi++) {
+              const brush = brushes[bi];
+              if (!brush || brush.numsides === 0) { continue; }
+              console.warn(
+                `  brush[${bi}]: contents=${brush.contents} sides=${brush.numsides}`,
+                `mins=${brush.mins} maxs=${brush.maxs}`,
+              );
+            }
+          }
+        }
+      }
+
+      return brushTrace;
     }
 
     // Legacy hull-based trace
@@ -1162,24 +1280,77 @@ export class PhysEnt { // physent_t
    */
   testPlayerPosition(position) {
     if (this.usesBrushTracing) {
+      let brushResult;
+
       // Submodel entities: brute-force test the submodel's brush range
       if (this.brushModel !== null) {
-        return BrushTrace.testPositionModel(
+        brushResult = BrushTrace.testPositionModel(
           this.brushModel,
+          position,
+          Pmove.PLAYER_MINS,
+          Pmove.PLAYER_MAXS,
+        );
+      } else {
+        // World entity: walk the BSP tree via leafbrush index
+        brushResult = BrushTrace.testPosition(
+          this.brushWorldModel,
+          this.brushHeadNode,
           position,
           Pmove.PLAYER_MINS,
           Pmove.PLAYER_MAXS,
         );
       }
 
-      // World entity: walk the BSP tree via leafbrush index
-      return BrushTrace.testPosition(
-        this.brushWorldModel,
-        this.brushHeadNode,
-        position,
-        Pmove.PLAYER_MINS,
-        Pmove.PLAYER_MAXS,
-      );
+      // DEBUG: compare with hull result when pm_debug is on
+      if (PmovePlayer.DEBUG && this.hulls.length > 0) {
+        const hull = this.getClippingHull();
+        const hullResult = hull.pointContents(position) !== content.CONTENT_SOLID;
+
+        if (brushResult !== hullResult) {
+          const model = this.brushModel;
+          console.warn(
+            `[Pmove POS MISMATCH] edictId=${this.edictId} model=${model?.name ?? 'world'}`,
+            `\n  brush says ${brushResult ? 'VALID' : 'IN SOLID'}`,
+            `\n  hull  says ${hullResult ? 'VALID' : 'IN SOLID'}`,
+            `\n  position=${position}`,
+            model ? `\n  brushRange: first=${model.firstBrush} num=${model.numBrushes}` : '',
+          );
+
+          if (!brushResult && hullResult && model) {
+            // Brush says solid, hull says valid — log culprit brush
+            const brushes = model.brushes;
+            const planes = model.planes;
+            const brushsides = model.brushsides;
+            const last = model.firstBrush + model.numBrushes;
+            for (let bi = model.firstBrush; bi < last; bi++) {
+              const brush = brushes[bi];
+              if (!brush || brush.numsides === 0) { continue; }
+              if (brush.contents !== content.CONTENT_SOLID
+                && brush.contents !== -8) { continue; }
+              // Minkowski test inline
+              let inside = true;
+              for (let si = 0; si < brush.numsides; si++) {
+                const side = brushsides[brush.firstside + si];
+                const plane = planes[side.planenum];
+                let dist = plane.dist;
+                for (let j = 0; j < 3; j++) {
+                  dist -= (plane.normal[j] < 0 ? Pmove.PLAYER_MAXS[j] : Pmove.PLAYER_MINS[j]) * plane.normal[j];
+                }
+                const d1 = plane.normal.dot(position) - dist;
+                if (d1 > 0) { inside = false; break; }
+              }
+              if (inside) {
+                console.warn(
+                  `  CULPRIT brush[${bi}]: contents=${brush.contents} sides=${brush.numsides}`,
+                  `mins=${brush.mins} maxs=${brush.maxs}`,
+                );
+              }
+            }
+          }
+        }
+      }
+
+      return brushResult;
     }
 
     // Legacy hull-based point test
@@ -2457,10 +2628,22 @@ export class Pmove { // pmove_t
    * @returns {boolean} Returns false if the given player position is not valid (in solid)
    */
   isValidPlayerPosition(position) {
-    for (const pe of this.physents) {
+    for (let i = 0; i < this.physents.length; i++) {
+      const pe = this.physents[i];
       const test = position.copy().subtract(pe.origin);
 
       if (!pe.testPlayerPosition(test)) {
+        if (PmovePlayer.DEBUG) {
+          console.warn(
+            `[isValidPlayerPosition] BLOCKED by physent[${i}]`,
+            `edictId=${pe.edictId}`,
+            `mode=${pe.usesBrushTracing ? 'brush' : 'hull'}`,
+            `model=${pe.brushModel?.name ?? 'world'}`,
+            `pe.origin=${pe.origin}`,
+            `testPos=${test}`,
+            `worldPos=${position}`,
+          );
+        }
         return false;
       }
     }
@@ -2475,6 +2658,9 @@ export class Pmove { // pmove_t
    * @returns {Trace} trace object
    */
   clipPlayerMove(start, end) {
+    console.assert(!Number.isNaN(start[0]) && !Number.isNaN(start[1]) && !Number.isNaN(start[2]), 'NaN start');
+    console.assert(!Number.isNaN(end[0]) && !Number.isNaN(end[1]) && !Number.isNaN(end[2]), 'NaN end');
+
     const totalTrace = new Trace();
     totalTrace.allsolid = false; // QW compat: total trace starts non-solid; individual checks mark it solid
 
@@ -2483,6 +2669,10 @@ export class Pmove { // pmove_t
     for (let i = 0; i < this.physents.length; i++) {
       const pe = this.physents[i];
 
+      console.assert(!Number.isNaN(pe.origin[0]), 'NaN origin x');
+      console.assert(!Number.isNaN(pe.origin[1]), 'NaN origin y');
+      console.assert(!Number.isNaN(pe.origin[2]), 'NaN origin z');
+
       const offset = pe.origin.copy();
 
       const start_l = start.copy().subtract(offset);
@@ -2490,6 +2680,10 @@ export class Pmove { // pmove_t
 
       // trace a line through the appropriate collision path (brush or hull)
       const trace = pe.tracePlayerMove(start_l, end_l);
+
+      console.assert(!Number.isNaN(trace.endpos[0]), 'NaN x');
+      console.assert(!Number.isNaN(trace.endpos[1]), 'NaN y');
+      console.assert(!Number.isNaN(trace.endpos[2]), 'NaN z');
 
       if (trace.allsolid) {
         trace.startsolid = true;
@@ -2516,6 +2710,10 @@ export class Pmove { // pmove_t
         totalTrace.ent = i;
       }
     }
+
+    console.assert(!Number.isNaN(totalTrace.endpos[0]), 'NaN x');
+    console.assert(!Number.isNaN(totalTrace.endpos[1]), 'NaN y');
+    console.assert(!Number.isNaN(totalTrace.endpos[2]), 'NaN z');
 
     return totalTrace;
   }
