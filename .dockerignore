@@ -1,3 +1,27 @@
+# Build artifacts & dependencies (rebuilt inside container)
+node_modules/
+dist/
+
+# Version control & IDE
+.git/
+.github/
+.vscode/
+*.code-workspace
+
+# Docker files (avoid recursive context)
+Dockerfile
+.dockerignore
+
+# CI / docs / non-runtime files
+docs/
+LLM.md
+README.md
+LICENSE
+eslint.config.mjs
+build.sh
+wrangler.toml
+
+# Unnecessary game data (keep paks, configs, shaders, navmeshes)
 data/id1/*.wad
 data/id1/*.pak
 !data/id1/pak*.pak
