@@ -4,6 +4,7 @@ This directory contains documentation for the QuakeShack engine codebase and fea
 
 ## Table of Contents
 
+- [BSPX Support](bspx.md) - Details on supported BSPX extensions and lumps for advanced mapping features.
 - [Client Server Architecture](cs.md) - Overview of the client-side architecture.
 - [Code Style Guide](code-style-guide.md) - Coding conventions and style rules for the QuakeShack Engine codebase.
 - [Console](console.md) - Details regarding the console implementation.

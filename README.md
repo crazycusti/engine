@@ -2,32 +2,16 @@
 
 This is a modern JavaScript port of Quake 1 with some features sprinkled on top.
 
-Added features include but not limited to:
+Added features include, but are not limited to:
 
-* Dedicated server running in node.js with a console shell.
-* Improved resource loading using asynchronous code.
-* Support for client-side game code.
-* 32-bit texture support.
-* WAD3 file support and texture support.
-* Colored dynamic and static lighting support, supporting both BSPX/RGBLIGHTING lumps and `.lit` files.
-* [PBR materials](./docs/qsmat-format.md) support.
-* Slightly improved console subsystem.
-* Smooth animations using lerping.
-* Somewhat optimized network code.
-* Navigation mesh for smarter NPC behavior.
-* Multithreading support.
-* Limited BSPX support:
-  * `LIGHTINGDIR`: used for per-pixel lighting on supported materials.
-  * `RGBLIGHTING`: used for colorful lightmaps.
-  * `LIGHTGRID_OCTREE`: used for smoothly lighting dynamically moving objects.
-  * `BRUSHLIST`: used for non-hull collision detection using Quake 2 based Pmove code path
-* Support for `LMSCALE`/`_lightmap_scale`, supporting higher resolution lightmaps.
-* BSP2 format support for large maps.
-* Static skybox support, like in Half-Life 1 and Quake 2.
-* Automatic area portals infrastructure for dynamic sound and rendering culling, though experimental.
-* Semi-transparent model (through `alpha` entity key) support.
-* [Volumetric fog support](./docs/volumetric-fog.md) through `func_fog` and opt-in for automatically fogging turbulents.
-* Peer-to-peer multiplayer support using [WebRTC](./docs/webrtc.md).
+* **Modern Environments**: Dedicated Node.js server, WebGL-based browser client, multithreading, and optimized networking.
+* **Enhanced Visuals**: 32-bit textures, WAD3 support, colored static and dynamic lighting (`.lit` files), [PBR materials](./docs/qsmat-format.md), and smooth model animations.
+* **Advanced Map Features**: BSP2 format for large maps, high-resolution lightmaps (`LMSCALE`), static skyboxes, and [volumetric fog](./docs/volumetric-fog.md).
+* **Modern Geometry Details**: Limited BSPX lump support (including per-pixel lighting from `LIGHTINGDIR`, dynamic lighting through `LIGHTGRID_OCTREE`, etc.).
+* **Multiplayer Enhancements**: Built-in peer-to-peer multiplayer using [WebRTC](./docs/webrtc.md) and client-side game code.
+* **Gameplay & Audio**: Navigation meshes for smarter NPCs and area portals for dynamic sound and culling.
+
+For more detailed information over the engine architecture, features, and implementations, please refer to the [comprehensive documentation](./docs/README.md).
 
 Yet, there is still plenty to do.
 
@@ -38,6 +22,7 @@ Some features on the roadmap:
 * Better network code with client-side prediction.
 * More flexible rendering subsystem, making it easier to reuse model rendering etc.
 * HLBSP/BSP30 support.
+* Quake 2 support (BSP38, md2, etc.)
 
 This is an educational and recreational project.
 Though the vision is to provide an id tech 2 based game engine running in the browser for fun multiplayer projects.
@@ -46,6 +31,8 @@ The engine is supposed to be extensible and fun to work with. Made for boomer sh
 Work on this project is supported by LLMs. Please read [LLM.md](./LLM.md) for more information on this matter.
 
 ## Documentation
+
+QuakeShack provides a detailed set of documentation files within the [docs](./docs/README.md) directory. Ensure to read them to understand the structure of the engine, the format specifications, event bus use cases, networking implementations, and more.
 
 ### Turn-key ready build and deploy
 
@@ -136,6 +123,22 @@ connect self
 
 The `connect self` command will connect to the same webserver hosting the game frontend.
 
+Check the [dedicated server documentation](./docs/dedicated.md) for more details.
+
+However, there’s no need for a dedicated server as the game can also establish a peer-to-peer session.
+
+You can start a P2P game session by typing in the following console commands:
+
+```
+maxplayers 4
+listen 1
+coop 1
+map start
+```
+
+Using the `invite` command will allow you to invite friends.
+
+
 ### Extending and hacking
 
 These are the important directory structures:
@@ -157,8 +160,6 @@ There are two main entrypoints:
 | - | - |
 | source/engine/main-browser.mjs | launcher for a full browser session |
 | source/engine/main-dedicated.mjs | launcher for a dedicated server |
-
-Please also checkout the [documentation](./docs/). There are many more features that have been added to the original engine.
 
 ## Based on the work of
 
