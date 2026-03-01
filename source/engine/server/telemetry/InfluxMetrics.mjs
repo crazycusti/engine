@@ -204,7 +204,8 @@ export default class InfluxMetrics {
       `${this.#measurementPrefix.string}_runtime`,
       this.#buildTags(),
       {
-        uptime_s: nowSec,
+        // Use process uptime (monotonic, seconds) instead of wall-clock epoch time
+        uptime_s: process.uptime(),
         framecount: currentFrameCount,
         frametime_ms: (Host.frametime || 0) * 1000,
         fps,
