@@ -5,7 +5,7 @@ This is a modern JavaScript port of Quake 1 with some features sprinkled on top.
 Added features include but not limited to:
 
 * Dedicated server running in node.js with a console shell.
-* Improved resource loading using asynchroneous code.
+* Improved resource loading using asynchronous code.
 * Support for client-side game code.
 * 32-bit texture support.
 * WAD3 file support and texture support.
@@ -26,16 +26,16 @@ Added features include but not limited to:
 * Static skybox support, like in Half-Life 1 and Quake 2.
 * Automatic area portals infrastructure for dynamic sound and rendering culling, though experimental.
 * Semi-transparent model (through `alpha` entity key) support.
-* [Volumentric fog support](./docs/volumetric-fog.md) through `func_fog` and opt-in for automatically fog turbulents.
+* [Volumetric fog support](./docs/volumetric-fog.md) through `func_fog` and opt-in for automatically fogging turbulents.
 * Peer-to-peer multiplayer support using [WebRTC](./docs/webrtc.md).
 
 Yet, there is still plenty to do.
 
 Some features on the roadmap:
 
-* Semi-transparent turbolent (water, lava, slime) support.
+* Semi-transparent turbulent (water, lava, slime) support.
 * Proper WAD3 support when maps refer them, loading them from external WAD, if not compiled in.
-* Better network code with client-side predicition.
+* Better network code with client-side prediction.
 * More flexible rendering subsystem, making it easier to reuse model rendering etc.
 * HLBSP/BSP30 support.
 
@@ -87,14 +87,20 @@ Next, you need to start both the dedicated server and vite watcher like so:
 npm run dev &
 
 # start the dedicated server to serve both the virtual Quake filesystem and whatever vite is building for you
-./dedicated.mjs -ip ::1 -port 3000
+npm run dedicated:start
 ```
 
 Open http://localhost:3000/ and enjoy hacking.
 
+### Production environment
+
+The dedicated server can be started using `npm run dedicated:start`, but this will run with many `console.assert(…)` in hot paths and is only really suitable for development work.
+
+That’s why you should compile the dedicated server with `npm run dedicated:build:production` and start it using `npm run dedicated:start:production`.
+
 ### Deploy to a CDN
 
-You can deploy the built frontend code to a CDN such as Cloudflare and skip the virtual Quake fileystem by providing the URL where to get the game assets (basically everything extracted from the pak files) from.
+You can deploy the built frontend code to a CDN such as Cloudflare and skip the virtual Quake filesystem by providing the URL where to get the game assets (basically everything extracted from the pak files) from.
 
 You can set a custom URL to serve the assets like this:
 
@@ -108,7 +114,7 @@ Also `{shard}` is not required, but highly recommended to speed up fetching asse
 
 Next run `npm run build:production` to build for production.
 
-In `dist/` you’ll have everything you need to upload to your static web server or CDN provider.
+In `dist/browser/` you’ll have everything you need to upload to your static web server or CDN provider.
 
 **Tip**: Make sure to set the max-age as low as possible for `/index.html` so you can quickly rollout a new version. Each update will produce a different hash for cache busting.
 
@@ -137,12 +143,12 @@ These are the important directory structures:
 | Directory | Description |
 | - | - |
 | data/id1 | game assets like pak files etc. |
-| source/game/id | game code for id1 |
-| engine/client | anything client-code related |
-| engine/server | anything server-code related |
-| engine/common | everything used in both client and server code |
-| engine/network | networking code |
-| shared | code that is used in both engine and game code |
+| source/game/id1 | game code for id1 |
+| source/engine/client | anything client-code related |
+| source/engine/server | anything server-code related |
+| source/engine/common | everything used in both client and server code |
+| source/engine/network | networking code |
+| source/shared | code that is used in both engine and game code |
 
 
 There are two main entrypoints:

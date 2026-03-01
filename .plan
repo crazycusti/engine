@@ -156,6 +156,12 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-03-01
+
+- compiling dedicated server using vite
+  - due to all the `console.assert` calls in hot code paths, we need to build dedicated for production use as well
+  - it was a bit tricky to come up with a solution that lets the code serve both dedicated and browser version as well as a non-built dedicated version to make development easier
+
 ### 2026-02-26
 
 - Pmove implementation, what a mess

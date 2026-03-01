@@ -48,10 +48,10 @@ function gameModulePreloadPlugin() {
 export default defineConfig(({ mode }) => ({
   esbuild: {
     drop: mode === 'production' ? ['debugger'] : [],
-    pure: mode === 'production' ? ['console.log', 'console.debug', 'console.info', 'console.assert'] : [],
+    pure: mode === 'production' ? ['console.log', 'console.debug', 'console.info', 'console.assert', 'console.trace'] : [],
   },
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(__dirname, 'dist/browser'),
     emptyOutDir: true,
     rollupOptions: {
       input: {

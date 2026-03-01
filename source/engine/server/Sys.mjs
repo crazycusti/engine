@@ -9,12 +9,11 @@ import { createServer } from 'http';
 
 import { registry, eventBus } from '../registry.mjs';
 import Cvar from '../common/Cvar.mjs';
-import { REPLServer } from 'node:repl';
-import { Worker } from 'node:worker_threads';
+/** @typedef {import('node:repl').REPLServer} REPLServer */
 import Cmd from '../common/Cmd.mjs';
 import Q from '../../shared/Q.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
-import { BaseWorker } from '../common/Sys.mjs';
+import workerFactories from '../common/WorkerFactories.mjs';
 
 let { COM, Host, NET } = registry;
 
@@ -48,51 +47,6 @@ eventBus.subscribe('net.connection.accepted', () => {
   mainLoop.notify();
 });
 
-class NodeWorker extends BaseWorker {
-  #worker = /** @type {Worker} */ (null);
-
-  constructor(name) {
-    super(name);
-
-    this.#initWorker();
-  }
-
-  #initWorker() {
-    this.#worker = new Worker(`./source/engine/${this.name}`, {
-      name: this.name,
-    });
-
-    this.#worker.on('error', (e) => {
-      console.error(`NodeWorker ${this.name} error: ${e.message}`);
-
-      void this.shutdown();
-
-      Host.HandleCrash(e);
-    });
-  }
-
-  addOnMessageListener(listener) {
-    this.#worker.on('message', (e) => {
-      listener(e);
-    });
-  }
-
-  postMessage(message) {
-    this.#worker.postMessage(message);
-  }
-
-  async shutdown() {
-    for (const listener of this._shutdownListeners) {
-      listener();
-    }
-
-    this._shutdownListeners.length = 0;
-
-    await this.#worker.terminate();
-    this.#worker = null;
-  }
-}
-
 /**
  * System class to manage initialization, quitting, and REPL functionality.
  */
@@ -104,14 +58,6 @@ export default class Sys {
   static #repl = null;
 
   /**
-   * @param {string} script Path to worker script
-   * @returns {BaseWorker} worker thread wrapper
-   */
-  static CreateWorker(script) {
-    return new NodeWorker(script);
-  }
-
-  /**
    * Initializes the low-level system.
    */
   static async Init() {
@@ -119,14 +65,14 @@ export default class Sys {
     COM.InitArgv(argv);
 
     eventBus.subscribe('console.print-line', (line) => {
-      console.info(line);
+      stdout.write(line + '\n');
     });
 
     // Record the initial time
     Sys.#oldtime = Date.now() * 0.001;
 
     // Start worker manager
-    WorkerManager.Init();
+    WorkerManager.Init(workerFactories);
 
     // Start webserver
     Sys.StartWebserver();
@@ -201,7 +147,7 @@ export default class Sys {
    * @param {string} text - The text to print.
    */
   static Print(text) {
-    console.info(String(text).trim());
+    stdout.write(String(text).trim() + '\n');
   }
 
   /**
@@ -244,11 +190,11 @@ export default class Sys {
     };
 
     if (basepath !== '') {
-      app.use(basepath, express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
+      app.use(basepath, express.static(join(__dirname + '/..', 'dist/browser'), { setHeaders: distHeaders }));
       app.use(basepath + '/data', express.static(join(__dirname + '/..', 'data')));
       app.use(basepath + '/source', express.static(join(__dirname + '/..', 'source')));
     } else {
-      app.use(express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
+      app.use(express.static(join(__dirname + '/..', 'dist/browser'), { setHeaders: distHeaders }));
       app.use('/data', express.static(join(__dirname + '/..', 'data')));
       app.use('/source', express.static(join(__dirname + '/..', 'source')));
     }

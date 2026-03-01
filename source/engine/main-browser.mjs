@@ -26,7 +26,7 @@ export default class EngineLauncher {
    * @returns {Promise<import("./registry.mjs").registry>} engine registry
    */
   static async Launch(urls, buildConfig) {
-    console.log('Launching engine in browser mode...');
+    console.info('Launching engine in browser mode...');
 
     registry.urls = urls;
     registry.buildConfig = buildConfig;

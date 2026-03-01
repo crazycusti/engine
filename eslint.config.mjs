@@ -9,7 +9,7 @@ import tsparser from '@typescript-eslint/parser';
 export default [
   { files: ['**/*.js'], languageOptions: { sourceType: 'commonjs' } },
   {
-    ignores: ['vite.config.mjs', '.env*', 'dist/**'],
+    ignores: ['vite.config.mjs', 'vite.config.dedicated.mjs', '.env*', 'dist/**', 'public/libs/**', 'data/**/*.mjs'],
     languageOptions: {
       globals: globals.browser,
       parser: tsparser,

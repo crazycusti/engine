@@ -3,8 +3,7 @@ import Q from '../../shared/Q.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import Tools from './Tools.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
-import { BaseWorker } from '../common/Sys.mjs';
-import { SysError } from '../common/Errors.mjs';
+import workerFactories from '../common/WorkerFactories.mjs';
 
 let { COM, Host, Key } = registry;
 
@@ -176,83 +175,9 @@ const eventHandlers = {
   },
 };
 
-/**
- * Add new worker scripts here when creating additional workers.
- * @type {Record<string, (name: string) => Worker>}
- */
-const workerFactories = {
-  'server/DummyWorker.mjs': (name) =>
-    new Worker(new URL('../server/DummyWorker.mjs', import.meta.url), { name, type: 'module' }),
-  'server/NavigationWorker.mjs': (name) =>
-    new Worker(new URL('../server/NavigationWorker.mjs', import.meta.url), { name, type: 'module' }),
-};
-
-class WebWorker extends BaseWorker {
-  #worker = /** @type {Worker} */ (null);
-
-  constructor(name) {
-    super(name);
-
-    this.#initWorker();
-  }
-
-  #initWorker() {
-    const factory = workerFactories[this.name];
-
-    console.assert(factory, `No worker factory found for script "${this.name}". Make sure it's registered in workerFactories.`);
-
-    try {
-      this.#worker = factory(this.name);
-    } catch (e) {
-      console.error(`WebWorker ${this.name} failed to initialize:`, e);
-      throw new SysError(`WebWorker ${this.name}: failed to construct Worker: ${e.message}`);
-    }
-
-    this.#worker.addEventListener('error', (e) => {
-      const detail = e?.message || e?.filename || '(no details)';
-
-      console.error(`WebWorker ${this.name} error: ${detail}`, e);
-
-      void this.shutdown();
-
-      Host.HandleCrash(e);
-    });
-  }
-
-  addOnMessageListener(listener) {
-    this.#worker.addEventListener('message', (e) => {
-      listener(e.data);
-    });
-  }
-
-  postMessage(message) {
-    this.#worker.postMessage(message);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async shutdown() {
-    for (const listener of this._shutdownListeners) {
-      listener();
-    }
-
-    this._shutdownListeners.length = 0;
-
-    this.#worker.terminate();
-    this.#worker = null;
-  }
-}
-
 export default class Sys {
   static #oldtime = 0;
   static #isRunning = false;
-
-  /**
-   * @param {string} script Path to worker script
-   * @returns {BaseWorker} worker thread wrapper
-   */
-  static CreateWorker(script) {
-    return new WebWorker(script);
-  }
 
   static async Init() {
     // @ts-ignore
@@ -301,7 +226,7 @@ export default class Sys {
     document.getElementById('progress').style.display = 'none';
 
     // Start worker manager
-    WorkerManager.Init();
+    WorkerManager.Init(workerFactories);
 
     Sys.Print('Host.Init: Initializing game…\n');
 

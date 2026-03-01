@@ -1415,7 +1415,7 @@ PR.ExecuteProgram = function(fnum) {
           PR.RunError('NULL function');
         }
         if (PR.globals_int[st.a] < 0) {
-          console.log('special function called');
+          console.debug('special function called');
           continue;
         }
         newf = PR.functions[PR.globals_int[st.a]];

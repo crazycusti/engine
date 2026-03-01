@@ -27,7 +27,7 @@ class WorkerConsole {
 
 class WorkerSys extends Sys {
   static Print(message) {
-    console.log(message);
+    console.info(message);
   }
 
   static FloatTime() {
