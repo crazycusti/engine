@@ -130,6 +130,69 @@ connect self
 
 The `connect self` command will connect to the same webserver hosting the game frontend.
 
+### Dedicated metrics to InfluxDB
+
+For long-running debugging you can enable periodic dedicated-server metrics export to InfluxDB.
+Both InfluxDB v1 and v2 are supported.
+
+Enable via environment variables before launch (v2 example):
+
+```sh
+INFLUXDB_ENABLE=1 \
+INFLUXDB_VERSION=2 \
+INFLUXDB_URL="http://127.0.0.1:8086" \
+INFLUXDB_ORG="my-org" \
+INFLUXDB_BUCKET="quakeshack" \
+INFLUXDB_TOKEN="your-token" \
+./dedicated.mjs -ip ::1 -port 3000
+```
+
+Or set at runtime via console/cfg (v2):
+
+```cfg
+seta influxdb_enable 1
+seta influxdb_version 2
+seta influxdb_url "http://127.0.0.1:8086"
+seta influxdb_org "my-org"
+seta influxdb_bucket "quakeshack"
+set influxdb_token "your-token"
+seta influxdb_interval 10
+```
+
+v1 example:
+
+```cfg
+seta influxdb_enable 1
+seta influxdb_version 1
+seta influxdb_url "http://127.0.0.1:8086"
+seta influxdb_database "quakeshack"
+seta influxdb_username "admin"
+set influxdb_password "secret"
+seta influxdb_retention_policy "autogen"
+seta influxdb_precision "ms"
+```
+
+Relevant cvars:
+
+- `influxdb_enable`
+- `influxdb_version` (`auto|1|2`)
+- `influxdb_url`
+- `influxdb_database` (v1)
+- `influxdb_username` (v1)
+- `influxdb_password` (v1)
+- `influxdb_retention_policy` (v1)
+- `influxdb_consistency` (v1)
+- `influxdb_token`
+- `influxdb_org`
+- `influxdb_bucket`
+- `influxdb_precision` (`ns|us|ms|s`, default `ms`)
+- `influxdb_tags` (global tags, e.g. `env=dev,instance=local`)
+- `influxdb_interval` (seconds)
+- `influxdb_batch_size`
+- `influxdb_max_queue`
+- `influxdb_timeout_ms`
+- `influxdb_measurement_prefix`
+
 ### Extending and hacking
 
 These are the important directory structures:
