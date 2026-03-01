@@ -12,6 +12,9 @@ export type ServerEdict = Readonly<ServerEdict>;
 export type GLTexture = import("../engine/client/GL.mjs").GLTexture;
 export type Cvar = Readonly<import("../engine/common/Cvar.mjs").default>;
 
+export type PmoveConfiguration = Readonly<import("../shared/Pmove.mjs").PmoveConfiguration>;
+export type PmoveQuake2Configuration = Readonly<import("../shared/Pmove.mjs").PmoveQuake2Configuration>;
+
 export type SerializableType = (string | number | boolean | Vector | ServerEdict | SerializableType[] | null);
 
 export type ClientdataMap = Record<string, SerializableType>;
