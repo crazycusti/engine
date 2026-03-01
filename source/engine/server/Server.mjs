@@ -227,6 +227,9 @@ export default class SV {
   static waterfriction = null;
   static rcon_password = null;
   static public = null;
+  static maxmessagesperframe = null;
+  static maxcommandsperframe = null;
+  static maxpendingcmds = null;
 
   /** Scheduled game commands */
   static _scheduledGameCommands = [];
@@ -256,6 +259,9 @@ export default class SV {
     SV.waterfriction = new Cvar('sv_waterfriction', '4');
     SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
     SV.public = new Cvar('sv_public', '1', Cvar.FLAG.ARCHIVE | Cvar.FLAG.SERVER, 'Make this server publicly listed in the master server');
+    SV.maxmessagesperframe = new Cvar('sv_maxmessagesperframe', '128', Cvar.FLAG.SERVER, 'Max network messages consumed per client and frame (0 = unlimited).');
+    SV.maxcommandsperframe = new Cvar('sv_maxcommandsperframe', '2048', Cvar.FLAG.SERVER, 'Max client commands processed per client and frame (0 = unlimited).');
+    SV.maxpendingcmds = new Cvar('sv_maxpendingcmds', '256', Cvar.FLAG.SERVER, 'Max queued move commands per client (oldest commands are dropped on overflow).');
 
     Navigation.Init();
 
@@ -602,6 +608,11 @@ export default class SV {
     // (QW-style: each command is simulated individually so msec matches
     // what the client predicted, even when multiple arrive in one frame).
     client.pendingCmds.push(cmd);
+    const maxPendingCmds = SV.maxpendingcmds.value | 0;
+    if (maxPendingCmds > 0 && client.pendingCmds.length > maxPendingCmds) {
+      const overflowCount = client.pendingCmds.length - maxPendingCmds;
+      client.pendingCmds.splice(0, overflowCount);
+    }
 
     // Keep client.cmd as the latest for backwards-compat code paths
     client.cmd.set(cmd);
@@ -645,8 +656,25 @@ export default class SV {
    * @returns {boolean} true if successful, false if failed
    */
   static ReadClientMessage(client) {
+    const maxMessages = SV.maxmessagesperframe.value | 0;
+    const maxCommands = SV.maxcommandsperframe.value | 0;
+    const messageBudgetEnabled = maxMessages > 0;
+    const commandBudgetEnabled = maxCommands > 0;
+    let messagesProcessed = 0;
+    let commandsProcessed = 0;
+
     // Process all pending network messages
     while (true) {
+      if (messageBudgetEnabled && messagesProcessed >= maxMessages) {
+        Con.DPrint(`SV.ReadClientMessage: message budget exceeded for ${client.name} (${client.netconnection.address})\n`);
+        return true;
+      }
+
+      if (commandBudgetEnabled && commandsProcessed >= maxCommands) {
+        Con.DPrint(`SV.ReadClientMessage: command budget exceeded for ${client.name} (${client.netconnection.address})\n`);
+        return true;
+      }
+
       const ret = NET.GetMessage(client.netconnection);
 
       if (ret === -1) {
@@ -658,6 +686,7 @@ export default class SV {
         return true; // No more messages
       }
 
+      messagesProcessed++;
       NET.message.beginReading();
 
       // Process all commands in this message
@@ -678,6 +707,12 @@ export default class SV {
 
         if (cmd === -1) {
           break; // End of message
+        }
+
+        commandsProcessed++;
+        if (commandBudgetEnabled && commandsProcessed > maxCommands) {
+          Con.DPrint(`SV.ReadClientMessage: command budget exceeded for ${client.name} (${client.netconnection.address})\n`);
+          return true;
         }
 
         if (!SV.#processClientCommand(client, cmd)) {

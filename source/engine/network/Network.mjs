@@ -187,6 +187,8 @@ NET.Init = function() {
 
   NET.delay_receive = new Cvar('net_delay_receive', '0', Cvar.FLAG.NONE, 'Delay receiving messages from the network. Useful for debugging.');
   NET.delay_receive_jitter = new Cvar('net_delay_receive_jitter', '0', Cvar.FLAG.NONE, 'Jitter for the delay receiving messages from the network. Useful for debugging.');
+  NET.ws_max_receive_queue = new Cvar('net_ws_max_receive_queue', '512', Cvar.FLAG.NONE, 'Maximum queued websocket messages per connection before dropping it.');
+  NET.ws_max_receive_queue_bytes = new Cvar('net_ws_max_receive_queue_bytes', '4194304', Cvar.FLAG.NONE, 'Maximum queued websocket payload bytes per connection before dropping it.');
 
   Cmd.AddCommand('maxplayers', NET.MaxPlayers_f);
   Cmd.AddCommand('listen', NET.Listen_f);

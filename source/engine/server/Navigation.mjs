@@ -175,7 +175,10 @@ export class Navigation {
   /** @type {Cvar} */
   static nav_debug_path = null;
   /** @type {Cvar|null} NOTE: unavailable outside of dedicated server */
+  static nav_auto_rebuild = null;
+  /** @type {Cvar|null} NOTE: unavailable outside of dedicated server */
   static nav_build_process = null;
+  static _rebuildScheduled = false;
 
   /** maximum slope that is passable */
   maxSlope = 0.7; // ~45 degrees
@@ -214,6 +217,7 @@ export class Navigation {
   static Init() {
     if (registry.isDedicatedServer) {
       this.nav_build_process = new Cvar('nav_build_process', '0', Cvar.FLAG.NONE, 'if set to 1, it will force build the nav mesh and quit');
+      this.nav_auto_rebuild = new Cvar('nav_auto_rebuild', '0', Cvar.FLAG.NONE, 'if set to 1, outdated navmesh is rebuilt automatically (may spike CPU)');
     }
 
     this.nav_save_waypoints = new Cvar('nav_save_waypoints', '0', Cvar.FLAG.NONE, 'if set to 1, will save all extracted waypoints to nav file');
@@ -223,9 +227,29 @@ export class Navigation {
 
     // worker thread -> main thread: mesh probably out of date
     eventBus.subscribe('nav.build', () => {
-      if (SV.server.navigation) {
-        SV.server.navigation.build();
+      if (!SV.server.navigation) {
+        return;
       }
+
+      if (this.nav_auto_rebuild && this.nav_auto_rebuild.value === 0) {
+        Con.PrintWarning('Navigation: nav mesh is out of date and auto rebuild is disabled. Run "nav_auto_rebuild 1" or rebuild manually via "nav".\n');
+        return;
+      }
+
+      if (this._rebuildScheduled) {
+        return;
+      }
+
+      this._rebuildScheduled = true;
+      setTimeout(() => {
+        this._rebuildScheduled = false;
+
+        if (!SV.server.navigation) {
+          return;
+        }
+
+        SV.server.navigation.build();
+      }, 0);
     });
   }
 

@@ -18,6 +18,92 @@ eventBus.subscribe('registry.frozen', () => {
 
 // @ts-ignore
 export default class NodeCOM extends COM {
+  /** @type {Map<string, Map<string, {filepos:number, filelen:number}>>} */
+  static _packIndexCache = new Map();
+  /** @type {Map<string, import('fs').promises.FileHandle>} */
+  static _packFdCache = new Map();
+  /** @type {Map<string, ArrayBuffer>} */
+  static _fileCache = new Map();
+  static _fileCacheBytes = 0;
+  static _maxFileCacheEntries = 256;
+  static _maxFileCacheBytes = 32 * 1024 * 1024;
+
+  static _touchCacheEntry(key, data) {
+    if (this._fileCache.has(key)) {
+      this._fileCache.delete(key);
+    }
+    this._fileCache.set(key, data);
+  }
+
+  static _getCachedFile(key) {
+    if (!this._fileCache.has(key)) {
+      return null;
+    }
+
+    const data = this._fileCache.get(key);
+    this._touchCacheEntry(key, data);
+    return data;
+  }
+
+  static _addCachedFile(key, data) {
+    if (!data || data.byteLength === 0 || data.byteLength > (this._maxFileCacheBytes >> 2)) {
+      return;
+    }
+
+    if (this._fileCache.has(key)) {
+      const previous = this._fileCache.get(key);
+      this._fileCacheBytes -= previous.byteLength;
+      this._fileCache.delete(key);
+    }
+
+    while (
+      this._fileCache.size >= this._maxFileCacheEntries ||
+      (this._fileCacheBytes + data.byteLength) > this._maxFileCacheBytes
+    ) {
+      const firstKey = this._fileCache.keys().next().value;
+      if (!firstKey) {
+        break;
+      }
+      const evicted = this._fileCache.get(firstKey);
+      this._fileCache.delete(firstKey);
+      this._fileCacheBytes -= evicted.byteLength;
+    }
+
+    this._fileCache.set(key, data);
+    this._fileCacheBytes += data.byteLength;
+  }
+
+  static _clearFileCache() {
+    this._fileCache.clear();
+    this._fileCacheBytes = 0;
+  }
+
+  static _getPackIndex(searchPathName, packIndex, pak) {
+    const cacheKey = `${searchPathName}\u0000${packIndex}`;
+    const existing = this._packIndexCache.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+
+    const index = new Map();
+    for (const file of pak) {
+      index.set(file.name, file);
+    }
+
+    this._packIndexCache.set(cacheKey, index);
+    return index;
+  }
+
+  static async _getPackFd(packPath) {
+    let fd = this._packFdCache.get(packPath);
+    if (fd) {
+      return fd;
+    }
+
+    fd = await fsPromises.open(packPath, 'r');
+    this._packFdCache.set(packPath, fd);
+    return fd;
+  }
 
   /**
    * Loads a file, searching through registered search paths and packs.
@@ -31,43 +117,48 @@ export default class NodeCOM extends COM {
     for (let i = this.searchpaths.length - 1; i >= 0; i--) {
       const search = this.searchpaths[i];
       const netpath = search.filename ? `${search.filename}/${filename}` : filename;
+      const cached = this._getCachedFile(netpath);
+      if (cached) {
+        return cached;
+      }
 
       // 1) Search within pack files
       for (let j = search.pack.length - 1; j >= 0; j--) {
         const pak = search.pack[j];
+        const packIndex = this._getPackIndex(search.filename, j, pak);
+        const file = packIndex.get(filename);
+        if (!file) {
+          continue;
+        }
 
-        for (const file of pak) {
-          if (file.name !== filename) {
-            continue;
+        // Found a matching file in the PAK metadata
+        if (file.filelen === 0) {
+          // The file length is zero, return an empty buffer
+          return new ArrayBuffer(0);
+        }
+
+        const packPath = `data/${search.filename !== '' ? search.filename + '/' : ''}pak${j}.pak`;
+
+        try {
+          // Reuse already-open file descriptors for hot asset paths.
+          const fd = await this._getPackFd(packPath);
+
+          // Read the bytes
+          const buffer = Buffer.alloc(file.filelen);
+          await fd.read(buffer, 0, file.filelen, file.filepos);
+
+          const out = new Uint8Array(buffer).buffer;
+          this._addCachedFile(netpath, out);
+          Sys.Print(`PackFile: ${packPath} : ${filename}\n`);
+          return out;
+          // eslint-disable-next-line no-unused-vars
+        } catch (err) {
+          // If we can't open or read from the PAK, just continue searching
+          const staleFd = this._packFdCache.get(packPath);
+          if (staleFd) {
+            void staleFd.close().catch(() => {});
           }
-
-          // Found a matching file in the PAK metadata
-          if (file.filelen === 0) {
-            // The file length is zero, return an empty buffer
-            return new ArrayBuffer(0);
-          }
-
-          const packPath = `data/${search.filename !== '' ? search.filename + '/' : ''}pak${j}.pak`;
-
-          let fd;
-          try {
-            // Open the .pak file
-            fd = await fsPromises.open(packPath, 'r');
-
-            // Read the bytes
-            const buffer = Buffer.alloc(file.filelen);
-            await fd.read(buffer, 0, file.filelen, file.filepos);
-
-            Sys.Print(`PackFile: ${packPath} : ${filename}\n`);
-            return new Uint8Array(buffer).buffer;
-            // eslint-disable-next-line no-unused-vars
-          } catch (err) {
-            // If we can't open or read from the PAK, just continue searching
-          } finally {
-            if (fd) {
-              await fd.close();
-            }
-          }
+          this._packFdCache.delete(packPath);
         }
       }
 
@@ -80,8 +171,10 @@ export default class NodeCOM extends COM {
 
         // If we got here, the file exists—read and return its contents
         const buffer = await fsPromises.readFile(directPath);
+        const out = new Uint8Array(buffer).buffer;
+        this._addCachedFile(netpath, out);
         Sys.Print(`FindFile: ${netpath}\n`);
-        return new Uint8Array(buffer).buffer;
+        return out;
         // eslint-disable-next-line no-unused-vars
       } catch (err) {
         // Not accessible or doesn't exist—keep searching
@@ -94,6 +187,12 @@ export default class NodeCOM extends COM {
   };
 
   static Shutdown() {
+    for (const fd of this._packFdCache.values()) {
+      void fd.close().catch(() => {});
+    }
+    this._packFdCache.clear();
+    this._packIndexCache.clear();
+    this._clearFileCache();
   };
 
   /**
@@ -169,6 +268,7 @@ export default class NodeCOM extends COM {
       return false;
     }
     Sys.Print('COM.WriteFile: ' + filename + '\n');
+    this._clearFileCache();
     return true;
   }
 
@@ -182,6 +282,7 @@ export default class NodeCOM extends COM {
       return false;
     }
     Sys.Print('COM.WriteTextFile: ' + filename + '\n');
+    this._clearFileCache();
     return true;
   }
 
@@ -195,6 +296,8 @@ export default class NodeCOM extends COM {
       search.pack[search.pack.length] = pak;
     }
     this.searchpaths[this.searchpaths.length] = search;
+    this._packIndexCache.clear();
+    this._clearFileCache();
   }
 
   static Path_f() {

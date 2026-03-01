@@ -1476,6 +1476,30 @@ export class PmovePlayer { // pmove_t (player state only)
     this._pmove_wf = new WeakRef(pmove);
   }
 
+  // --- Scratch vectors for hot path movement methods ---
+  #pitchedAngles = new Vector();
+  #categorizePoint = new Vector();
+  #specialFlatForward = new Vector();
+  #specialSpot = new Vector();
+  #specialLadderPoint = new Vector();
+  #specialWaterJumpSpot = new Vector();
+  #airForward = new Vector();
+  #airRight = new Vector();
+  #airWishvel = new Vector();
+  #airWishdir = new Vector();
+  #waterWishvel = new Vector();
+  #waterWishdir = new Vector();
+  #waterDest = new Vector();
+  #waterStart = new Vector();
+  #flyForward = new Vector();
+  #flyRight = new Vector();
+  #flyWishvel = new Vector();
+  #flyWishdir = new Vector();
+  #frictionStart = new Vector();
+  #frictionStop = new Vector();
+  #snapBase = new Vector();
+  #nudgeBase = new Vector();
+
   /** @returns {Pmove} parent Pmove instance @private */
   get _pmove() {
     return this._pmove_wf.deref();
@@ -1585,7 +1609,7 @@ export class PmovePlayer { // pmove_t (player state only)
         const divisor = this._pmove.configuration.pitchDivisor;
 
         if (divisor) {
-          const pitchedAngles = this.angles.copy();
+          const pitchedAngles = this.#pitchedAngles.set(this.angles);
           let pitch = pitchedAngles[0];
           if (pitch > 180) {
             pitch -= 360;
@@ -1666,7 +1690,7 @@ export class PmovePlayer { // pmove_t (player state only)
   /** Determine ground entity, water type and water level. */
   _categorizePosition() { // Q2: PM_CatagorizePosition
     // --- Ground check ---
-    const point = this.origin.copy();
+    const point = this.#categorizePoint.set(this.origin);
     point[2] -= this._pmove.configuration.groundCheckDepth;
 
     if (this.velocity[2] > 180) {
@@ -1760,15 +1784,21 @@ export class PmovePlayer { // pmove_t (player state only)
     this._ladder = false;
 
     // check for ladder
-    const flatforward = new Vector(this._angleVectors.forward[0], this._angleVectors.forward[1], 0);
+    const flatforward = this.#specialFlatForward;
+    flatforward[0] = this._angleVectors.forward[0];
+    flatforward[1] = this._angleVectors.forward[1];
+    flatforward[2] = 0;
     flatforward.normalize();
 
-    const spot = this.origin.copy().add(flatforward);
+    const spot = this.#specialSpot.set(this.origin).add(flatforward);
     let trace = this._pmove.clipPlayerMove(this.origin, spot);
 
     if (trace.fraction < 1) {
       // Q2 checks trace.contents & CONTENTS_LADDER, we use content type
-      const ladderPoint = trace.endpos.copy().add(flatforward.copy().multiply(0.5));
+      const ladderPoint = this.#specialLadderPoint;
+      ladderPoint[0] = trace.endpos[0] + flatforward[0] * 0.5;
+      ladderPoint[1] = trace.endpos[1] + flatforward[1] * 0.5;
+      ladderPoint[2] = trace.endpos[2] + flatforward[2] * 0.5;
       const ladderContents = this._pmove.pointContents(ladderPoint);
       // In Q1 BSP, there is no CONTENTS_LADDER. Ladder detection should
       // be implemented via trigger_ladder entities or texture flags.
@@ -1788,7 +1818,10 @@ export class PmovePlayer { // pmove_t (player state only)
     }
 
     // probe forward for a solid wall, then check for empty space above it.
-    const wjspot = this.origin.copy().add(flatforward.copy().multiply(this._pmove.configuration.forwardProbe));
+    const wjspot = this.#specialWaterJumpSpot;
+    wjspot[0] = this.origin[0] + flatforward[0] * this._pmove.configuration.forwardProbe;
+    wjspot[1] = this.origin[1] + flatforward[1] * this._pmove.configuration.forwardProbe;
+    wjspot[2] = this.origin[2] + flatforward[2] * this._pmove.configuration.forwardProbe;
     wjspot[2] += this._pmove.configuration.wallcheckZ;
 
     let cont = this._pmove.pointContents(wjspot);
@@ -1923,12 +1956,15 @@ export class PmovePlayer { // pmove_t (player state only)
 
       // Q1: if the leading edge is over a dropoff, increase friction
       if (this._pmove.configuration.edgeFriction && this.onground !== null) {
-        const start = new Vector(
-          this.origin[0] + vel[0] / speed * 16,
-          this.origin[1] + vel[1] / speed * 16,
-          this.origin[2] + Pmove.PLAYER_MINS[2],
-        );
-        const stop = new Vector(start[0], start[1], start[2] - 34);
+        const start = this.#frictionStart;
+        const stop = this.#frictionStop;
+        const invSpeed = 1.0 / speed;
+        start[0] = this.origin[0] + vel[0] * invSpeed * 16;
+        start[1] = this.origin[1] + vel[1] * invSpeed * 16;
+        start[2] = this.origin[2] + Pmove.PLAYER_MINS[2];
+        stop[0] = start[0];
+        stop[1] = start[1];
+        stop[2] = start[2] - 34;
         const edgeTrace = this._pmove.clipPlayerMove(start, stop);
         if (edgeTrace.fraction === 1.0) {
           friction *= this._pmove.movevars.edgefriction;
@@ -2342,27 +2378,29 @@ export class PmovePlayer { // pmove_t (player state only)
 
     // Project forward/right onto the horizontal plane and renormalize.
     // This prevents looking up/down from reducing horizontal move speed.
-    const forward = this._angleVectors.forward.copy();
-    const right = this._angleVectors.right.copy();
+    const forward = this.#airForward.set(this._angleVectors.forward);
+    const right = this.#airRight.set(this._angleVectors.right);
     forward[2] = 0;
     right[2] = 0;
     forward.normalize();
     right.normalize();
 
-    const wishvel = new Vector(
-      forward[0] * fmove + right[0] * smove,
-      forward[1] * fmove + right[1] * smove,
-      0,
-    );
+    const wishvel = this.#airWishvel;
+    wishvel[0] = forward[0] * fmove + right[0] * smove;
+    wishvel[1] = forward[1] * fmove + right[1] * smove;
+    wishvel[2] = 0;
 
-    const wishdir = wishvel.copy();
+    const wishdir = this.#airWishdir.set(wishvel);
     let wishspeed = wishdir.normalize();
 
     // clamp to server defined max speed
     const maxspeed = (this.pmFlags & PMF.DUCKED) ? this._pmove.movevars.duckspeed : this._pmove.movevars.maxspeed;
 
     if (wishspeed > maxspeed) {
-      wishvel.multiply(maxspeed / wishspeed);
+      const scale = maxspeed / wishspeed;
+      wishvel[0] *= scale;
+      wishvel[1] *= scale;
+      wishvel[2] *= scale;
       wishspeed = maxspeed;
     }
 
@@ -2424,11 +2462,10 @@ export class PmovePlayer { // pmove_t (player state only)
     const forward = this._angleVectors.forward;
     const right = this._angleVectors.right;
 
-    const wishvel = new Vector(
-      forward[0] * this.cmd.forwardmove + right[0] * this.cmd.sidemove,
-      forward[1] * this.cmd.forwardmove + right[1] * this.cmd.sidemove,
-      forward[2] * this.cmd.forwardmove + right[2] * this.cmd.sidemove,
-    );
+    const wishvel = this.#waterWishvel;
+    wishvel[0] = forward[0] * this.cmd.forwardmove + right[0] * this.cmd.sidemove;
+    wishvel[1] = forward[1] * this.cmd.forwardmove + right[1] * this.cmd.sidemove;
+    wishvel[2] = forward[2] * this.cmd.forwardmove + right[2] * this.cmd.sidemove;
 
     if (!this.cmd.forwardmove && !this.cmd.sidemove && !this.cmd.upmove) {
       wishvel[2] -= 60; // drift towards bottom
@@ -2436,11 +2473,14 @@ export class PmovePlayer { // pmove_t (player state only)
       wishvel[2] += this.cmd.upmove;
     }
 
-    const wishdir = wishvel.copy();
+    const wishdir = this.#waterWishdir.set(wishvel);
     let wishspeed = wishdir.normalize();
 
     if (wishspeed > this._pmove.movevars.maxspeed) {
-      wishvel.multiply(this._pmove.movevars.maxspeed / wishspeed);
+      const scale = this._pmove.movevars.maxspeed / wishspeed;
+      wishvel[0] *= scale;
+      wishvel[1] *= scale;
+      wishvel[2] *= scale;
       wishspeed = this._pmove.movevars.maxspeed;
     }
 
@@ -2452,12 +2492,11 @@ export class PmovePlayer { // pmove_t (player state only)
     // from STEPSIZE+1 above it straight down. If the trace succeeds the
     // player “steps up” onto a ledge or slope, allowing them to climb out
     // of the water at low edges. Only fall back to slideMove on failure.
-    const dest = new Vector(
-      this.origin[0] + this.frametime * this.velocity[0],
-      this.origin[1] + this.frametime * this.velocity[1],
-      this.origin[2] + this.frametime * this.velocity[2],
-    );
-    const start = dest.copy();
+    const dest = this.#waterDest;
+    dest[0] = this.origin[0] + this.frametime * this.velocity[0];
+    dest[1] = this.origin[1] + this.frametime * this.velocity[1];
+    dest[2] = this.origin[2] + this.frametime * this.velocity[2];
+    const start = this.#waterStart.set(dest);
     start[2] += STEPSIZE + 1;
 
     const trace = this._pmove.clipPlayerMove(start, dest);
@@ -2508,23 +2547,25 @@ export class PmovePlayer { // pmove_t (player state only)
     const fmove = this.cmd.forwardmove;
     const smove = this.cmd.sidemove;
 
-    const fwd = this._angleVectors.forward.copy();
-    const rgt = this._angleVectors.right.copy();
+    const fwd = this.#flyForward.set(this._angleVectors.forward);
+    const rgt = this.#flyRight.set(this._angleVectors.right);
     fwd.normalize();
     rgt.normalize();
 
-    const wishvel = new Vector(
-      fwd[0] * fmove + rgt[0] * smove,
-      fwd[1] * fmove + rgt[1] * smove,
-      fwd[2] * fmove + rgt[2] * smove,
-    );
+    const wishvel = this.#flyWishvel;
+    wishvel[0] = fwd[0] * fmove + rgt[0] * smove;
+    wishvel[1] = fwd[1] * fmove + rgt[1] * smove;
+    wishvel[2] = fwd[2] * fmove + rgt[2] * smove;
     wishvel[2] += this.cmd.upmove;
 
-    const wishdir = wishvel.copy();
+    const wishdir = this.#flyWishdir.set(wishvel);
     let wishspeed = wishdir.normalize();
 
     if (wishspeed > this._pmove.movevars.spectatormaxspeed) {
-      wishvel.multiply(this._pmove.movevars.spectatormaxspeed / wishspeed);
+      const scale = this._pmove.movevars.spectatormaxspeed / wishspeed;
+      wishvel[0] *= scale;
+      wishvel[1] *= scale;
+      wishvel[2] *= scale;
       wishspeed = this._pmove.movevars.spectatormaxspeed;
     }
 
@@ -2566,7 +2607,7 @@ export class PmovePlayer { // pmove_t (player state only)
     // Compute snap direction signs BEFORE rounding origin, so we know
     // which way to jitter when the snapped position lands in solid.
     const sign = [0, 0, 0];
-    const base = new Vector();
+    const base = this.#snapBase;
     for (let i = 0; i < 3; i++) {
       const snapped = Math.round(this.origin[i] * 8.0);
       base[i] = snapped * 0.125;
@@ -2605,7 +2646,7 @@ export class PmovePlayer { // pmove_t (player state only)
    */
   _nudgePosition() { // Q2: PM_InitialSnapPosition / QW: NudgePosition
     const offsets = [0, -1, 1];
-    const base = this.origin.copy();
+    const base = this.#nudgeBase.set(this.origin);
 
     for (let z = 0; z < 3; z++) {
       for (let y = 0; y < 3; y++) {

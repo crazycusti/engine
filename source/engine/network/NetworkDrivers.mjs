@@ -326,6 +326,31 @@ export class WebSocketDriver extends BaseDriver {
     return /^wss?:\/\//i.test(host);
   }
 
+  _QueueIncomingMessage(qsocket, data) {
+    const packet = new Uint8Array(data);
+    const maxQueueMessages = Math.max(1, NET.ws_max_receive_queue.value | 0);
+    const maxQueueBytes = Math.max(1024, NET.ws_max_receive_queue_bytes.value | 0);
+    const queuedBytes = qsocket.receiveMessageLength | 0;
+
+    if (qsocket.receiveMessage.length >= maxQueueMessages || (queuedBytes + packet.byteLength) > maxQueueBytes) {
+      Con.PrintWarning(`WebSocketDriver: receive queue overflow for ${qsocket.address}, disconnecting client\n`);
+      qsocket.state = QSocket.STATE_DISCONNECTED;
+
+      try {
+        if (qsocket.driverdata && qsocket.driverdata.readyState <= 1) {
+          qsocket.driverdata.close(1008, 'receive queue overflow');
+        }
+      } catch {
+        // socket already gone, nothing else to do
+      }
+
+      return;
+    }
+
+    qsocket.receiveMessage.push(packet);
+    qsocket.receiveMessageLength = queuedBytes + packet.byteLength;
+  }
+
   Connect(host) {
     // Only handle ws:// and wss:// URLs
     if (!/^wss?:\/\//i.test(host)) {
@@ -359,9 +384,9 @@ export class WebSocketDriver extends BaseDriver {
 
     // freeing up some QSocket structures
     sock.receiveMessage = [];
-    sock.receiveMessageLength = null;
+    sock.receiveMessageLength = 0;
     sock.sendMessage = [];
-    sock.sendMessageLength = null;
+    sock.sendMessageLength = 0;
 
     sock.driverdata.qsocket = sock;
 
@@ -392,6 +417,7 @@ export class WebSocketDriver extends BaseDriver {
 
     // fetch a message
     const message = qsocket.receiveMessage.shift();
+    qsocket.receiveMessageLength = Math.max(0, (qsocket.receiveMessageLength | 0) - message.byteLength);
 
     // parse header
     const ret = message[0];
@@ -492,12 +518,12 @@ export class WebSocketDriver extends BaseDriver {
     }
 
     if (NET.delay_receive.value === 0) {
-      this.qsocket.receiveMessage.push(new Uint8Array(data));
+      this.qsocket.driver._QueueIncomingMessage(this.qsocket, data);
       return;
     }
 
     setTimeout(() => {
-      this.qsocket.receiveMessage.push(new Uint8Array(data));
+      this.qsocket.driver._QueueIncomingMessage(this.qsocket, data);
     }, NET.delay_receive.value + (Math.random() - 0.5) * NET.delay_receive_jitter.value);
   }
 
@@ -531,9 +557,9 @@ export class WebSocketDriver extends BaseDriver {
 
     // these event handlers will feed into the message buffer structures
     sock.receiveMessage = [];
-    sock.receiveMessageLength = null;
+    sock.receiveMessageLength = 0;
     sock.sendMessage = [];
-    sock.sendMessageLength = null;
+    sock.sendMessageLength = 0;
     sock.state = QSocket.STATE_CONNECTED;
 
     // set the last message time to now
@@ -555,7 +581,7 @@ export class WebSocketDriver extends BaseDriver {
     });
 
     ws.on('message', (data) => {
-      sock.receiveMessage.push(new Uint8Array(data));
+      this._QueueIncomingMessage(sock, data);
     });
 
     this.newConnections.push(sock);
@@ -1969,4 +1995,3 @@ export class WebRTCDriver extends BaseDriver {
     return null;
   }
 };
-

@@ -1,6 +1,6 @@
 /* global Buffer */
 
-import { argv, stdout, exit } from 'node:process';
+import { argv, stdout, exit, cwd } from 'node:process';
 import { start } from 'repl';
 
 import express from 'express';
@@ -161,7 +161,11 @@ export default class Sys {
     Sys.#isRunning = true;
 
     if (Host.refreshrate.value === 0) {
-      Host.refreshrate.set(60);
+      if (registry.isDedicatedServer && Host.ticrate.value > 0) {
+        Host.refreshrate.set(Math.round(1.0 / Host.ticrate.value));
+      } else {
+        Host.refreshrate.set(60);
+      }
     }
 
     // Main loop
@@ -176,7 +180,12 @@ export default class Sys {
         Sys.Print(`Host.Frame took too long: ${dtime} ms\n`);
       }
 
-      await Q.sleep(Math.max(0, 1000.0 / Math.min(300, Math.max(60, Host.refreshrate.value)) - dtime));
+      const minRefreshRate = registry.isDedicatedServer ? 10 : 60;
+      const refreshRate = Math.min(300, Math.max(minRefreshRate, Host.refreshrate.value));
+      const frameBudget = 1000.0 / refreshRate;
+
+      // Always yield at least 1ms, otherwise overload can spin at 100% CPU forever.
+      await Q.sleep(Math.max(1, frameBudget - dtime));
 
       // when there are no more commands to process and no active connections, we can sleep indefinitely
       if (NET.activeconnections === 0 && Host._scheduledForNextFrame.length === 0 && !Cmd.HasPendingCommands()) {
@@ -236,7 +245,8 @@ export default class Sys {
 
     Sys.Print(`Webserver will listen on ${listenAddress || 'all interfaces'} on port ${listenPort}\n`);
 
-    const __dirname = import.meta.dirname + '/../..';
+    // Always serve relative to repository root (cwd), works for both source and Vite SSR bundle.
+    const rootDir = cwd();
 
     const distHeaders = (res) => {
       res.set('Cross-Origin-Opener-Policy', 'same-origin');
@@ -244,13 +254,13 @@ export default class Sys {
     };
 
     if (basepath !== '') {
-      app.use(basepath, express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
-      app.use(basepath + '/data', express.static(join(__dirname + '/..', 'data')));
-      app.use(basepath + '/source', express.static(join(__dirname + '/..', 'source')));
+      app.use(basepath, express.static(join(rootDir, 'dist'), { setHeaders: distHeaders }));
+      app.use(basepath + '/data', express.static(join(rootDir, 'data')));
+      app.use(basepath + '/source', express.static(join(rootDir, 'source')));
     } else {
-      app.use(express.static(join(__dirname + '/..', 'dist'), { setHeaders: distHeaders }));
-      app.use('/data', express.static(join(__dirname + '/..', 'data')));
-      app.use('/source', express.static(join(__dirname + '/..', 'source')));
+      app.use(express.static(join(rootDir, 'dist'), { setHeaders: distHeaders }));
+      app.use('/data', express.static(join(rootDir, 'data')));
+      app.use('/source', express.static(join(rootDir, 'source')));
     }
 
     const skipChars = (basepath + '/qfs/').length;
@@ -291,4 +301,3 @@ export default class Sys {
     });
   }
 };
-

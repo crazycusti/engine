@@ -24,6 +24,10 @@ eventBus.subscribe('registry.frozen', () => {
  */
 export class ServerClientPhysics {
   constructor() {
+    /** @type {import('../../common/Pmove.mjs').PmovePlayer|null} */
+    this._sharedPmovePlayer = null;
+    this._sharedPmoveRef = null;
+    this._impactVelocityScratch = new Vector();
   }
 
   // =========================================================================
@@ -65,6 +69,20 @@ export class ServerClientPhysics {
   }
 
   /**
+   * Reuse a single PmovePlayer instance to avoid per-command allocations.
+   * @param {import('../../common/Pmove.mjs').Pmove} pm pmove world instance
+   * @returns {import('../../common/Pmove.mjs').PmovePlayer} reusable mover
+   */
+  _getSharedPmovePlayer(pm) {
+    if (!this._sharedPmovePlayer || this._sharedPmoveRef !== pm) {
+      this._sharedPmovePlayer = pm.newPlayerMove();
+      this._sharedPmoveRef = pm;
+    }
+
+    return this._sharedPmovePlayer;
+  }
+
+  /**
    * Runs the shared PmovePlayer for a client, copying state in and out of
    * the entity and client objects. This replaces the old server-side
    * walkMove/airMove/waterMove/friction/accelerate code with the same
@@ -76,11 +94,8 @@ export class ServerClientPhysics {
     const entity = ent.entity;
     const pm = SV.pmove;
 
-    // --- Set up physents ---
-    this._setupPhysents(ent);
-
-    // --- Create a fresh player mover ---
-    const pmove = pm.newPlayerMove();
+    // --- Reuse the player mover ---
+    const pmove = this._getSharedPmovePlayer(pm);
 
     // --- Copy entity state → pmove ---
     pmove.origin.set(entity.origin);
@@ -180,6 +195,7 @@ export class ServerClientPhysics {
     // Touched entities — fire touch functions via SV.physics.impact
     // to match the bidirectional touch semantics used by SV_FlyMove.
     const touchedSet = new Set();
+    const impactVelocity = this._impactVelocityScratch;
     for (const idx of pmove.touchindices) {
       if (idx > 0 && idx < pm.physents.length && !touchedSet.has(idx)) {
         touchedSet.add(idx);
@@ -187,7 +203,8 @@ export class ServerClientPhysics {
         if (pe.edictId !== undefined && pe.edictId < SV.server.num_edicts) {
           const touchEdict = SV.server.edicts[pe.edictId];
           if (!touchEdict.isFree()) {
-            SV.physics.impact(ent, touchEdict, entity.velocity.copy());
+            impactVelocity.set(entity.velocity);
+            SV.physics.impact(ent, touchEdict, impactVelocity);
           }
         }
       }
@@ -347,8 +364,13 @@ export class ServerClientPhysics {
           // smooth and the next packet will catch up. Running with the
           // last known cmd would add phantom movement, making the
           // remote player appear to move faster than the host.
-          for (const cmd of client.pendingCmds) {
-            client.cmd.set(cmd);
+          if (client.pendingCmds.length > 0) {
+            // Build physents once per frame; commands only differ in input.
+            this._setupPhysents(ent);
+          }
+
+          for (let i = 0; i < client.pendingCmds.length; i++) {
+            client.cmd.set(client.pendingCmds[i]);
             this._runSharedPmove(ent, client);
           }
           client.pendingCmds.length = 0;
