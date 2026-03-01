@@ -1632,7 +1632,7 @@ export class BSP29Loader extends ModelLoader {
       const styles = new Uint8Array(buf, fileofs + 12, 4);
       const out = Object.assign(new Face(), {
         plane: loadmodel.planes[view.getUint16(fileofs, true)],
-        firstedge: view.getUint16(fileofs + 4, true),
+        firstedge: view.getInt32(fileofs + 4, true),
         numedges: view.getUint16(fileofs + 8, true),
         texinfo: view.getUint16(fileofs + 10, true),
         styles: [],

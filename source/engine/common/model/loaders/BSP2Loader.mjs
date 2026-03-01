@@ -333,17 +333,17 @@ export class BSP2Loader extends BSP29Loader {
    * @protected
    * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
-   * @throws {CorruptedResourceError} If edge lump size is not a multiple of 4
+   * @throws {CorruptedResourceError} If edge lump size is not a multiple of 8
    */
   _loadEdges(loadmodel, buf) {
     const view = new DataView(buf);
     const lump = 12; // edges lump
     let fileofs = view.getUint32((lump << 3) + 4, true);
     const filelen = view.getUint32((lump << 3) + 8, true);
-    if ((filelen & 3) !== 0) {
-      throw new CorruptedResourceError(loadmodel.name, 'BSP2Loader: edges lump size is not a multiple of 4');
+    if ((filelen % 8) !== 0) {
+      throw new CorruptedResourceError(loadmodel.name, 'BSP2Loader: edges lump size is not a multiple of 8');
     }
-    const count = filelen >> 2;
+    const count = filelen >> 3;
     loadmodel.edges.length = count;
     for (let i = 0; i < count; i++) {
       loadmodel.edges[i] = [view.getUint32(fileofs, true), view.getUint32(fileofs + 4, true)];

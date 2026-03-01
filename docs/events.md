@@ -43,6 +43,7 @@ The engine has an event bus.
 | Event | Arguments | Description |
 | - | - | - |
 | cvar.changed | 1. Cvar name | When a Cvar has been changed. |
+| cvar.changed.<cvar-name> | 1. Cvar | When a specific Cvar has been changed. |
 
 ### Frontend
 

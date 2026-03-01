@@ -1,4 +1,4 @@
-# Build stage — produces the Vite client bundle (dist/)
+# Build stage — produces the Vite client bundle (dist/browser/) and dedicated server (dist/dedicated/)
 FROM node:24-alpine AS builder
 
 ARG GIT_COMMIT_SHA
@@ -12,7 +12,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY index.html ./index.html
+COPY dedicated.mjs ./dedicated.mjs
 COPY vite.config.mjs ./vite.config.mjs
+COPY vite.config.dedicated.mjs ./vite.config.dedicated.mjs
 COPY jsconfig.json ./jsconfig.json
 COPY source ./source
 COPY public ./public
@@ -22,7 +24,8 @@ ENV VITE_SIGNALING_URL=${VITE_SIGNALING_URL}
 ENV VITE_CDN_URL_PATTERN=${VITE_CDN_URL_PATTERN}
 ENV VITE_GAME_DIR=${VITE_GAME_DIR}
 
-RUN npm run build:production
+RUN npm run build:production && \
+    npm run dedicated:build:production
 
 # Production stage — dedicated server + web client host
 FROM node:24-alpine
@@ -37,12 +40,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY dedicated.mjs ./dedicated.mjs
 COPY --from=builder /app/dist ./dist
 COPY data ./data
-# source/ is still required at runtime — the dedicated server imports
-# engine modules directly, and also serves source/ for unbundled browser loading
-COPY source ./source
 
 RUN chown -R quakeshack:quakeshack /app
 USER quakeshack
@@ -52,4 +51,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO /dev/null http://localhost:3000/ || exit 1
 
-CMD ["node", "./dedicated.mjs", "+exec", "server.cfg"]
+CMD ["npm", "run", "dedicated:start:production"]

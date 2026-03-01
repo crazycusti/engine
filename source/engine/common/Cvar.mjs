@@ -142,6 +142,7 @@ export default class Cvar {
 
     if (changed) {
       eventBus.publish('cvar.changed', this.name);
+      eventBus.publish(`cvar.changed.${this.name}`, this);
     }
 
     return this;

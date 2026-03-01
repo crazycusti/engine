@@ -1,5 +1,12 @@
 
+import { Worker } from 'node:worker_threads';
 import { registry, freeze as registryFreeze } from './registry.mjs';
+
+// Polyfill Worker global for Node.js so that WorkerFactories.mjs
+// (which uses the browser-compatible `new Worker(url)` pattern for
+// Vite static analysis) works identically in unbundled Node.js.
+// @ts-ignore — Node.js worker_threads.Worker is API-compatible at runtime
+globalThis.Worker = Worker;
 
 import Sys from './server/Sys.mjs';
 import NodeCOM from './server/Com.mjs';
@@ -15,7 +22,7 @@ import InfluxMetrics from './server/telemetry/InfluxMetrics.mjs';
 
 export default class EngineLauncher {
   static async Launch() {
-    console.log('Launching engine as dedicated server...');
+    console.info('Launching engine as dedicated server...');
 
     // set some global flags
     registry.isDedicatedServer = true;

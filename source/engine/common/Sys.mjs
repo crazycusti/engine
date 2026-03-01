@@ -60,11 +60,4 @@ export default class Sys {
     // eslint-disable-next-line no-unreachable
     return 0;
   }
-
-  // eslint-disable-next-line no-unused-vars
-  static CreateWorker(script) {
-    throw new NotImplementedError('Sys.CreateWorker must be implemented in a subclass');
-    // eslint-disable-next-line no-unreachable
-    return /** @type {BaseWorker} */ (null);
-  }
 };

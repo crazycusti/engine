@@ -899,7 +899,7 @@ export function resampleTexture8(data, inwidth, inheight, outwidth, outheight) {
 
 
 
-/** Turn this on to enable GL profiling */
+/** Turn this on to enable GL profiling, must be configured at compile-time */
 const profileGL = false;
 
 /** @type {Record<string, number>} */
@@ -1021,13 +1021,13 @@ function GL_Init() {
       pairs.sort((a, b) => b[1] - a[1]);
 
       if (pairs.length > 0) {
-        console.log('GL Profiling Stats:');
+        console.info('GL Profiling Stats:');
         for (const [key, value] of pairs) {
           if (value === 0) {
             continue;
           }
 
-          console.log(`  ${key}: ${value}`);
+          console.info(`  ${key}: ${value}`);
         }
       }
 

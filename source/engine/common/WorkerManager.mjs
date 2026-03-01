@@ -1,18 +1,31 @@
 import { registry, eventBus } from '../registry.mjs';
-import { BaseWorker } from './Sys.mjs';
+import { SysError } from './Errors.mjs';
+import PlatformWorker from './PlatformWorker.mjs';
 
-let { Con, COM, Sys } = registry;
+let { Con, COM } = registry;
 
 eventBus.subscribe('registry.frozen', () => {
   COM = registry.COM;
   Con = registry.Con;
-  Sys = registry.Sys;
 });
 
 export default class WorkerManager {
-  static Init() {
+  /** @type {Record<string, (name: string) => Worker>} */
+  static #factories = null;
+
+  /**
+   * Initializes the worker manager with the worker factory registry.
+   *
+   * Factories are passed in at runtime (rather than statically imported)
+   * to avoid a circular module dependency: worker scripts transitively
+   * import WorkerManager via Navigation.mjs, and WorkerFactories.mjs
+   * references those same worker scripts.
+   * @param {Record<string, (name: string) => Worker>} factories worker factory map from WorkerFactories.mjs
+   */
+  static Init(factories) {
+    WorkerManager.#factories = factories;
     // eventBus.subscribe('com.ready', () => {
-    //   console.log('WorkerManager: Spawning dummy worker for initialization test.');
+    //   console.info('WorkerManager: Spawning dummy worker for initialization test.');
 
     //   const worker = this.SpawnWorker('server/DummyWorker.mjs', ['worker.test', 'worker.busy', 'worker.error']);
 
@@ -30,12 +43,24 @@ export default class WorkerManager {
 
   /**
    * Spawns a worker thread and sets up event forwarding.
-   * @param {string} script Path to worker script (MUST BE REGISTERED IN client/Sys.mjs, see workerFactories!)
+   * @param {string} script Path to worker script (must be registered in WorkerFactories.mjs)
    * @param {string[]} events list of events the worker wants to subscribe to
-   * @returns {BaseWorker} worker thread wrapper
+   * @returns {PlatformWorker} worker thread wrapper
    */
   static SpawnWorker(script, events) {
-    const worker = Sys.CreateWorker(script);
+    const factory = WorkerManager.#factories[script];
+
+    console.assert(factory, `No worker factory found for script "${script}". Make sure it's registered in WorkerFactories.mjs.`);
+
+    let rawWorker;
+    try {
+      rawWorker = factory(script);
+    } catch (e) {
+      console.error(`WorkerManager: failed to create worker "${script}":`, e);
+      throw new SysError(`Worker ${script}: failed to construct: ${e.message}`);
+    }
+
+    const worker = new PlatformWorker(script, rawWorker);
 
     // worker thread --> main thread
     worker.addOnMessageListener(({ event, data }) => {

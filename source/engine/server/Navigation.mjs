@@ -9,7 +9,7 @@ import { CorruptedResourceError, MissingResourceError } from '../common/Errors.m
 import { ServerEngineAPI } from '../common/GameAPIs.mjs';
 import { BrushModel } from '../common/Mod.mjs';
 import { Face } from '../common/model/BaseModel.mjs';
-import { BaseWorker } from '../common/Sys.mjs';
+import PlatformWorker from '../common/PlatformWorker.mjs';
 import WorkerManager from '../common/WorkerManager.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import { ServerEdict } from './Edict.mjs';
@@ -186,7 +186,7 @@ export class Navigation {
   /** @type {Record<string,(path:Vector[]|null)=>(void)>} holds pending requests for the worker thread */
   #requests = {};
 
-  /** @type {BaseWorker} worker thread handling navigation lookups */
+  /** @type {PlatformWorker} worker thread handling navigation lookups */
   #worker = null;
 
   /** @type {Function?} unsubscribe from nav.path.request */
@@ -1268,7 +1268,7 @@ export class Navigation {
     const goalNode = this.#findNearestNode(goalPos, 512);
 
     if (!startNode || !goalNode) {
-      console.log('Navigation: no start or goal node found', startPos, goalPos);
+      console.warn('Navigation: no start or goal node found', startPos, goalPos);
       return null;
     }
 
@@ -1440,8 +1440,8 @@ export class Navigation {
       }
     }
 
-    console.log('waypoints: ', waypoints);
-    console.log('extracted walkable surfaces:', this.geometry.walkableSurfaces);
+    console.debug('waypoints: ', waypoints);
+    console.debug('extracted walkable surfaces:', this.geometry.walkableSurfaces);
 
     for (const { color, origin } of debugPoints) {
       this.#emitDot(origin, color);
