@@ -3,7 +3,7 @@ import Key from '../client/Key.mjs';
 import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';
 import * as Protocol from '../network/Protocol.mjs';
-import { eventBus, registry } from '../registry.mjs';
+import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ServerClient } from '../server/Client.mjs';
 import { ED, ServerEdict } from '../server/Edict.mjs';
 import Cmd from './Cmd.mjs';
@@ -603,6 +603,10 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return SV.svs.maxclients;
   }
 
+  /**
+   * Server game event bus, will be reset on every map load.
+   * @returns {EventBus} event bus
+   */
   static get eventBus() {
     return SV.server.eventBus;
   }
