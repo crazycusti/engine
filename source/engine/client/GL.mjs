@@ -698,6 +698,7 @@ export class GLTexture {
 
   /**
    * Will lock the texture mode to the specified name.
+   * Changes to gl_texturemode will no longer change this texture’s mode.
    * @param {string} name texture mode name
    * @returns {GLTexture} this
    */
