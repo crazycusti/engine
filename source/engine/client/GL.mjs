@@ -974,7 +974,7 @@ function GL_Init() {
 
   GL.maxtexturesize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
-  gl.clearColor(0.0, 0.0, 0.0, 0.0);
+  gl.clearColor(1.0, 0.0, 1.0, 1.0); // CR: magenta clear color to easily identify unrendered areas
   gl.cullFace(gl.FRONT);
   gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
 
