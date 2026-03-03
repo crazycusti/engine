@@ -820,9 +820,9 @@ export class BrushTrace {
   }
 
   /** @type {Vector[]} */
-  static _midPool = Array.from({ length: 64 }, () => new Vector());
+  static _midPool = Array.from({ length: 96 }, () => new Vector());
   /** @type {Vector[]} */
-  static _mid2Pool = Array.from({ length: 64 }, () => new Vector());
+  static _mid2Pool = Array.from({ length: 96 }, () => new Vector());
 
   /**
    * Recursively traverse the BSP node tree, expanding by trace extents.
@@ -897,10 +897,13 @@ export class BrushTrace {
       frac2 = 0;
     }
 
-    if (depth >= BrushTrace._midPool.length) {
+    while (depth >= BrushTrace._midPool.length) {
       BrushTrace._midPool.push(new Vector());
       BrushTrace._mid2Pool.push(new Vector());
     }
+
+    console.assert(depth === 128, 'hull check went quite deep');
+    console.assert(depth < 256, 'hull check went really deep');
 
     // Move up to the node
     const midf = p1f + (p2f - p1f) * frac;
