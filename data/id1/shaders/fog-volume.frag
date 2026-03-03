@@ -43,9 +43,10 @@ vec3 sampleLightProbe(vec3 worldPos) {
  * Derives near/far from the actual perspective matrix elements:
  *   uPerspective[2][2] = -(far+near)/(far-near)
  *   uPerspective[3][2] = -2*near*far/(far-near)
+ * Uses highp to avoid precision artifacts in the near-plane division.
  */
-float linearizeDepth(float depth) {
-  float z_ndc = depth * 2.0 - 1.0;
+float linearizeDepth(highp float depth) {
+  highp float z_ndc = depth * 2.0 - 1.0;
   return uPerspective[3][2] / (z_ndc + uPerspective[2][2]);
 }
 
@@ -66,17 +67,11 @@ vec2 intersectAABB(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
 }
 
 void main(void) {
-  // Screen UV for depth texture lookup
-  vec2 screenUV = gl_FragCoord.xy / uScreenSize;
-
-  // Sample scene depth and linearize
-  float rawDepth = texture(tDepth, screenUV).r;
-  float sceneDepth = linearizeDepth(rawDepth);
-
   // Ray from camera through this fragment in world space
   vec3 rayDir = normalize(vWorldPos - uViewOrigin);
 
-  // Intersect the ray with the fog volume AABB
+  // Intersect the ray with the fog volume AABB before sampling depth,
+  // to avoid unnecessary texture work on non-hitting fragments.
   vec2 tHit = intersectAABB(uViewOrigin, rayDir, uFogVolumeMins, uFogVolumeMaxs);
 
   // Clamp entry to 0 (camera might be inside the volume)
@@ -87,6 +82,13 @@ void main(void) {
   if (tEntry >= tExit || tExit <= 0.0) {
     discard;
   }
+
+  // Screen UV for depth texture lookup
+  vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+
+  // Sample scene depth and linearize
+  float rawDepth = texture(tDepth, screenUV).r;
+  float sceneDepth = linearizeDepth(rawDepth);
 
   // Convert scene view-depth to world-space ray distance.
   // The view-space Y axis IS the forward direction, and linearizeDepth
@@ -115,6 +117,18 @@ void main(void) {
   // Sample light probe at the midpoint of the fog ray to tint the fog
   // by the local lighting environment (colored lights, etc.)
   vec3 fogMidpoint = uViewOrigin + rayDir * ((tEntry + tExit) * 0.5);
+
+  // Edge fade: taper fog density towards zero near all six AABB faces so that
+  // the volume boundary dissolves smoothly instead of cutting off sharply.
+  // relPos = [0,1]^3 inside the volume; smoothstep creates a fade zone of
+  // EDGE_FADE_FRAC (fraction of the volume extent) on each face.
+  const float EDGE_FADE_FRAC = 0.12;
+  vec3 relPos = clamp((fogMidpoint - uFogVolumeMins) / (uFogVolumeMaxs - uFogVolumeMins), 0.0, 1.0);
+  vec3 edgeFade3 = smoothstep(vec3(0.0), vec3(EDGE_FADE_FRAC), relPos) *
+                   smoothstep(vec3(1.0), vec3(1.0 - EDGE_FADE_FRAC), relPos);
+  float edgeFade = edgeFade3.x * edgeFade3.y * edgeFade3.z;
+  fogFactor *= edgeFade;
+
   vec3 lightTint = sampleLightProbe(fogMidpoint);
 
   // Accumulate dynamic light contributions at the fog midpoint.
@@ -132,8 +146,10 @@ void main(void) {
     dlightContrib += dlColor * atten;
   }
 
-  // Apply gamma to light-tinted fog color (static probe + dynamic lights)
-  vec3 color = pow(uFogVolumeColor * lightTint + dlightContrib, vec3(uGamma));
+  // Apply gamma to light-tinted fog color (static probe + dynamic lights).
+  // uFogVolumeColor is the scattering albedo and modulates all light sources.
+  // Clamp to [0, 1] before pow to avoid undefined behaviour for over-bright inputs.
+  vec3 color = pow(clamp(uFogVolumeColor * (lightTint + dlightContrib), 0.0, 1.0), vec3(uGamma));
 
   fragColor = vec4(color, fogFactor);
 }
