@@ -79,6 +79,8 @@ export const flags = Object.freeze({
   FL_WATERJUMP: 2048,
   /** for jump debouncing */
   FL_JUMPRELEASED: 4096,
+  /** entity can be used (interacted with) */
+  FL_USEABLE: 8192,
 });
 
 /**
