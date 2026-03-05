@@ -89,6 +89,21 @@ class GL {
   }
 
   /**
+   * Binds a 2D array texture. Invalidates the 2D texture cache for this unit.
+   * @param {number} target texture unit (0-31)
+   * @param {WebGLTexture} texnum texture handle
+   */
+  static BindArray(target, texnum) {
+    if (currentTextureTarget !== target) {
+      currentTextureTarget = target;
+      gl.activeTexture(gl.TEXTURE0 + target);
+    }
+
+    currentTextureTargets[target] = null;
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, texnum);
+  }
+
+  /**
    * Binds a cube map texture. Invalidates the 2D texture cache for this unit.
    * @param {number} target texture unit (0-31)
    * @param {WebGLTexture} texnum texture handle

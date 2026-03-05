@@ -26,13 +26,14 @@ eventBus.subscribe('gl.shutdown', () => {
 });
 
 // Lightmap atlas configuration
-// This defines the width of the dynamic lightmap texture atlas.
-// The height is LIGHTMAP_BLOCK_SIZE * 4 because we pack 4 lightstyles in RGBA channels.
-// The 3 RGB color channels are stacked vertically (see shader for details).
-// Increase this value for larger maps (e.g., 2048 or 4096).
-// NOTE: Memory usage scales quadratically (2048 = 4x memory, 4096 = 16x memory).
+// LIGHTMAP_BLOCK_SIZE defines the width and height of each lightmap layer.
+// The lightmap is stored as a TEXTURE_2D_ARRAY with 3 layers (R, G, B).
+// Each layer is LIGHTMAP_BLOCK_SIZE x LIGHTMAP_BLOCK_SIZE pixels in RGBA8,
+// where the 4 RGBA channels carry the 4 lightstyle intensities.
+// LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4 is the RGBA byte stride per row,
+// used internally for CPU-side lightmap data indexing.
 export const LIGHTMAP_BLOCK_SIZE = 2048;
-export const LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4; // 4 lightstyles in RGBA
+export const LIGHTMAP_BLOCK_HEIGHT = LIGHTMAP_BLOCK_SIZE * 4; // RGBA byte stride per row
 
 /**
  * Renderer for BSP brush models (maps and inline models like doors, platforms).
@@ -158,7 +159,7 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, true);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-    GL.Bind(program.tDeluxemap, R.deluxemap_texture);
+    GL.BindArray(program.tDeluxemap, R.deluxemap_texture);
 
     gl.uniform1f(program.uHaveDeluxemap, 1.0);
 
@@ -304,7 +305,7 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, true);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-    GL.Bind(program.tDeluxemap, R.deluxemap_texture);
+    GL.BindArray(program.tDeluxemap, R.deluxemap_texture);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -485,9 +486,9 @@ export class BrushModelRenderer extends ModelRenderer {
   _setupBrushShaderCommon(program, clmodel, isWorld) {
     // Bind lightmap textures
     if ((R.fullbright.value !== 0) || (clmodel.lightdata === null && clmodel.lightdata_rgb === null)) {
-      GL.Bind(program.tLightmap, R.fullbright_texture);
+      GL.BindArray(program.tLightmap, R.fullbright_texture);
     } else {
-      GL.Bind(program.tLightmap, R.lightmap_texture);
+      GL.BindArray(program.tLightmap, R.lightmap_texture);
     }
 
     // Bind dynamic light texture
@@ -551,7 +552,7 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, false);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-    GL.Bind(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
+    GL.BindArray(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
 
     gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
 
@@ -632,7 +633,7 @@ export class BrushModelRenderer extends ModelRenderer {
     this._setupBrushShaderCommon(program, clmodel, false);
     GL.Bind(program.tLightStyleA, R.lightstyle_texture_a);
     GL.Bind(program.tLightStyleB, R.lightstyle_texture_b);
-    GL.Bind(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
+    GL.BindArray(program.tDeluxemap, clmodel.submodel ? R.deluxemap_texture : R.normal_up_texture);
 
     gl.uniform1f(program.uHaveDeluxemap, clmodel.submodel ? 1.0 : 0.0);
 

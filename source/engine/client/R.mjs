@@ -1319,16 +1319,16 @@ R.InitTextures = function() {
   R.flatnormalmap = GLTexture.Allocate('r_flatnormalmap', 1, 1, new Uint8Array([128, 128, 255, 255]));
 
   R.deluxemap_texture = gl.createTexture();
-  GL.Bind(0, R.deluxemap_texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT);
+  GL.BindArray(0, R.deluxemap_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 3);
 
   R.lightmap_texture = gl.createTexture();
-  GL.Bind(0, R.lightmap_texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT);
+  GL.BindArray(0, R.lightmap_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 3);
 
   R.dlightmap_rgba_texture = gl.createTexture();
   GL.Bind(0, R.dlightmap_rgba_texture);
@@ -1349,11 +1349,15 @@ R.InitTextures = function() {
   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, 64, 1);
 
   R.fullbright_texture = gl.createTexture();
-  GL.Bind(0, R.fullbright_texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 0]));
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  GL.BindArray(0, R.fullbright_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 1, 1, 3);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 3, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+    255, 0, 0, 0, // layer 0 (R): lightstyle 0 at full
+    255, 0, 0, 0, // layer 1 (G): lightstyle 0 at full
+    255, 0, 0, 0, // layer 2 (B): lightstyle 0 at full
+  ]));
 
   R.null_texture = gl.createTexture();
   GL.Bind(0, R.null_texture);
@@ -1363,11 +1367,15 @@ R.InitTextures = function() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
   R.normal_up_texture = gl.createTexture();
-  GL.Bind(0, R.normal_up_texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  GL.BindArray(0, R.normal_up_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 1, 1, 3);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 3, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+    128, 0, 0, 0, // layer 0 (X): neutral
+    255, 0, 0, 0, // layer 1 (Y): full (up direction)
+    128, 0, 0, 0, // layer 2 (Z): neutral
+  ]));
 
   eventBus.publish('renderer.textures.initialized');
 };
@@ -2340,7 +2348,7 @@ R.BuildLightMapEx = function(currentmodel, surf) {
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   if (currentmodel.deluxemap && !R.deluxemap) {
-    R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+    R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 3));
   }
 
   for (let k = 0; k < 3; k++) {
@@ -2496,7 +2504,7 @@ R.AllocBlock = function(surf) {
 R.BuildLightmaps = function() {
   R.allocated = (new Array(LIGHTMAP_BLOCK_SIZE)).fill(0);
 
-  R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+  R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 3));
   R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
 
   const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
@@ -2531,12 +2539,17 @@ R.BuildLightmaps = function() {
     }
   }
 
-  GL.Bind(0, R.lightmap_texture);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
+  const layerBytes = LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4;
+  GL.BindArray(0, R.lightmap_texture);
+  for (let k = 0; k < 3; k++) {
+    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 1, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb.subarray(k * layerBytes, (k + 1) * layerBytes));
+  }
 
-  GL.Bind(0, R.deluxemap_texture);
+  GL.BindArray(0, R.deluxemap_texture);
   if (R.deluxemap) {
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
+    for (let k = 0; k < 3; k++) {
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 1, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap.subarray(k * layerBytes, (k + 1) * layerBytes));
+    }
   }
 };
 

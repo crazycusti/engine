@@ -8,14 +8,14 @@ uniform float uAlpha;
 
 uniform sampler2D tTextureA;
 uniform sampler2D tTextureB;
-uniform sampler2D tLightmap;
+uniform mediump sampler2DArray tLightmap;
 uniform sampler2D tDlight;
 uniform sampler2D tLightStyleA;
 uniform sampler2D tLightStyleB;
 uniform sampler2D tLuminance;
 uniform sampler2D tNormal;
 uniform sampler2D tSpecular;
-uniform sampler2D tDeluxemap;
+uniform mediump sampler2DArray tDeluxemap;
 
 // Shadow mapping
 uniform highp sampler2DShadow tShadowMap;
@@ -80,16 +80,10 @@ void main(void) {
   );
   vec4 lightstyle = mix(lightstyleA, lightstyleB, uInterpolation) * LIGHTSTYLE_SCALE;
 
-  // Pre-calculate shared texture coordinates
-  float lightmapW = vTexCoord.w * 0.25; // divide once instead of three times
-  vec2 lightmapCoordR = vec2(vTexCoord.z, lightmapW);
-  vec2 lightmapCoordG = vec2(vTexCoord.z, lightmapW + 0.25);
-  vec2 lightmapCoordB = vec2(vTexCoord.z, lightmapW + 0.5);
-
-  // Sample all lightmap channels
-  vec4 lightmapR = texture(tLightmap, lightmapCoordR);
-  vec4 lightmapG = texture(tLightmap, lightmapCoordG);
-  vec4 lightmapB = texture(tLightmap, lightmapCoordB);
+  // Sample lightmap layers (R, G, B each in a separate array layer)
+  vec4 lightmapR = texture(tLightmap, vec3(vTexCoord.zw, 0.0));
+  vec4 lightmapG = texture(tLightmap, vec3(vTexCoord.zw, 1.0));
+  vec4 lightmapB = texture(tLightmap, vec3(vTexCoord.zw, 2.0));
 
   vec3 lightmap = vec3(
     dot(lightmapR, lightstyle),
@@ -199,9 +193,9 @@ void main(void) {
 
     if (uHaveDeluxemap) {
       // Reuse pre-calculated deluxemap coordinates
-      vec4 deluxemapR = texture(tDeluxemap, lightmapCoordR);
-      vec4 deluxemapG = texture(tDeluxemap, lightmapCoordG);
-      vec4 deluxemapB = texture(tDeluxemap, lightmapCoordB);
+      vec4 deluxemapR = texture(tDeluxemap, vec3(vTexCoord.zw, 0.0));
+      vec4 deluxemapG = texture(tDeluxemap, vec3(vTexCoord.zw, 1.0));
+      vec4 deluxemapB = texture(tDeluxemap, vec3(vTexCoord.zw, 2.0));
 
       lightDirection = vec3(
         dot(deluxemapR, lightstyle),
