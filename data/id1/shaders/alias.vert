@@ -8,6 +8,9 @@ uniform vec3 uLightVec;
 uniform vec3 uDynamicLightVec;
 uniform float uInterpolation;
 
+// Shadow mapping
+uniform mat4 uLightSpaceMatrix;
+
 in vec3 aPositionA;
 in vec3 aPositionB;
 in vec3 aNormal;
@@ -17,15 +20,21 @@ out vec2 vTexCoord;
 out float vLightDot;
 out float vDynamicLightDot;
 out float vFog;
+out vec4 vShadowCoord;
+out vec3 vWorldPos;
 
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
   vec3 lerpPos = mix(aPositionA, aPositionB, uInterpolation);
   vec3 worldPos = uAngles * lerpPos + uOrigin;
+  vWorldPos = worldPos;
   vec3 position = uViewAngles * (worldPos - uViewOrigin);
 
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
+
+  // Shadow coordinate in light space
+  vShadowCoord = uLightSpaceMatrix * vec4(worldPos, 1.0);
 
   vTexCoord = aTexCoord;
   vLightDot = max(0.0, dot(aNormal, normalize(worldPos - uLightVec)));

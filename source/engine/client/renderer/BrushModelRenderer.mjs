@@ -496,6 +496,21 @@ export class BrushModelRenderer extends ModelRenderer {
     } else {
       GL.Bind(program.tDlight, R.null_texture);
     }
+
+    // Bind shadow map texture
+    if (program.tShadowMap !== undefined) {
+      GL.Bind(program.tShadowMap, R.shadow_texture);
+    }
+
+    // Bind world occluder depth map (raw depth for wall-block detection)
+    if (program.tWorldDepthMap !== undefined) {
+      GL.Bind(program.tWorldDepthMap, R.world_depth_texture);
+    }
+
+    // Bind point light cube shadow map
+    if (program.tPointShadowMap !== undefined) {
+      GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
+    }
   }
 
   /**

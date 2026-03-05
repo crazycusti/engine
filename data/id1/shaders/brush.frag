@@ -17,6 +17,20 @@ uniform sampler2D tNormal;
 uniform sampler2D tSpecular;
 uniform sampler2D tDeluxemap;
 
+// Shadow mapping
+uniform highp sampler2DShadow tShadowMap;
+uniform highp sampler2D tWorldDepthMap;
+uniform float uShadowEnabled;
+uniform float uShadowDarkness;
+uniform float uShadowMaxDist;
+uniform float uShadowMapSize;
+
+// Point light shadow mapping
+uniform highp samplerCubeShadow tPointShadowMap;
+uniform vec3 uPointLightPos;
+uniform float uPointLightRadius;
+uniform float uPointShadowEnabled;
+
 uniform bool uPerformDotLighting;
 uniform bool uHaveDeluxemap;
 
@@ -34,6 +48,8 @@ in vec3 vLightVec;
 in float vLightMix;
 in vec3 vTangent;
 in vec3 vViewVec;
+in vec4 vShadowCoord;
+in vec3 vWorldPos;
 uniform vec3 uFogColor;
 in mat3 vAngles;
 
@@ -81,7 +97,98 @@ void main(void) {
     dot(lightmapB, lightstyle)
   );
 
-  vec3 staticLight = lightmap + texture(tDlight, vTexCoord.zw).rgb;
+  // Local entity shadow — small local depth map, BSP-light-driven direction.
+  // Modulates the lightmap; fades smoothly to fully-lit at coverage edge.
+  // 5×5 Gaussian-weighted PCF for smooth shadow edges. Each tap uses the
+  // hardware sampler2DShadow (LINEAR gives free 2×2 PCF per tap).
+  // The world occluder depth map (tWorldDepthMap) stores the closest world
+  // surface depth from the light.  When a wall sits between the shadow caster
+  // and this fragment the world depth is much less than the fragment depth,
+  // so the shadow is suppressed to prevent bleed-through.
+  float shadow = 1.0;
+  if (uShadowEnabled > 0.5) {
+    vec3 shadowCoord = vShadowCoord.xyz / vShadowCoord.w * 0.5 + 0.5;
+    if (shadowCoord.z >= 0.0 && shadowCoord.z <= 1.0) {
+      float edgeDist = max(abs(shadowCoord.x * 2.0 - 1.0), abs(shadowCoord.y * 2.0 - 1.0));
+      float fade = 1.0 - smoothstep(0.7, 1.0, edgeDist);
+      if (fade > 0.0) {
+        // 5×5 Gaussian-weighted PCF
+        float texelSize = 1.0 / uShadowMapSize;
+        float lit = 0.0;
+        // Row weights for a 5×5 Gaussian kernel (sigma ≈ 1.0)
+        // Weights: 1 4 6 4 1 / 4 16 24 16 4 / 6 24 36 24 6 / ...
+        // Normalized so they sum to 256
+        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3(-2.0, -2.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-1.0, -2.0, 0.0) * texelSize);
+        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 0.0, -2.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 1.0, -2.0, 0.0) * texelSize);
+        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3( 2.0, -2.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-2.0, -1.0, 0.0) * texelSize);
+        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3(-1.0, -1.0, 0.0) * texelSize);
+        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 0.0, -1.0, 0.0) * texelSize);
+        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3( 1.0, -1.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 2.0, -1.0, 0.0) * texelSize);
+        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  0.0, 0.0) * texelSize);
+        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3(-1.0,  0.0, 0.0) * texelSize);
+        lit += 36.0 * texture(tShadowMap, shadowCoord + vec3( 0.0,  0.0, 0.0) * texelSize);
+        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 1.0,  0.0, 0.0) * texelSize);
+        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  0.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  1.0, 0.0) * texelSize);
+        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3(-1.0,  1.0, 0.0) * texelSize);
+        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 0.0,  1.0, 0.0) * texelSize);
+        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3( 1.0,  1.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  1.0, 0.0) * texelSize);
+        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  2.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-1.0,  2.0, 0.0) * texelSize);
+        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 0.0,  2.0, 0.0) * texelSize);
+        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 1.0,  2.0, 0.0) * texelSize);
+        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  2.0, 0.0) * texelSize);
+        lit /= 256.0;
+        // Read the closest world surface depth from the light (no comparison).
+        // If this fragment is behind a world surface (wall), the entity
+        // shadow is bleeding through solid geometry — suppress it.
+        float worldDepth = texture(tWorldDepthMap, shadowCoord.xy).r;
+        if (worldDepth < 1.0) {
+          float depthDiff = shadowCoord.z - worldDepth;
+          float wallBlock = smoothstep(uShadowMaxDist * 0.5, uShadowMaxDist, depthDiff);
+          lit = mix(lit, 1.0, wallBlock);
+        }
+        shadow = mix(1.0, mix(uShadowDarkness, 1.0, lit), fade);
+      }
+    }
+  }
+
+  // Point light shadow — entity shadows cast from the nearest point light
+  // (BSP light entity or transient dynamic light). Fades quickly with
+  // distance so the effect is localised around the light source.
+  float pointShadow = 1.0;
+  if (uPointShadowEnabled > 0.5) {
+    vec3 fragToLight = vWorldPos - uPointLightPos;
+    float fragDist = length(fragToLight);
+    if (fragDist < uPointLightRadius) {
+      // The cubemap face's perspective projection stores depth based on
+      // the view-space Z, which equals the dominant axis of fragToLight
+      // (the component that selected this cube face). Using the radial
+      // distance instead would overestimate depth at face edges/corners,
+      // producing a cross-shaped shadow artifact at cube face seams.
+      vec3 absFTL = abs(fragToLight);
+      float viewZ = max(absFTL.x, max(absFTL.y, absFTL.z));
+      float n = 1.0;
+      float f = uPointLightRadius;
+      float refDepth = (n * f / (n - f)) / viewZ + n / (n - f);
+      refDepth = refDepth * 0.5 + 0.5;
+      float cubeShadow = texture(tPointShadowMap, vec4(fragToLight, refDepth));
+      // Quick distance fade — shadow strongest near the light, gone
+      // well before the radius edge so coverage stays tight.
+      float ptFade = 1.0 - smoothstep(f * 0.3, f * 0.7, fragDist);
+      pointShadow = mix(1.0, cubeShadow, ptFade);
+    }
+  }
+
+  // Point shadow darkens the lightmap (with a darkness floor so it never
+  // goes pure black) and fully occludes the dynamic light contribution.
+  vec3 staticLight = lightmap * shadow * mix(uShadowDarkness, 1.0, pointShadow)
+                   + texture(tDlight, vTexCoord.zw).rgb * pointShadow;
 
   float bumpLightDot = 1.0;
   float specFactor = 0.0;

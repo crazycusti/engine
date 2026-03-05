@@ -129,6 +129,21 @@ export class AliasModelRenderer extends ModelRenderer {
       skin.playertexture.bind(program.tPlayer);
     }
 
+    // Bind shadow map
+    if (program.tShadowMap !== undefined && R.shadow_texture) {
+      GL.Bind(program.tShadowMap, R.shadow_texture);
+    }
+
+    // Bind world occluder depth map (raw depth for wall-block detection)
+    if (program.tWorldDepthMap !== undefined && R.world_depth_texture) {
+      GL.Bind(program.tWorldDepthMap, R.world_depth_texture);
+    }
+
+    // Bind point light cube shadow map
+    if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
+      GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
+    }
+
     if (pass === 2) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

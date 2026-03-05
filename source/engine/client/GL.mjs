@@ -88,6 +88,21 @@ class GL {
     gl.bindTexture(gl.TEXTURE_3D, texnum);
   }
 
+  /**
+   * Binds a cube map texture. Invalidates the 2D texture cache for this unit.
+   * @param {number} target texture unit (0-31)
+   * @param {WebGLTexture} texnum texture handle
+   */
+  static BindCube(target, texnum) {
+    if (currentTextureTarget !== target) {
+      currentTextureTarget = target;
+      gl.activeTexture(gl.TEXTURE0 + target);
+    }
+
+    currentTextureTargets[target] = null;
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texnum);
+  }
+
   static Set2D() {
     gl.viewport(0, 0, Math.floor(VID.width * VID.pixelRatio), Math.floor(VID.height * VID.pixelRatio));
     GL.UnbindProgram();

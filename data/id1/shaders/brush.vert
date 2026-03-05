@@ -12,6 +12,9 @@ uniform vec3 uDynamicLightVec;
 uniform bool uPerformDotLighting;
 uniform bool uHaveDeluxemap;
 
+// Shadow mapping
+uniform mat4 uLightSpaceMatrix;
+
 in vec3 aPosition;
 in vec3 aNormal;
 in vec4 aTexCoord;
@@ -30,15 +33,21 @@ out vec3 vTangent;
 out mat3 vAngles;
 
 out vec3 vViewVec;
+out vec4 vShadowCoord;
+out vec3 vWorldPos;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
   // Calculate world position once and reuse
   vec3 worldPos = uAngles * aPosition + uOrigin;
+  vWorldPos = worldPos;
 
   // Calculate view position and set gl_Position
   vec3 position = uViewAngles * (worldPos - uViewOrigin);
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
+
+  // Shadow coordinate in light space
+  vShadowCoord = uLightSpaceMatrix * vec4(worldPos, 1.0);
 
   // Pass through texture coordinates
   vTexCoord = aTexCoord;

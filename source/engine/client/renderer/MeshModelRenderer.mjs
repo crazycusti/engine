@@ -112,6 +112,21 @@ export class MeshModelRenderer extends ModelRenderer {
       R.notexture.bind(program.tTexture);
     }
 
+    // Bind shadow map
+    if (program.tShadowMap !== undefined && R.shadow_texture) {
+      GL.Bind(program.tShadowMap, R.shadow_texture);
+    }
+
+    // Bind world occluder depth map (raw depth for wall-block detection)
+    if (program.tWorldDepthMap !== undefined && R.world_depth_texture) {
+      GL.Bind(program.tWorldDepthMap, R.world_depth_texture);
+    }
+
+    // Bind point light cube shadow map
+    if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
+      GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
+    }
+
     // Draw (IBO is captured in the VAO)
     const indexType = clmodel.indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT;
     gl.drawElements(gl.TRIANGLES, clmodel.numTriangles * 3, indexType, 0);
