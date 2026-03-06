@@ -171,6 +171,9 @@ export default class ShadowMap {
   /** @type {Cvar} Enable point light shadow mapping (0 = off, 1 = on) */
   static pointEnabled = null;
 
+  /** @type {Cvar} Normal offset bias for point light shadows (world units) */
+  static pointNormalBias = null;
+
   /** @type {number} Shadow map resolution in pixels (read by shaders for PCF texel size) */
   static size = SHADOW_SIZE;
 
@@ -220,6 +223,7 @@ export default class ShadowMap {
 
     // ── Point light cubemap depth texture ──────────────────────────
     ShadowMap.pointEnabled = new Cvar('r_shadow_point', '1', Cvar.FLAG.ARCHIVE, 'Enable point light shadow mapping');
+    ShadowMap.pointNormalBias = new Cvar('r_shadow_point_normal_bias', '1.5', Cvar.FLAG.ARCHIVE, 'Normal offset bias for point light shadows (world units)');
 
     ShadowMap.pointDepthCube = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_CUBE_MAP, ShadowMap.pointDepthCube);
@@ -671,10 +675,24 @@ export default class ShadowMap {
     gl.vertexAttribPointer(program.aPositionA.location, 3, gl.FLOAT, false, 24, frameA.cmdofs);
     gl.vertexAttribPointer(program.aPositionB.location, 3, gl.FLOAT, false, 24, frameB.cmdofs);
 
+    // Bind normal attributes for point shadow normal offset bias (offset +12 in same buffer)
+    if (program.aNormalA) {
+      gl.enableVertexAttribArray(program.aNormalA.location);
+      gl.enableVertexAttribArray(program.aNormalB.location);
+      gl.vertexAttribPointer(program.aNormalA.location, 3, gl.FLOAT, false, 24, frameA.cmdofs + 12);
+      gl.vertexAttribPointer(program.aNormalB.location, 3, gl.FLOAT, false, 24, frameB.cmdofs + 12);
+      gl.uniform3fv(program.uLightPos, ShadowMap.pointLightOrigin);
+      gl.uniform1f(program.uNormalBias, ShadowMap.pointNormalBias.value);
+    }
+
     gl.drawArrays(gl.TRIANGLES, 0, model._num_tris * 3);
 
     gl.disableVertexAttribArray(program.aPositionA.location);
     gl.disableVertexAttribArray(program.aPositionB.location);
+    if (program.aNormalA) {
+      gl.disableVertexAttribArray(program.aNormalA.location);
+      gl.disableVertexAttribArray(program.aNormalB.location);
+    }
   }
 
   /**
@@ -884,7 +902,7 @@ export default class ShadowMap {
     const refZ = casterCount > 0 ? centroid[2] : viewOrigin[2];
 
     // Build scored list, cheaply reject lights that are too far away
-    const maxRange = ShadowMap.range.value * 4.0;
+    const maxRange = ShadowMap.range.value * 16.0;
     const maxRangeSq = maxRange * maxRange;
     const scored = [];
 
@@ -990,32 +1008,32 @@ export default class ShadowMap {
       }
     }
 
-    // Score static BSP light entities — only consider lights within
-    // twice their radius so distant map lights don't compete.
-    const lights = ShadowMap.lightEntities;
-    for (let i = 0; i < lights.length; i++) {
-      const light = lights[i];
-      const dx = light.origin[0] - viewOrigin[0];
-      const dy = light.origin[1] - viewOrigin[1];
-      const dz = light.origin[2] - viewOrigin[2];
-      const distSq = dx * dx + dy * dy + dz * dz;
-      const maxDist = light.radius * 2.0;
+    // // Score static BSP light entities — only consider lights within
+    // // twice their radius so distant map lights don't compete.
+    // const lights = ShadowMap.lightEntities;
+    // for (let i = 0; i < lights.length; i++) {
+    //   const light = lights[i];
+    //   const dx = light.origin[0] - viewOrigin[0];
+    //   const dy = light.origin[1] - viewOrigin[1];
+    //   const dz = light.origin[2] - viewOrigin[2];
+    //   const distSq = dx * dx + dy * dy + dz * dz;
+    //   const maxDist = light.radius * 2.0;
 
-      if (distSq > maxDist * maxDist) {
-        continue;
-      }
+    //   if (distSq > maxDist * maxDist) {
+    //     continue;
+    //   }
 
-      const dist = Math.sqrt(distSq);
-      const score = light.radius / Math.max(dist, 1.0);
+    //   const dist = Math.sqrt(distSq);
+    //   const score = light.radius / Math.max(dist, 1.0);
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestOriginX = light.origin[0];
-        bestOriginY = light.origin[1];
-        bestOriginZ = light.origin[2];
-        bestRadius = light.radius;
-      }
-    }
+    //   if (score > bestScore) {
+    //     bestScore = score;
+    //     bestOriginX = light.origin[0];
+    //     bestOriginY = light.origin[1];
+    //     bestOriginZ = light.origin[2];
+    //     bestRadius = light.radius;
+    //   }
+    // }
 
     if (bestScore < 0) {
       return false;
@@ -1110,8 +1128,6 @@ export default class ShadowMap {
     gl.viewport(0, 0, POINT_SHADOW_SIZE, POINT_SHADOW_SIZE);
     gl.enable(gl.DEPTH_TEST);
     gl.colorMask(false, false, false, false);
-    gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(1.0, 1.0);
     gl.disable(gl.CULL_FACE); // render both sides for correct occlusion behind thin geometry
 
     GL.BindVAO(/** @type {WebGLVertexArrayObject} */ (worldmodel.opaqueVAO));
@@ -1121,6 +1137,7 @@ export default class ShadowMap {
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
     gl.uniform3fv(program.uLightPos, ShadowMap.pointLightOrigin);
     gl.uniform1f(program.uLightRadius, ShadowMap.pointLightRadius);
+    gl.uniform1f(program.uNormalBias, ShadowMap.pointNormalBias.value);
 
     for (let face = 0; face < 6; face++) {
       // Attach the correct cube face to the FBO depth
@@ -1164,7 +1181,6 @@ export default class ShadowMap {
     GL.UnbindVAO();
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.FRONT); // restore engine default
-    gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.colorMask(true, true, true, true);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }

@@ -516,6 +516,8 @@ export const ATTRIB_LOCATIONS = {
   aColor: 5,
   aPositionA: 6,
   aPositionB: 7,
+  aNormalA: 8,
+  aNormalB: 9,
 };
 
 /** @type {number} Standard brush vertex stride (20 floats = 80 bytes) */

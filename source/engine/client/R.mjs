@@ -1199,7 +1199,7 @@ R.RenderScene = function() {
   // between shadow casters and receiving surfaces (no bleed-through).
   // Falls back to configurable fallback angles when no light entity is visible.
   if (ShadowMap.enabled.value) {
-    // ShadowMap.selectLocalLight(R.refdef.vieworg);
+    ShadowMap.selectLocalLight(R.refdef.vieworg);
     ShadowMap._applyFallbackDirection();
 
     ShadowMap.updateLightSpaceMatrix(R.refdef.vieworg);
@@ -1500,8 +1500,8 @@ R.InitShaders = async function() {
 
     // shadow depth pass for point light cube shadow mapping
     GL.CreateProgram('shadow-point',
-      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uLightPos', 'uLightRadius'],
-      [['aPosition', gl.FLOAT, 3]],
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uLightPos', 'uLightRadius', 'uNormalBias'],
+      [['aPosition', gl.FLOAT, 3], ['aNormal', gl.FLOAT, 3]],
       []),
 
     // shadow depth pass for alias models (frame interpolation)
@@ -1512,8 +1512,8 @@ R.InitShaders = async function() {
 
     // point shadow depth pass for alias models (frame interpolation)
     GL.CreateProgram('shadow-alias-point',
-      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uInterpolation', 'uLightPos', 'uLightRadius'],
-      [['aPositionA', gl.FLOAT, 3], ['aPositionB', gl.FLOAT, 3]],
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uInterpolation', 'uLightPos', 'uLightRadius', 'uNormalBias'],
+      [['aPositionA', gl.FLOAT, 3], ['aPositionB', gl.FLOAT, 3], ['aNormalA', gl.FLOAT, 3], ['aNormalB', gl.FLOAT, 3]],
       []),
   ]);
 
