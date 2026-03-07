@@ -12,10 +12,8 @@ uniform float uAlpha;
 
 // Shadow mapping
 uniform mediump sampler2DShadow tShadowMap;
-uniform highp sampler2D tWorldDepthMap;
 uniform float uShadowEnabled;
 uniform float uShadowDarkness;
-uniform float uShadowMaxDist;
 
 // Point light shadow mapping
 uniform mediump samplerCubeShadow tPointShadowMap;
@@ -37,7 +35,6 @@ void main(void){
   // Local entity shadow — small local depth map, BSP-light-driven direction.
   // Fades smoothly to fully-lit at the coverage edge (no hard clip).
   // sampler2DShadow + LINEAR gives free 2×2 PCF soft edges.
-  // The world occluder depth map suppresses shadow that bleeds through walls.
   float shadow = 1.0;
   if (uShadowEnabled > 0.5) {
     vec3 shadowCoord = vShadowCoord.xyz / vShadowCoord.w * 0.5 + 0.5;
@@ -47,15 +44,6 @@ void main(void){
       float fade = 1.0 - smoothstep(0.7, 1.0, edgeDist);
       if (fade > 0.0) {
         float lit = texture(tShadowMap, shadowCoord);
-        // Read the closest world surface depth from the light (no comparison).
-        // If this fragment is behind a world surface (wall), the entity
-        // shadow is bleeding through solid geometry — suppress it.
-        float worldDepth = texture(tWorldDepthMap, shadowCoord.xy).r;
-        if (worldDepth < 1.0) {
-          float depthDiff = shadowCoord.z - worldDepth;
-          float wallBlock = smoothstep(uShadowMaxDist * 0.5, uShadowMaxDist, depthDiff);
-          lit = mix(lit, 1.0, wallBlock);
-        }
         shadow = mix(1.0, mix(uShadowDarkness, 1.0, lit), fade);
       }
     }

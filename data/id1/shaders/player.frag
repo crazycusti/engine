@@ -15,10 +15,8 @@ uniform float uAlpha;
 
 // Shadow mapping
 uniform mediump sampler2DShadow tShadowMap;
-uniform highp sampler2D tWorldDepthMap;
 uniform float uShadowEnabled;
 uniform float uShadowDarkness;
-uniform float uShadowMaxDist;
 
 // Point light shadow mapping
 uniform mediump samplerCubeShadow tPointShadowMap;
@@ -48,15 +46,6 @@ void main(void) {
       float fade = 1.0 - smoothstep(0.7, 1.0, edgeDist);
       if (fade > 0.0) {
         float rawShadow = texture(tShadowMap, shadowCoord);
-        // Read the closest world surface depth from the light (no comparison).
-        // If this fragment is behind a world surface (wall), the entity
-        // shadow is bleeding through solid geometry — suppress it.
-        float worldDepth = texture(tWorldDepthMap, shadowCoord.xy).r;
-        if (worldDepth < 1.0) {
-          float depthDiff = shadowCoord.z - worldDepth;
-          float wallBlock = smoothstep(uShadowMaxDist * 0.5, uShadowMaxDist, depthDiff);
-          rawShadow = mix(rawShadow, 1.0, wallBlock);
-        }
         shadow = mix(1.0, mix(uShadowDarkness, 1.0, rawShadow), fade);
       }
     }

@@ -89,9 +89,6 @@ export default class ShadowMap {
   /** @type {Cvar} Fallback shadow pitch when no nearby light is found (degrees, negative = downward) */
   static sunPitch = null;
 
-  /** @type {Cvar} Wall-block depth threshold in world units (entity shadows behind a world surface thicker than this are suppressed) */
-  static maxDist = null;
-
   // ─── Local light direction ────────────────────────────────────────
 
   /**
@@ -132,8 +129,14 @@ export default class ShadowMap {
   /** @type {number} Maximum number of light entities to test per frame (performance cap) */
   static _MAX_LIGHT_TRACES = 8;
 
+  /** @type {number} Blend factor between camera position and caster centroid for local shadow focus */
+  static _SHADOW_FOCUS_BLEND = 0.35;
+
   /** @type {Float64Array} Scratch buffer for shadow caster centroid computation */
   static _centroidScratch = new Float64Array(3);
+
+  /** @type {Float64Array} Stable focus point for the local entity-shadow projection */
+  static _shadowFocusPoint = new Float64Array(3);
 
   // ─── Point light shadow ──────────────────────────────────────────
 
@@ -151,17 +154,6 @@ export default class ShadowMap {
 
   /** @type {Float64Array} Active point light position [x, y, z] for this frame */
   static pointLightOrigin = new Float64Array(3);
-
-  // ─── World occluder depth map ────────────────────────────────
-
-  /** @type {WebGLFramebuffer} Depth-only FBO for the world occluder pass */
-  static worldFBO = null;
-
-  /** @type {WebGLTexture} Depth texture (sampler2D, no comparison) storing closest world surface depth from the light */
-  static worldDepthTexture = null;
-
-  /** @type {WebGLTexture} 1×1 dummy texture (depth = 1.0) used when shadows are off */
-  static worldDummyTexture = null;
 
   /** @type {number} Active point light radius for this frame */
   static pointLightRadius = 0;
@@ -188,7 +180,6 @@ export default class ShadowMap {
     ShadowMap.darkness = new Cvar('r_shadow_darkness', '0.66', Cvar.FLAG.ARCHIVE, 'Minimum brightness in shadow (0=black, 1=no shadow)');
     ShadowMap.sunYaw = new Cvar('r_shadow_fallback_yaw', '225', Cvar.FLAG.ARCHIVE, 'Fallback shadow direction yaw when no nearby light is found (degrees)');
     ShadowMap.sunPitch = new Cvar('r_shadow_fallback_pitch', '-90', Cvar.FLAG.ARCHIVE, 'Fallback shadow direction pitch when no nearby light is found (degrees, negative = down)');
-    ShadowMap.maxDist = new Cvar('r_shadow_max_dist', '64', Cvar.FLAG.ARCHIVE, 'Wall-block depth threshold in world units (entity shadows behind a world surface thicker than this are suppressed)');
 
     // ── Shadow depth texture ───────────────────────────────────────
     ShadowMap.depthTexture = gl.createTexture();
@@ -254,37 +245,6 @@ export default class ShadowMap {
     gl.readBuffer(gl.NONE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    // ── World occluder depth texture (sampler2D, no comparison) ────
-    // Stores the closest world surface depth from the light's POV.
-    // The fragment shader reads this raw depth to detect walls between
-    // shadow-casting entities and the receiving surface, preventing
-    // entity shadows from bleeding through solid world geometry.
-    ShadowMap.worldDepthTexture = gl.createTexture();
-    GL.Bind(0, ShadowMap.worldDepthTexture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    // No TEXTURE_COMPARE_MODE — we want raw depth via sampler2D
-
-    ShadowMap.worldFBO = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, ShadowMap.worldFBO);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, ShadowMap.worldDepthTexture, 0);
-    gl.drawBuffers([]);
-    gl.readBuffer(gl.NONE);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    // 1×1 dummy world depth (depth = 1.0 → no wall anywhere)
-    ShadowMap.worldDummyTexture = gl.createTexture();
-    GL.Bind(0, ShadowMap.worldDummyTexture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, 1, 1);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, new Uint32Array([0xFFFFFFFF]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
     // ── 1×1 dummy cubemap (always-lit) ─────────────────────────────
     ShadowMap.pointDummyCube = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_CUBE_MAP, ShadowMap.pointDummyCube);
@@ -306,22 +266,25 @@ export default class ShadowMap {
 
   /**
    * Recompute the light-space view-projection matrix for the current frame.
-   * Uses an orthographic projection centred on the camera.
+   * Uses an orthographic projection centred on the local shadow focus point.
    * Direction is taken from `localLightDir`, set by `selectLocalLight()`.
-   * @param {Float64Array|number[]} viewOrigin Camera position in world space
    */
-  static updateLightSpaceMatrix(viewOrigin) {
+  static updateLightSpaceMatrix() {
     const range = ShadowMap.range.value;
+    const focusPoint = ShadowMap._shadowFocusPoint;
+    const focusX = focusPoint[0];
+    const focusY = focusPoint[1];
+    const focusZ = focusPoint[2];
 
     // Light direction (FROM light TO scene), already normalised
     const dirX = ShadowMap.localLightDir[0];
     const dirY = ShadowMap.localLightDir[1];
     const dirZ = ShadowMap.localLightDir[2];
 
-    // Light "eye" — offset back from view origin along the opposite of sun dir
-    const eyeX = viewOrigin[0] - dirX * range;
-    const eyeY = viewOrigin[1] - dirY * range;
-    const eyeZ = viewOrigin[2] - dirZ * range;
+    // Light "eye" — offset back from the shadow focus point along the light direction.
+    const eyeX = focusX - dirX * range;
+    const eyeY = focusY - dirY * range;
+    const eyeZ = focusZ - dirZ * range;
 
     // ── Build an OpenGL-style lookAt matrix ────────────────────────
     // Forward = sun direction (already unit-length)
@@ -421,82 +384,6 @@ export default class ShadowMap {
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.colorMask(true, true, true, true);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  /**
-   * Begin the raw entity depth pass.
-   * Renders shadow-casting entities into a separate depth texture
-   * (sampler2D, no comparison mode) so the fragment shader can read
-   * the raw caster depth and suppress shadows that exceed the maximum
-   * projection distance — preventing bleed-through walls.
-   */
-  static beginWorldPass() {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, ShadowMap.worldFBO);
-    gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
-    gl.enable(gl.DEPTH_TEST);
-    gl.clear(gl.DEPTH_BUFFER_BIT);
-    gl.colorMask(false, false, false, false);
-    gl.enable(gl.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(1.0, 1.0);
-    gl.disable(gl.CULL_FACE);
-  }
-
-  /**
-   * End the world occluder depth pass and restore GL state.
-   */
-  static endWorldPass() {
-    gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.FRONT);
-    gl.disable(gl.POLYGON_OFFSET_FILL);
-    gl.colorMask(true, true, true, true);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-
-  /**
-   * Render world BSP into the world occluder depth map.
-   * Uses a small polygon offset to avoid z-fighting; stores accurate
-   * world depth so the fragment shader can detect walls between
-   * shadow casters and receiving surfaces.
-   */
-  static renderWorldOccluder() {
-    const worldmodel = /** @type {import('../../common/model/BSP.mjs').BrushModel} */ (CL.state.worldmodel);
-    if (!worldmodel) {
-      return;
-    }
-
-    GL.BindVAO(/** @type {WebGLVertexArrayObject} */ (worldmodel.opaqueVAO));
-    const program = GL.UseProgram('shadow-brush');
-
-    gl.uniform3f(program.uOrigin, 0, 0, 0);
-    gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-    gl.uniformMatrix4fv(program.uLightSpaceMatrix, false, ShadowMap.lightSpaceMatrix);
-
-    for (let i = 0; i < worldmodel.leafs.length; i++) {
-      const leaf = worldmodel.leafs[i];
-      if (leaf.skychain === 0) {
-        continue;
-      }
-
-      for (let j = 0; j < leaf.skychain; j++) {
-        const cmds = leaf.cmds[j];
-        const flags = worldmodel.textures[cmds[0]].flags;
-
-        if (flags & (materialFlags.MF_SKIP | materialFlags.MF_TRANSPARENT)) {
-          continue;
-        }
-
-        gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
-      }
-    }
-
-    GL.UnbindVAO();
-  }
-
-  /**
-   * @returns {WebGLTexture} The world occluder depth texture (real or dummy)
-   */
-  static getActiveWorldTexture() {
-    return ShadowMap.enabled.value ? ShadowMap.worldDepthTexture : ShadowMap.worldDummyTexture;
   }
 
   /**
@@ -779,8 +666,8 @@ export default class ShadowMap {
 
   /**
    * Test line-of-sight between two points using the world BSP hull 0.
-   * @param {Float64Array|number[]} start Start point
-   * @param {Float64Array|number[]} end End point
+   * @param {Vector|Float64Array|number[]} start Start point
+   * @param {Vector|Float64Array|number[]} end End point
    * @returns {boolean} `true` if the line is unobstructed
    */
   static _traceVisible(start, end) {
@@ -839,17 +726,20 @@ export default class ShadowMap {
    * Finds the strongest visible light entity (parsed from the BSP entity
    * lump) near the shadow-casting entities and derives the shadow cast
    * direction from the vector pointing FROM the light TO the entity
-   * centroid.  This ensures shadows remain stable when only the camera
-   * moves — only entity movement changes the shadow direction.
+   * centroid. This ensures shadows remain stable when only the camera
+   * moves; only entity movement changes the shadow direction.
    * When no visible light entity is found the method falls back to the
    * configurable fallback angles (`r_shadow_fallback_yaw` /
    * `r_shadow_fallback_pitch`).
-   * @param {Float64Array|number[]} viewOrigin Camera position (used as
-   *   fallback when no shadow casters are visible)
+   * @param {Vector|Float64Array|number[]} viewOrigin Camera position used as
+   *   fallback when no shadow casters are visible.
    */
   static selectLocalLight(viewOrigin) {
     const worldmodel = CL.state.worldmodel;
     if (!worldmodel) {
+      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
+      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
+      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
       ShadowMap._applyFallbackDirection();
       return;
     }
@@ -866,6 +756,9 @@ export default class ShadowMap {
     const numLights = lights.length;
 
     if (numLights === 0) {
+      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
+      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
+      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
       ShadowMap._applyFallbackDirection();
       return;
     }
@@ -878,6 +771,18 @@ export default class ShadowMap {
     const refX = casterCount > 0 ? centroid[0] : viewOrigin[0];
     const refY = casterCount > 0 ? centroid[1] : viewOrigin[1];
     const refZ = casterCount > 0 ? centroid[2] : viewOrigin[2];
+    const targetPoint = casterCount > 0 ? centroid : viewOrigin;
+    if (casterCount > 0) {
+      const blend = ShadowMap._SHADOW_FOCUS_BLEND;
+      const invBlend = 1.0 - blend;
+      ShadowMap._shadowFocusPoint[0] = viewOrigin[0] * invBlend + refX * blend;
+      ShadowMap._shadowFocusPoint[1] = viewOrigin[1] * invBlend + refY * blend;
+      ShadowMap._shadowFocusPoint[2] = viewOrigin[2] * invBlend + refZ * blend;
+    } else {
+      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
+      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
+      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
+    }
 
     // Build scored list, cheaply reject lights that are too far away
     const maxRange = ShadowMap.range.value * 16.0;
@@ -906,6 +811,11 @@ export default class ShadowMap {
 
     for (let i = 0; i < traceLimit; i++) {
       const { light, dist } = scored[i];
+
+      // Prefer lights that actually have line-of-sight to the casters.
+      if (!ShadowMap._traceVisible(light.origin, targetPoint)) {
+        continue;
+      }
 
       // Direction FROM the light TO the entity centroid (shadow cast direction)
       const invDist = 1.0 / dist;
@@ -937,11 +847,11 @@ export default class ShadowMap {
   /**
    * Select the strongest light for point shadow casting.
    * Considers both transient dynamic lights and static BSP light
-   * entities.  Picks whichever scores highest (radius / distance).
+   * entities. Picks whichever scores highest (radius / distance).
    * BSP lights are capped at twice their radius so distant map
    * lights don't compete with nearby ones.
-   * @param {Float64Array|number[]} viewOrigin Camera position in world space
-   * @returns {boolean} True if a suitable light was found
+   * @param {Vector|Float64Array|number[]} viewOrigin Camera position in world space.
+   * @returns {boolean} True if a suitable light was found.
    */
   static selectPointLight(viewOrigin) {
     ShadowMap.pointLightActive = false;

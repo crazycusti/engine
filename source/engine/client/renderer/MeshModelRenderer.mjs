@@ -117,11 +117,6 @@ export class MeshModelRenderer extends ModelRenderer {
       GL.Bind(program.tShadowMap, R.shadow_texture);
     }
 
-    // Bind world occluder depth map (raw depth for wall-block detection)
-    if (program.tWorldDepthMap !== undefined && R.world_depth_texture) {
-      GL.Bind(program.tWorldDepthMap, R.world_depth_texture);
-    }
-
     // Bind point light cube shadow map
     if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
       GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);

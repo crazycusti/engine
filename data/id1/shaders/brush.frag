@@ -24,10 +24,8 @@ uniform sampler2DArray tDeluxemap;
 
 // Shadow mapping
 uniform sampler2DShadow tShadowMap;
-uniform sampler2D tWorldDepthMap;
 uniform float uShadowEnabled;
 uniform float uShadowDarkness;
-uniform float uShadowMaxDist;
 uniform float uShadowMapSize;
 
 // Point light shadow mapping
@@ -100,10 +98,6 @@ void main(void) {
   // Modulates the lightmap; fades smoothly to fully-lit at coverage edge.
   // 5×5 Gaussian-weighted PCF for smooth shadow edges. Each tap uses the
   // hardware sampler2DShadow (LINEAR gives free 2×2 PCF per tap).
-  // The world occluder depth map (tWorldDepthMap) stores the closest world
-  // surface depth from the light.  When a wall sits between the shadow caster
-  // and this fragment the world depth is much less than the fragment depth,
-  // so the shadow is suppressed to prevent bleed-through.
   float shadow = 1.0;
   if (uShadowEnabled > 0.5) {
     vec3 shadowCoord = vShadowCoord.xyz / vShadowCoord.w * 0.5 + 0.5;
@@ -143,15 +137,6 @@ void main(void) {
         lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 1.0,  2.0, 0.0) * texelSize);
         lit += 1.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  2.0, 0.0) * texelSize);
         lit /= 256.0;
-        // Read the closest world surface depth from the light (no comparison).
-        // If this fragment is behind a world surface (wall), the entity
-        // shadow is bleeding through solid geometry — suppress it.
-        float worldDepth = texture(tWorldDepthMap, shadowCoord.xy).r;
-        if (worldDepth < 1.0) {
-          float depthDiff = shadowCoord.z - worldDepth;
-          float wallBlock = smoothstep(uShadowMaxDist * 0.5, uShadowMaxDist, depthDiff);
-          lit = mix(lit, 1.0, wallBlock);
-        }
         shadow = mix(1.0, mix(uShadowDarkness, 1.0, lit), fade);
       }
     }

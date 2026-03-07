@@ -8,7 +8,7 @@ import Chase from './Chase.mjs';
 import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { ATTRIB_LOCATIONS, GLTexture } from './GL.mjs';
-import { content, effect, EPSILON, gameCapabilities } from '../../shared/Defs.mjs';
+import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer, LIGHTMAP_BLOCK_HEIGHT, LIGHTMAP_BLOCK_SIZE } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
@@ -1159,12 +1159,6 @@ R.Perspective = function() {
     if (program.uShadowDarkness !== undefined) {
       gl.uniform1f(program.uShadowDarkness, ShadowMap.darkness.value);
     }
-    if (program.uShadowMaxDist !== undefined) {
-      // Convert world-unit max distance to NDC-space fraction.
-      // Ortho depth range = 2 * range; NDC [0,1] maps to that.
-      const range = ShadowMap.range.value;
-      gl.uniform1f(program.uShadowMaxDist, ShadowMap.maxDist.value / (2.0 * range));
-    }
     if (program.uShadowMapSize !== undefined) {
       gl.uniform1f(program.uShadowMapSize, ShadowMap.size);
     }
@@ -1230,7 +1224,6 @@ R.PreRenderScene = function() {
   // Choose the shadow texture for this frame (real or dummy)
   R.shadow_texture = ShadowMap.getActiveTexture();
   R.point_shadow_texture = ShadowMap.getActivePointTexture();
-  R.world_depth_texture = ShadowMap.getActiveWorldTexture();
 };
 
 R.RenderWorld = function() {
@@ -1271,30 +1264,18 @@ R.RenderScene = function() {
   R.SetFrustum();
 
   // Shadow depth pass — local entity shadow driven by the nearest visible
-  // static light entity from the BSP entity lump.  World geometry is rendered
-  // into a separate occluder depth map so the fragment shader can detect walls
-  // between shadow casters and receiving surfaces (no bleed-through).
-  // Falls back to configurable fallback angles when no light entity is visible.
+  // static light entity from the BSP entity lump. Static world shadowing
+  // remains authored by baked lightmaps.
   if (ShadowMap.enabled.value) {
     ShadowMap.selectLocalLight(R.refdef.vieworg);
-    ShadowMap._applyFallbackDirection();
 
-    ShadowMap.updateLightSpaceMatrix(R.refdef.vieworg);
-
-    // World occluder depth pass — stores the closest world surface depth
-    // from the light so the fragment shader can detect walls between
-    // shadow-casting entities and receiving surfaces (no bleed-through).
-    ShadowMap.beginWorldPass();
-    ShadowMap.renderEntitiesShadow(ShadowMap.lightSpaceMatrix);
-    // ShadowMap.renderWorldOccluder();
-    ShadowMap.endWorldPass();
+    ShadowMap.updateLightSpaceMatrix();
 
     // Entity shadow caster pass
     ShadowMap.begin();
     ShadowMap.renderEntitiesShadow(ShadowMap.lightSpaceMatrix);
     ShadowMap.end();
   }
-  R.world_depth_texture = ShadowMap.getActiveWorldTexture();
 
   // Point light shadow pass — render world BSP into a cube depth map
   // from the strongest dlight's position.
@@ -1461,28 +1442,28 @@ R.InitShaders = async function() {
   // rendering alias models
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMaxDist', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
         ['aNormal', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
       ],
-      ['tTexture', 'tShadowMap', 'tPointShadowMap', 'tWorldDepthMap']),
+      ['tTexture', 'tShadowMap', 'tPointShadowMap']),
 
     // rendering mesh models (OBJ, IQM, GLTF)
     GL.CreateProgram('mesh',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMaxDist', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
         ['aNormal', gl.FLOAT, 3],
       ],
-      ['tTexture', 'tShadowMap', 'tPointShadowMap', 'tWorldDepthMap']),
+      ['tTexture', 'tShadowMap', 'tPointShadowMap']),
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMaxDist', 'uShadowMapSize', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMapSize', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -1490,7 +1471,7 @@ R.InitShaders = async function() {
           ['aNormal', gl.FLOAT, 3],
           ['aTangent', gl.FLOAT, 3],
         ],
-        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap', 'tPointShadowMap', 'tWorldDepthMap']),
+        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap', 'tPointShadowMap']),
 
     // rendering dynamic lights
     GL.CreateProgram('dlight',
@@ -1500,14 +1481,14 @@ R.InitShaders = async function() {
 
     // rendering the player model (similar to alias model but with custom colors)
     GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMaxDist', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPositionA', gl.FLOAT, 3],
           ['aPositionB', gl.FLOAT, 3],
           ['aNormal', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 2],
         ],
-        ['tTexture', 'tPlayer', 'tShadowMap', 'tPointShadowMap', 'tWorldDepthMap']),
+        ['tTexture', 'tPlayer', 'tShadowMap', 'tPointShadowMap']),
 
     // for rendering sprites (usually effects)
     GL.CreateProgram('sprite',

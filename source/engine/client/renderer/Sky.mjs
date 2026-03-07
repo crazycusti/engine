@@ -453,9 +453,6 @@ export class SimpleSkyBox extends SkyRenderer {
     if (program.tShadowMap !== undefined && R.shadow_texture) {
       GL.Bind(program.tShadowMap, R.shadow_texture);
     }
-    if (program.tWorldDepthMap !== undefined && R.world_depth_texture) {
-      GL.Bind(program.tWorldDepthMap, R.world_depth_texture);
-    }
     if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
       GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
     }
