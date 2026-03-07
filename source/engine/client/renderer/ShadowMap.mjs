@@ -5,6 +5,7 @@ import { eventBus, registry } from '../../registry.mjs';
 import { materialFlags } from './Materials.mjs';
 import { effect } from '../../../shared/Defs.mjs';
 import Vector from '../../../shared/Vector.mjs';
+import { AliasModelRenderer } from './AliasModelRenderer.mjs';
 
 let { CL, COM, Mod, R, SV } = registry;
 
@@ -641,37 +642,9 @@ export default class ShadowMap {
     gl.uniformMatrix3fv(program.uAngles, false, entity.lerp.angles.toRotationMatrix());
     gl.uniformMatrix4fv(program.uLightSpaceMatrix, false, lightSpaceMatrix);
 
-    // Frame interpolation (same logic as AliasModelRenderer._selectFrames)
-    const time = CL.state.time + entity.syncbase;
-    let num = entity.frame;
-    if (num >= model.frames.length || num < 0) {
-      num = 0;
-    }
-    let frame = model.frames[num];
-    let frameA = frame;
-    let frameB = frame;
-    let targettime = 0;
-    if (frame.group === true) {
-      const last = frame.frames.length - 1;
-      const fullinterval = frame.frames[last].interval;
-      frameA = frame.frames[0];
-      frameB = frame.frames[1 % frame.frames.length];
-      targettime = time - Math.floor(time / fullinterval) * fullinterval;
-      for (let i = 0; i < last; i++) {
-        if (frame.frames[i].interval > targettime) {
-          frameA = frame.frames[i];
-          frameB = frame.frames[(i + 1) % frame.frames.length];
-          break;
-        }
-      }
-    } else if (R.interpolation.value) {
-      const [previousFrame, nextFrame, f] = entity.lerp.frame;
-      frameA = model.frames[previousFrame];
-      frameB = model.frames[nextFrame];
-      targettime = f;
-    }
+    const { frameA, frameB, targettime } = AliasModelRenderer._selectFrames(model, entity);
 
-    gl.uniform1f(program.uInterpolation, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value && (entity.effects & effect.EF_MUZZLEFLASH) === 0 ? Math.min(1, Math.max(0, targettime)) : 0);
 
     // Bind vertex buffer and setup attributes (stride=24: 3 floats pos + 3 floats normal)
     gl.bindBuffer(gl.ARRAY_BUFFER, model.cmds);

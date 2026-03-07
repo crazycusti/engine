@@ -22,6 +22,7 @@ export class Plane { // TODO: move to shared
 export class Face {
   submodel = false;
   plane = /** @type {Plane} */(null); // will be linked during loading
+  planeBack = false;
   firstedge = 0;
   numedges = 0;
   texinfo = 0;

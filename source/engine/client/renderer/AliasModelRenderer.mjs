@@ -3,6 +3,7 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 import W from '../../common/W.mjs';
+import { effect } from '../../../shared/Defs.mjs';
 
 let { CL, Host, R, Con } = registry;
 let gl = /** @type {WebGL2RenderingContext} */ (null);
@@ -108,10 +109,10 @@ export class AliasModelRenderer extends ModelRenderer {
     R.c_alias_polys += clmodel._num_tris;
 
     // Select animation frames
-    const { frameA, frameB, targettime } = this._selectFrames(clmodel, e);
+    const { frameA, frameB, targettime } = AliasModelRenderer._selectFrames(clmodel, e);
 
     // Setup interpolation
-    gl.uniform1f(program.uInterpolation, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value && (e.effects & effect.EF_MUZZLEFLASH) === 0 ? Math.min(1, Math.max(0, targettime)) : 0);
     gl.uniform1f(program.uTime, Host.realtime);
     gl.uniform1f(program.uAlpha, e.alpha);
 
@@ -159,12 +160,11 @@ export class AliasModelRenderer extends ModelRenderer {
 
   /**
    * Select animation frames for rendering with interpolation
-   * @private
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} clmodel The alias model
    * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
    * @returns {{frameA: object, frameB: object, targettime: number}} Selected frames and interpolation factor
    */
-  _selectFrames(clmodel, e) {
+  static _selectFrames(clmodel, e) {
     const time = CL.state.time + e.syncbase;
     let num = e.frame;
 
@@ -194,7 +194,7 @@ export class AliasModelRenderer extends ModelRenderer {
           break;
         }
       }
-    } else if (R.interpolation.value) {
+    } else if (R.interpolation.value && (e.effects & effect.EF_MUZZLEFLASH) === 0) {
       // Handle lerp-based interpolation
       const [previousFrame, nextFrame, f] = e.lerp.frame;
       frameA = clmodel.frames[previousFrame];

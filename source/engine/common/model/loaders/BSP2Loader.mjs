@@ -69,6 +69,7 @@ export class BSP2Loader extends BSP29Loader {
       const styles = new Uint8Array(buf, fileofs + 20, 4);
       const out = Object.assign(new Face(), {
         plane: loadmodel.planes[view.getUint32(fileofs, true)], // int planenum (offset 0)
+        planeBack: view.getInt32(fileofs + 4, true) !== 0, // int side (offset 4)
         firstedge: view.getUint32(fileofs + 8, true), // int firstedge (offset 8)
         numedges: view.getUint32(fileofs + 12, true), // int numedges (offset 12)
         texinfo: view.getUint32(fileofs + 16, true), // int texinfo (offset 16)

@@ -124,16 +124,87 @@ R.RenderDlights = function() {
 };
 
 /**
- * @param {ClientDlight} light
- * @param {number} bit
- * @param {Node} node
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface to orient.
+ * @returns {Vector} Face normal oriented to the BSP face side.
+ */
+R.GetDynamicLightSurfaceNormal = function(surf) {
+  if (surf.planeBack) {
+    return surf.plane.normal.copy().multiply(-1.0);
+  }
+
+  return surf.plane.normal.copy();
+};
+
+/**
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface to sample.
+ * @returns {Vector} A known point on the surface plane.
+ */
+R.GetDynamicLightSurfacePoint = function(surf) {
+  const surfedge = CL.state.worldmodel.surfedges[surf.firstedge];
+
+  if (surfedge >= 0) {
+    return CL.state.worldmodel.vertexes[CL.state.worldmodel.edges[surfedge][0]].copy();
+  }
+
+  return CL.state.worldmodel.vertexes[CL.state.worldmodel.edges[-surfedge][1]].copy();
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being evaluated.
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface being tested.
+ * @returns {{distanceToPlane: number, impact: Vector}|null} Surface-plane hit information when the light is in front of the face.
+ */
+R.GetDynamicLightSurfaceImpact = function(light, surf) {
+  const faceNormal = R.GetDynamicLightSurfaceNormal(surf);
+  const surfacePoint = R.GetDynamicLightSurfacePoint(surf);
+  const distanceToPlane = light.origin.copy().subtract(surfacePoint).dot(faceNormal);
+
+  if (distanceToPlane <= 0.0 || distanceToPlane >= light.radius) {
+    return null;
+  }
+
+  const impact = light.origin.copy().subtract(faceNormal.copy().multiply(distanceToPlane));
+
+  return { distanceToPlane, impact };
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being evaluated.
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface being tested.
+ * @param {Vector} impact Projected point on the face plane.
+ * @returns {boolean} True when the light has line of sight to the surface.
+ */
+R.IsDynamicLightSurfaceVisible = function(light, surf, impact) {
+  const faceNormal = R.GetDynamicLightSurfaceNormal(surf);
+  const trace = {
+    fraction: 1.0,
+    allsolid: true,
+    startsolid: false,
+    endpos: impact,
+    plane: {
+      normal: Vector.origin.copy(),
+      dist: 0.0,
+    },
+    ent: null,
+  };
+  const end = impact.copy().add(faceNormal.copy().multiply(1.0));
+
+  SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, light.origin, end, trace);
+
+  return !trace.startsolid && !trace.allsolid && trace.fraction === 1.0;
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being propagated through the BSP.
+ * @param {number} bit Bitmask for the current dynamic light.
+ * @param {Node} node BSP node being traversed.
  */
 R.MarkLights = function(light, bit, node) {
   if (node.contents < 0) {
     return;
   }
   const normal = node.plane.normal;
-  const dist = light.origin[0] * normal[0] + light.origin[1] * normal[1] + light.origin[2] * normal[2] - node.plane.dist;
+  const dist = light.origin.dot(normal) - node.plane.dist;
   if (dist > light.radius) {
     R.MarkLights(light, bit, node.children[0]);
     return;
@@ -147,11 +218,17 @@ R.MarkLights = function(light, bit, node) {
       continue;
     }
 
+    const lightImpact = R.GetDynamicLightSurfaceImpact(light, surf);
+
+    if (lightImpact === null || !R.IsDynamicLightSurfaceVisible(light, surf, lightImpact.impact)) {
+      continue;
+    }
+
     if (surf.dlightframe !== (R.dlightframecount + 1)) {
       surf.dlightbits = 0;
       surf.dlightframe = R.dlightframecount + 1;
     }
-    surf.dlightbits += bit;
+    surf.dlightbits |= bit;
   }
   R.MarkLights(light, bit, node.children[0]);
   R.MarkLights(light, bit, node.children[1]);
@@ -177,7 +254,7 @@ R.PushDlights = function() {
         if (ent.model === null) {
           continue;
         }
-        if ((ent.model.type !== Mod.type.brush) || (ent.model.submodel !== true)) {
+        if ((ent.model.type !== Mod.type.brush) || !ent.model.submodel) {
           continue;
         }
         R.MarkLights(l, bit, CL.state.worldmodel.nodes[ent.model.hulls[0].firstclipnode]);
@@ -2226,23 +2303,19 @@ R.AddDynamicLights = function(surf) {
       continue;
     }
     const light = CL.state.clientEntities.dlights[i];
-    let dist = light.origin.dot(surf.plane.normal) - surf.plane.dist;
-    // Skip surfaces facing away from the light. Without this check the
-    // use of Math.abs(dist) allows dlights to bleed through walls because
-    // back-facing surfaces (dist < 0) receive the same contribution as
-    // front-facing ones. The point shadow cubemap handles the remaining
-    // occlusion cases where the light is on the front side but blocked
-    // by other geometry.
-    if (dist <= 0) {
+    const lightImpact = R.GetDynamicLightSurfaceImpact(light, surf);
+
+    if (lightImpact === null) {
       continue;
     }
+    let dist = lightImpact.distanceToPlane;
     const rad = light.radius - dist;
     let minlight = light.minlight;
     if (rad < minlight) {
       continue;
     }
     minlight = rad - minlight;
-    const impact = light.origin.copy().subtract(surf.plane.normal.copy().multiply(dist));
+    const impact = lightImpact.impact;
     const tex = CL.state.worldmodel.texinfo[surf.texinfo];
     const local = [
       impact.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3] - surf.texturemins[0],

@@ -625,7 +625,7 @@ export class BSP29Loader extends ModelLoader {
 
     /**
      * Recursively classify nodes against portal planes
-     * @param {import('../BSP.mjs').Node} node
+      * @param {import('../BSP.mjs').Node} node Current BSP node being classified.
      * @param {number[]} states - Array of 0 (Back), 1 (Front), or -1 (Unknown)
      */
     const classifyRecursive = (node, states) => {
@@ -1632,6 +1632,7 @@ export class BSP29Loader extends ModelLoader {
       const styles = new Uint8Array(buf, fileofs + 12, 4);
       const out = Object.assign(new Face(), {
         plane: loadmodel.planes[view.getUint16(fileofs, true)],
+        planeBack: view.getInt16(fileofs + 2, true) !== 0,
         firstedge: view.getInt32(fileofs + 4, true),
         numedges: view.getUint16(fileofs + 8, true),
         texinfo: view.getUint16(fileofs + 10, true),
