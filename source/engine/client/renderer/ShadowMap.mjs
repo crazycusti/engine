@@ -98,9 +98,9 @@ export default class ShadowMap {
    * Derived each frame from the closest visible light entity parsed from
    * the BSP entity lump.  Falls back to the configured fallback angles
    * when no visible light entity is found.
-   * @type {Float32Array}
+   * @type {Float64Array}
    */
-  static localLightDir = new Float32Array([0, 0, -1]);
+  static localLightDir = new Float64Array([0, 0, -1]);
 
   /**
    * Shadow intensity multiplier passed to the fragment shader as `uShadowEnabled`.
@@ -117,7 +117,7 @@ export default class ShadowMap {
    * Each entry holds a position and radius (derived from the entity's
    * `light` key, defaulting to 300).  Populated once per map load by
    * `parseLightEntities()` and reused every frame.
-   * @type {Array<{origin: Float32Array, radius: number}>}
+   * @type {Array<{origin: Float64Array, radius: number}>}
    */
   static lightEntities = [];
 
@@ -131,8 +131,8 @@ export default class ShadowMap {
   /** @type {number} Maximum number of light entities to test per frame (performance cap) */
   static _MAX_LIGHT_TRACES = 8;
 
-  /** @type {Float32Array} Scratch buffer for shadow caster centroid computation */
-  static _centroidScratch = new Float32Array(3);
+  /** @type {Float64Array} Scratch buffer for shadow caster centroid computation */
+  static _centroidScratch = new Float64Array(3);
 
   // ─── Point light shadow ──────────────────────────────────────────
 
@@ -145,11 +145,11 @@ export default class ShadowMap {
   /** @type {WebGLTexture} 1×1 always-lit dummy cubemap used when point shadows are off */
   static pointDummyCube = null;
 
-  /** @type {Float32Array} Column-major 4×4 per-face view-projection matrix */
-  static pointFaceMatrix = new Float32Array(16);
+  /** @type {Float64Array} Column-major 4×4 per-face view-projection matrix */
+  static pointFaceMatrix = new Float64Array(16);
 
-  /** @type {Float32Array} Active point light position [x, y, z] for this frame */
-  static pointLightOrigin = new Float32Array(3);
+  /** @type {Float64Array} Active point light position [x, y, z] for this frame */
+  static pointLightOrigin = new Float64Array(3);
 
   // ─── World occluder depth map ────────────────────────────────
 
@@ -307,7 +307,7 @@ export default class ShadowMap {
    * Recompute the light-space view-projection matrix for the current frame.
    * Uses an orthographic projection centred on the camera.
    * Direction is taken from `localLightDir`, set by `selectLocalLight()`.
-   * @param {Float32Array|number[]} viewOrigin Camera position in world space
+   * @param {Float64Array|number[]} viewOrigin Camera position in world space
    */
   static updateLightSpaceMatrix(viewOrigin) {
     const range = ShadowMap.range.value;
@@ -568,6 +568,11 @@ export default class ShadowMap {
       if (entity.model === null || entity.alpha === 0.0 || entity.alpha < 1.0) {
         continue;
       }
+
+      if (entity.model.name.startsWith('*')) { // CR: submodels need to be handled differently
+        continue;
+      }
+
       // Skip entities flagged as not casting shadows, or ones that are effectively fullbright
       if (entity.effects & (noShadowEffects)) {
         continue;
@@ -593,7 +598,7 @@ export default class ShadowMap {
    * Render a brush submodel entity (door, platform, etc.) into a shadow map.
    * @param {import('../../common/model/BSP.mjs').BrushModel} model
    * @param {import('../ClientEntities.mjs').ClientEdict} entity
-   * @param {Float32Array} lightSpaceMatrix
+   * @param {Float64Array} lightSpaceMatrix
    * @param {string} programName
    */
   static _renderBrushEntityShadow(model, entity, lightSpaceMatrix, programName) {
@@ -623,7 +628,7 @@ export default class ShadowMap {
    * Handles frame interpolation identically to AliasModelRenderer.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model
    * @param {import('../ClientEntities.mjs').ClientEdict} entity
-   * @param {Float32Array} lightSpaceMatrix
+   * @param {Float64Array} lightSpaceMatrix
    * @param {string} programName
    */
   static _renderAliasEntityShadow(model, entity, lightSpaceMatrix, programName) {
@@ -699,7 +704,7 @@ export default class ShadowMap {
    * Render a mesh model entity (glTF) into a shadow map.
    * @param {import('../../common/model/MeshModel.mjs').MeshModel} model
    * @param {import('../ClientEntities.mjs').ClientEdict} entity
-   * @param {Float32Array} lightSpaceMatrix
+   * @param {Float64Array} lightSpaceMatrix
    * @param {string} programName
    */
   static _renderMeshEntityShadow(model, entity, lightSpaceMatrix, programName) {
@@ -782,7 +787,7 @@ export default class ShadowMap {
         continue;
       }
 
-      const origin = new Float32Array([
+      const origin = new Float64Array([
         parseFloat(parts[0]),
         parseFloat(parts[1]),
         parseFloat(parts[2]),
@@ -801,8 +806,8 @@ export default class ShadowMap {
 
   /**
    * Test line-of-sight between two points using the world BSP hull 0.
-   * @param {Float32Array|number[]} start Start point
-   * @param {Float32Array|number[]} end End point
+   * @param {Float64Array|number[]} start Start point
+   * @param {Float64Array|number[]} end End point
    * @returns {boolean} `true` if the line is unobstructed
    */
   static _traceVisible(start, end) {
@@ -821,7 +826,7 @@ export default class ShadowMap {
    * Used to select the dominant light relative to the entities rather
    * than the camera, so that shadows remain stable when only the
    * camera moves.
-   * @param {Float32Array} out 3-element array to receive the centroid
+   * @param {Float64Array} out 3-element array to receive the centroid
    * @returns {number} Number of entities that contributed
    */
   static _computeShadowCasterCentroid(out) {
@@ -866,7 +871,7 @@ export default class ShadowMap {
    * When no visible light entity is found the method falls back to the
    * configurable fallback angles (`r_shadow_fallback_yaw` /
    * `r_shadow_fallback_pitch`).
-   * @param {Float32Array|number[]} viewOrigin Camera position (used as
+   * @param {Float64Array|number[]} viewOrigin Camera position (used as
    *   fallback when no shadow casters are visible)
    */
   static selectLocalLight(viewOrigin) {
@@ -962,7 +967,7 @@ export default class ShadowMap {
    * entities.  Picks whichever scores highest (radius / distance).
    * BSP lights are capped at twice their radius so distant map
    * lights don't compete with nearby ones.
-   * @param {Float32Array|number[]} viewOrigin Camera position in world space
+   * @param {Float64Array|number[]} viewOrigin Camera position in world space
    * @returns {boolean} True if a suitable light was found
    */
   static selectPointLight(viewOrigin) {

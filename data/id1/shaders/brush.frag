@@ -1,5 +1,10 @@
 #version 300 es
-precision mediump float;
+precision highp float;
+precision highp sampler2D;
+precision highp sampler2DArray;
+precision highp sampler2DShadow;
+precision highp samplerCube;
+precision highp samplerCubeShadow;
 out vec4 fragColor;
 
 uniform float uGamma;
@@ -8,25 +13,25 @@ uniform float uAlpha;
 
 uniform sampler2D tTextureA;
 uniform sampler2D tTextureB;
-uniform mediump sampler2DArray tLightmap;
+uniform sampler2DArray tLightmap;
 uniform sampler2D tDlight;
 uniform sampler2D tLightStyleA;
 uniform sampler2D tLightStyleB;
 uniform sampler2D tLuminance;
 uniform sampler2D tNormal;
 uniform sampler2D tSpecular;
-uniform mediump sampler2DArray tDeluxemap;
+uniform sampler2DArray tDeluxemap;
 
 // Shadow mapping
-uniform highp sampler2DShadow tShadowMap;
-uniform highp sampler2D tWorldDepthMap;
+uniform sampler2DShadow tShadowMap;
+uniform sampler2D tWorldDepthMap;
 uniform float uShadowEnabled;
 uniform float uShadowDarkness;
 uniform float uShadowMaxDist;
 uniform float uShadowMapSize;
 
 // Point light shadow mapping
-uniform highp samplerCubeShadow tPointShadowMap;
+uniform samplerCubeShadow tPointShadowMap;
 uniform vec3 uPointLightPos;
 uniform float uPointLightRadius;
 uniform float uPointShadowEnabled;

@@ -1,5 +1,5 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 precision mediump sampler3D;
 precision mediump sampler2D;
 out vec4 fragColor;
