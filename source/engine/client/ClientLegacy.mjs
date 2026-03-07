@@ -36,14 +36,14 @@ export class DefaultClientEdictHandler extends BaseClientEdictHandler {
       const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);
       const fv = clent.angles.angleVectors().forward;
       dl.origin = new Vector(
-        clent.origin[0] + 18.0 * fv[0],
-        clent.origin[1] + 18.0 * fv[1],
-        clent.origin[2] + 16.0 + 18.0 * fv[2],
+        clent.origin[0] + 20.0 * fv[0],
+        clent.origin[1] + 20.0 * fv[1],
+        clent.origin[2] + 16.0 + 20.0 * fv[2],
       );
       dl.radius = 200.0 + Math.random() * 32.0;
       dl.minlight = 32.0;
-      dl.die = CL.state.time + 0.1;
-      // dl.color = new Vector(1.0, 0.95, 0.85);
+      dl.die = CL.state.time + 0.5;
+      dl.color = new Vector(1.0, 0.95, 0.85);
     }
     if ((clent.effects & effect.EF_BRIGHTLIGHT) !== 0) {
       const dl = CL.state.clientEntities.allocateDynamicLight(clent.num);

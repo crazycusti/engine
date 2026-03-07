@@ -899,6 +899,9 @@ export class ClientEngineAPI extends CommonEngineAPI {
     get levelname() {
       return CL.state.levelname;
     },
+    get entityNum() {
+      return CL.state.viewent.num;
+    },
     /**
      * local time, not game time! If you are looking for SV.server.time, check gametime
      * @returns {number} local time

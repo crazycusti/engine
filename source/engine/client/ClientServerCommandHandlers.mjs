@@ -659,7 +659,7 @@ function handleDamage() {
 }
 
 /**
- * Parses svc_serverdata and reinitialises renderer state.
+ * Parses svc_serverdata and reinitializes renderer state.
  */
 function handleServerData() {
   SCR.recalc_refdef = true;
@@ -705,7 +705,7 @@ function handleLightStyle() {
 }
 
 /**
- * Triggers spatialised sounds for the given entity/channel tuple.
+ * Triggers spatialized sounds for the given entity/channel tuple.
  */
 function handleSound() {
   parseStartSoundPacket();

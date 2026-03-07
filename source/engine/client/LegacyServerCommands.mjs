@@ -164,7 +164,7 @@ function getBaseline(num) {
 //   strings sound precache list (empty string terminates)
 
 /**
- * Parses WinQuake svc_serverdata and reinitialises client state for legacy demo playback.
+ * Parses WinQuake svc_serverdata and reinitializes client state for legacy demo playback.
  */
 function handleLegacyServerData() {
   Con.DPrint('Legacy Serverdata packet received.\n');
