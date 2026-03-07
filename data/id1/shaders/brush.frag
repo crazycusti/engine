@@ -23,8 +23,11 @@ uniform sampler2D tSpecular;
 uniform sampler2DArray tDeluxemap;
 
 // Shadow mapping
-uniform sampler2DShadow tShadowMap;
+uniform sampler2DShadow tShadowMap0;
+uniform sampler2DShadow tShadowMap1;
+uniform sampler2DShadow tShadowMap2;
 uniform float uShadowEnabled;
+uniform int uShadowCount;
 uniform float uShadowDarkness;
 uniform float uShadowMapSize;
 
@@ -51,10 +54,56 @@ in vec3 vLightVec;
 in float vLightMix;
 in vec3 vTangent;
 in vec3 vViewVec;
-in vec4 vShadowCoord;
+in vec4 vShadowCoord0;
+in vec4 vShadowCoord1;
+in vec4 vShadowCoord2;
 in vec3 vWorldPos;
 uniform vec3 uFogColor;
 in mat3 vAngles;
+
+float sampleLocalShadowPCF(sampler2DShadow shadowMap, vec4 shadowCoordH) {
+  vec3 shadowCoord = shadowCoordH.xyz / shadowCoordH.w * 0.5 + 0.5;
+  if (shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
+    return 1.0;
+  }
+
+  float edgeDist = max(abs(shadowCoord.x * 2.0 - 1.0), abs(shadowCoord.y * 2.0 - 1.0));
+  float fade = 1.0 - smoothstep(0.7, 1.0, edgeDist);
+  if (fade <= 0.0) {
+    return 1.0;
+  }
+
+  float texelSize = 1.0 / uShadowMapSize;
+  float lit = 0.0;
+  lit += 1.0  * texture(shadowMap, shadowCoord + vec3(-2.0, -2.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3(-1.0, -2.0, 0.0) * texelSize);
+  lit += 6.0  * texture(shadowMap, shadowCoord + vec3( 0.0, -2.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3( 1.0, -2.0, 0.0) * texelSize);
+  lit += 1.0  * texture(shadowMap, shadowCoord + vec3( 2.0, -2.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3(-2.0, -1.0, 0.0) * texelSize);
+  lit += 16.0 * texture(shadowMap, shadowCoord + vec3(-1.0, -1.0, 0.0) * texelSize);
+  lit += 24.0 * texture(shadowMap, shadowCoord + vec3( 0.0, -1.0, 0.0) * texelSize);
+  lit += 16.0 * texture(shadowMap, shadowCoord + vec3( 1.0, -1.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3( 2.0, -1.0, 0.0) * texelSize);
+  lit += 6.0  * texture(shadowMap, shadowCoord + vec3(-2.0,  0.0, 0.0) * texelSize);
+  lit += 24.0 * texture(shadowMap, shadowCoord + vec3(-1.0,  0.0, 0.0) * texelSize);
+  lit += 36.0 * texture(shadowMap, shadowCoord + vec3( 0.0,  0.0, 0.0) * texelSize);
+  lit += 24.0 * texture(shadowMap, shadowCoord + vec3( 1.0,  0.0, 0.0) * texelSize);
+  lit += 6.0  * texture(shadowMap, shadowCoord + vec3( 2.0,  0.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3(-2.0,  1.0, 0.0) * texelSize);
+  lit += 16.0 * texture(shadowMap, shadowCoord + vec3(-1.0,  1.0, 0.0) * texelSize);
+  lit += 24.0 * texture(shadowMap, shadowCoord + vec3( 0.0,  1.0, 0.0) * texelSize);
+  lit += 16.0 * texture(shadowMap, shadowCoord + vec3( 1.0,  1.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3( 2.0,  1.0, 0.0) * texelSize);
+  lit += 1.0  * texture(shadowMap, shadowCoord + vec3(-2.0,  2.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3(-1.0,  2.0, 0.0) * texelSize);
+  lit += 6.0  * texture(shadowMap, shadowCoord + vec3( 0.0,  2.0, 0.0) * texelSize);
+  lit += 4.0  * texture(shadowMap, shadowCoord + vec3( 1.0,  2.0, 0.0) * texelSize);
+  lit += 1.0  * texture(shadowMap, shadowCoord + vec3( 2.0,  2.0, 0.0) * texelSize);
+  lit /= 256.0;
+
+  return mix(1.0, mix(uShadowDarkness, 1.0, lit), fade);
+}
 
 void main(void) {
   // Combine texture samples at the start
@@ -99,46 +148,13 @@ void main(void) {
   // 5×5 Gaussian-weighted PCF for smooth shadow edges. Each tap uses the
   // hardware sampler2DShadow (LINEAR gives free 2×2 PCF per tap).
   float shadow = 1.0;
-  if (uShadowEnabled > 0.5) {
-    vec3 shadowCoord = vShadowCoord.xyz / vShadowCoord.w * 0.5 + 0.5;
-    if (shadowCoord.z >= 0.0 && shadowCoord.z <= 1.0) {
-      float edgeDist = max(abs(shadowCoord.x * 2.0 - 1.0), abs(shadowCoord.y * 2.0 - 1.0));
-      float fade = 1.0 - smoothstep(0.7, 1.0, edgeDist);
-      if (fade > 0.0) {
-        // 5×5 Gaussian-weighted PCF
-        float texelSize = 1.0 / uShadowMapSize;
-        float lit = 0.0;
-        // Row weights for a 5×5 Gaussian kernel (sigma ≈ 1.0)
-        // Weights: 1 4 6 4 1 / 4 16 24 16 4 / 6 24 36 24 6 / ...
-        // Normalized so they sum to 256
-        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3(-2.0, -2.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-1.0, -2.0, 0.0) * texelSize);
-        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 0.0, -2.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 1.0, -2.0, 0.0) * texelSize);
-        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3( 2.0, -2.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-2.0, -1.0, 0.0) * texelSize);
-        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3(-1.0, -1.0, 0.0) * texelSize);
-        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 0.0, -1.0, 0.0) * texelSize);
-        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3( 1.0, -1.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 2.0, -1.0, 0.0) * texelSize);
-        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  0.0, 0.0) * texelSize);
-        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3(-1.0,  0.0, 0.0) * texelSize);
-        lit += 36.0 * texture(tShadowMap, shadowCoord + vec3( 0.0,  0.0, 0.0) * texelSize);
-        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 1.0,  0.0, 0.0) * texelSize);
-        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  0.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  1.0, 0.0) * texelSize);
-        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3(-1.0,  1.0, 0.0) * texelSize);
-        lit += 24.0 * texture(tShadowMap, shadowCoord + vec3( 0.0,  1.0, 0.0) * texelSize);
-        lit += 16.0 * texture(tShadowMap, shadowCoord + vec3( 1.0,  1.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  1.0, 0.0) * texelSize);
-        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3(-2.0,  2.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3(-1.0,  2.0, 0.0) * texelSize);
-        lit += 6.0  * texture(tShadowMap, shadowCoord + vec3( 0.0,  2.0, 0.0) * texelSize);
-        lit += 4.0  * texture(tShadowMap, shadowCoord + vec3( 1.0,  2.0, 0.0) * texelSize);
-        lit += 1.0  * texture(tShadowMap, shadowCoord + vec3( 2.0,  2.0, 0.0) * texelSize);
-        lit /= 256.0;
-        shadow = mix(1.0, mix(uShadowDarkness, 1.0, lit), fade);
-      }
+  if (uShadowEnabled > 0.5 && uShadowCount > 0) {
+    shadow = sampleLocalShadowPCF(tShadowMap0, vShadowCoord0);
+    if (uShadowCount > 1) {
+      shadow = min(shadow, sampleLocalShadowPCF(tShadowMap1, vShadowCoord1));
+    }
+    if (uShadowCount > 2) {
+      shadow = min(shadow, sampleLocalShadowPCF(tShadowMap2, vShadowCoord2));
     }
   }
 

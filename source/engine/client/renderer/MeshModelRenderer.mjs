@@ -112,9 +112,15 @@ export class MeshModelRenderer extends ModelRenderer {
       R.notexture.bind(program.tTexture);
     }
 
-    // Bind shadow map
-    if (program.tShadowMap !== undefined && R.shadow_texture) {
-      GL.Bind(program.tShadowMap, R.shadow_texture);
+    // Bind local shadow maps
+    if (program.tShadowMap0 !== undefined && R.shadow_textures?.[0]) {
+      GL.Bind(program.tShadowMap0, R.shadow_textures[0]);
+    }
+    if (program.tShadowMap1 !== undefined && R.shadow_textures?.[1]) {
+      GL.Bind(program.tShadowMap1, R.shadow_textures[1]);
+    }
+    if (program.tShadowMap2 !== undefined && R.shadow_textures?.[2]) {
+      GL.Bind(program.tShadowMap2, R.shadow_textures[2]);
     }
 
     // Bind point light cube shadow map

@@ -498,9 +498,15 @@ export class BrushModelRenderer extends ModelRenderer {
       GL.Bind(program.tDlight, R.null_texture);
     }
 
-    // Bind shadow map texture
-    if (program.tShadowMap !== undefined) {
-      GL.Bind(program.tShadowMap, R.shadow_texture);
+    // Bind local shadow map textures
+    if (program.tShadowMap0 !== undefined && R.shadow_textures?.[0]) {
+      GL.Bind(program.tShadowMap0, R.shadow_textures[0]);
+    }
+    if (program.tShadowMap1 !== undefined && R.shadow_textures?.[1]) {
+      GL.Bind(program.tShadowMap1, R.shadow_textures[1]);
+    }
+    if (program.tShadowMap2 !== undefined && R.shadow_textures?.[2]) {
+      GL.Bind(program.tShadowMap2, R.shadow_textures[2]);
     }
 
     // Bind point light cube shadow map

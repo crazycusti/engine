@@ -1150,11 +1150,20 @@ R.Perspective = function() {
       gl.uniform4f(program.uFogParams, R.fog_start.value, R.fog_end.value, R.fog_density.value, R.fog_mode.value);
     }
     // shadow mapping uniforms (set on all programs that declare them)
-    if (program.uLightSpaceMatrix !== undefined) {
-      gl.uniformMatrix4fv(program.uLightSpaceMatrix, false, ShadowMap.lightSpaceMatrix);
+    if (program.uLightSpaceMatrix0 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix0, false, ShadowMap.lightSpaceMatrices[0]);
+    }
+    if (program.uLightSpaceMatrix1 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix1, false, ShadowMap.lightSpaceMatrices[1]);
+    }
+    if (program.uLightSpaceMatrix2 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix2, false, ShadowMap.lightSpaceMatrices[2]);
     }
     if (program.uShadowEnabled !== undefined) {
       gl.uniform1f(program.uShadowEnabled, ShadowMap.enabled.value ? 1.0 : 0.0);
+    }
+    if (program.uShadowCount !== undefined) {
+      gl.uniform1i(program.uShadowCount, ShadowMap.enabled.value ? ShadowMap.localLightCount : 0);
     }
     if (program.uShadowDarkness !== undefined) {
       gl.uniform1f(program.uShadowDarkness, ShadowMap.darkness.value);
@@ -1222,7 +1231,8 @@ R.PreRenderScene = function() {
   R.usePostProcess = CL.state.worldmodel.fogVolumes && CL.state.worldmodel.fogVolumes.length > 0;
 
   // Choose the shadow texture for this frame (real or dummy)
-  R.shadow_texture = ShadowMap.getActiveTexture();
+  R.shadow_textures = ShadowMap.getActiveTextures();
+  R.shadow_texture = R.shadow_textures[0];
   R.point_shadow_texture = ShadowMap.getActivePointTexture();
 };
 
@@ -1263,18 +1273,27 @@ R.RenderWorld = function() {
 R.RenderScene = function() {
   R.SetFrustum();
 
-  // Shadow depth pass — local entity shadow driven by the nearest visible
-  // static light entity from the BSP entity lump. Static world shadowing
-  // remains authored by baked lightmaps.
+  // Shadow depth pass — local entity shadow centered on the nearest visible
+  // shadow caster. Static world shadowing remains authored by baked lightmaps.
   if (ShadowMap.enabled.value) {
-    ShadowMap.selectLocalLight(R.refdef.vieworg);
+    ShadowMap.selectLocalLights(R.refdef.vieworg);
+    ShadowMap.updateLightSpaceMatrices();
+    R.shadow_textures = ShadowMap.getActiveTextures();
+    R.shadow_texture = R.shadow_textures[0];
+    const localCasterRadius = ShadowMap.casterRadius.value;
+    const localCasterRadiusSq = localCasterRadius * localCasterRadius;
 
-    ShadowMap.updateLightSpaceMatrix();
-
-    // Entity shadow caster pass
-    ShadowMap.begin();
-    ShadowMap.renderEntitiesShadow(ShadowMap.lightSpaceMatrix);
-    ShadowMap.end();
+    for (let i = 0; i < ShadowMap.localLightCount; i++) {
+      ShadowMap.begin(i);
+      ShadowMap.renderEntitiesShadow(
+        ShadowMap.lightSpaceMatrices[i],
+        'shadow-brush',
+        'shadow-alias',
+        ShadowMap._shadowFocusPoint,
+        localCasterRadiusSq,
+      );
+      ShadowMap.end();
+    }
   }
 
   // Point light shadow pass — render world BSP into a cube depth map
@@ -1442,28 +1461,28 @@ R.InitShaders = async function() {
   // rendering alias models
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
         ['aNormal', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
       ],
-      ['tTexture', 'tShadowMap', 'tPointShadowMap']),
+      ['tTexture', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering mesh models (OBJ, IQM, GLTF)
     GL.CreateProgram('mesh',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
         ['aNormal', gl.FLOAT, 3],
       ],
-      ['tTexture', 'tShadowMap', 'tPointShadowMap']),
+      ['tTexture', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uShadowMapSize', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uShadowMapSize', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
@@ -1471,7 +1490,7 @@ R.InitShaders = async function() {
           ['aNormal', gl.FLOAT, 3],
           ['aTangent', gl.FLOAT, 3],
         ],
-        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap', 'tPointShadowMap']),
+        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering dynamic lights
     GL.CreateProgram('dlight',
@@ -1481,14 +1500,14 @@ R.InitShaders = async function() {
 
     // rendering the player model (similar to alias model but with custom colors)
     GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix', 'uShadowEnabled', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPositionA', gl.FLOAT, 3],
           ['aPositionB', gl.FLOAT, 3],
           ['aNormal', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 2],
         ],
-        ['tTexture', 'tPlayer', 'tShadowMap', 'tPointShadowMap']),
+        ['tTexture', 'tPlayer', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // for rendering sprites (usually effects)
     GL.CreateProgram('sprite',
@@ -1703,6 +1722,7 @@ R.ClearAll = function() {
 
   R.allocated = null;
 
+  R.shadow_textures = [];
   R.shadow_texture = null;
   R.point_shadow_texture = null;
   R.world_depth_texture = null;

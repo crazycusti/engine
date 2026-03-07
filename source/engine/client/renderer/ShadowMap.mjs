@@ -27,6 +27,9 @@ eventBus.subscribe('gl.shutdown', () => {
 /** Shadow map resolution (px). Local coverage keeps this sharp at 1024. */
 const SHADOW_SIZE = 2048;
 
+/** Maximum number of local directional shadows rendered each frame. */
+const LOCAL_SHADOW_COUNT = 3;
+
 /** Point light cube shadow map resolution (px per face). */
 const POINT_SHADOW_SIZE = 256;
 
@@ -61,16 +64,16 @@ export default class ShadowMap {
   /** @type {WebGLFramebuffer} Depth-only framebuffer for the shadow pass */
   static fbo = null;
 
-  /** @type {WebGLTexture} Depth texture with hardware comparison (sampler2DShadow) */
-  static depthTexture = null;
+  /** @type {WebGLTexture[]} Depth textures with hardware comparison (sampler2DShadow) */
+  static depthTextures = [];
 
   /** @type {WebGLTexture} 1×1 always-lit dummy texture used when shadows are off */
   static dummyTexture = null;
 
   // ─── Matrices ────────────────────────────────────────────────────
 
-  /** @type {Float64Array} Column-major 4×4 light-space view-projection matrix */
-  static lightSpaceMatrix = new Float64Array(16);
+  /** @type {Float64Array[]} Column-major 4×4 light-space view-projection matrices */
+  static lightSpaceMatrices = Array.from({ length: LOCAL_SHADOW_COUNT }, () => new Float64Array(16));
 
   // ─── Cvars ───────────────────────────────────────────────────────
 
@@ -82,6 +85,9 @@ export default class ShadowMap {
 
   /** @type {Cvar} Minimum brightness in shadow (0 = pitch black, 1 = no shadow) */
   static darkness = null;
+
+  /** @type {Cvar} Maximum distance from the viewer for local shadow casters */
+  static casterRadius = null;
 
   /** @type {Cvar} Fallback shadow yaw when no nearby light is found (degrees, 0 = +X, 90 = +Y) */
   static sunYaw = null;
@@ -96,9 +102,12 @@ export default class ShadowMap {
    * Derived each frame from the closest visible light entity parsed from
    * the BSP entity lump.  Falls back to the configured fallback angles
    * when no visible light entity is found.
-   * @type {Float64Array}
+   * @type {Float64Array[]}
    */
-  static localLightDir = new Float64Array([0, 0, -1]);
+  static localLightDirs = Array.from({ length: LOCAL_SHADOW_COUNT }, () => new Float64Array([0, 0, -1]));
+
+  /** @type {number} Number of active local shadow directions this frame */
+  static localLightCount = 0;
 
   /**
    * Shadow intensity multiplier passed to the fragment shader as `uShadowEnabled`.
@@ -129,14 +138,17 @@ export default class ShadowMap {
   /** @type {number} Maximum number of light entities to test per frame (performance cap) */
   static _MAX_LIGHT_TRACES = 8;
 
-  /** @type {number} Blend factor between camera position and caster centroid for local shadow focus */
-  static _SHADOW_FOCUS_BLEND = 0.35;
+  /** @type {number} Distance used to nudge embedded light origins out of fixtures for LOS tests */
+  static _LIGHT_VISIBILITY_BIAS = 16.0;
 
-  /** @type {Float64Array} Scratch buffer for shadow caster centroid computation */
-  static _centroidScratch = new Float64Array(3);
+  /** @type {Float64Array} Scratch buffer for relaxed map-light visibility traces */
+  static _lightTraceScratch = new Float64Array(3);
 
   /** @type {Float64Array} Stable focus point for the local entity-shadow projection */
   static _shadowFocusPoint = new Float64Array(3);
+
+  /** @type {Int32Array} Indices of the map lights steering the local shadow directions */
+  static _currentLocalLightIndices = Int32Array.from([-1, -1, -1]);
 
   // ─── Point light shadow ──────────────────────────────────────────
 
@@ -178,25 +190,30 @@ export default class ShadowMap {
     ShadowMap.enabled = new Cvar('r_shadows', '1', Cvar.FLAG.ARCHIVE, 'Enable local entity shadow mapping');
     ShadowMap.range = new Cvar('r_shadow_range', (SHADOW_SIZE / 4).toFixed(0), Cvar.FLAG.ARCHIVE, 'Local shadow map coverage radius in world units');
     ShadowMap.darkness = new Cvar('r_shadow_darkness', '0.66', Cvar.FLAG.ARCHIVE, 'Minimum brightness in shadow (0=black, 1=no shadow)');
+    ShadowMap.casterRadius = new Cvar('r_shadow_caster_radius', (SHADOW_SIZE / 4).toFixed(0), Cvar.FLAG.ARCHIVE, 'Maximum distance from the local caster cluster for entities to contribute to local shadows');
     ShadowMap.sunYaw = new Cvar('r_shadow_fallback_yaw', '225', Cvar.FLAG.ARCHIVE, 'Fallback shadow direction yaw when no nearby light is found (degrees)');
     ShadowMap.sunPitch = new Cvar('r_shadow_fallback_pitch', '-90', Cvar.FLAG.ARCHIVE, 'Fallback shadow direction pitch when no nearby light is found (degrees, negative = down)');
 
-    // ── Shadow depth texture ───────────────────────────────────────
-    ShadowMap.depthTexture = gl.createTexture();
-    GL.Bind(0, ShadowMap.depthTexture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE);
-    // LINEAR + COMPARE gives free 2×2 PCF via sampler2DShadow
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    // ── Shadow depth textures ──────────────────────────────────────
+    ShadowMap.depthTextures.length = 0;
+    for (let i = 0; i < LOCAL_SHADOW_COUNT; i++) {
+      const depthTexture = gl.createTexture();
+      ShadowMap.depthTextures.push(depthTexture);
+      GL.Bind(0, depthTexture);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE);
+      // LINEAR + COMPARE gives free 2×2 PCF via sampler2DShadow
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    }
 
     // ── Depth-only FBO ─────────────────────────────────────────────
     ShadowMap.fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, ShadowMap.fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, ShadowMap.depthTexture, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, ShadowMap.depthTextures[0], 0);
     gl.drawBuffers([]);   // no color attachment
     gl.readBuffer(gl.NONE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -265,11 +282,11 @@ export default class ShadowMap {
   }
 
   /**
-   * Recompute the light-space view-projection matrix for the current frame.
+   * Recompute the light-space view-projection matrix for one local shadow.
    * Uses an orthographic projection centred on the local shadow focus point.
-   * Direction is taken from `localLightDir`, set by `selectLocalLight()`.
+   * @param {number} slotIndex Local shadow slot to update
    */
-  static updateLightSpaceMatrix() {
+  static _updateLightSpaceMatrix(slotIndex) {
     const range = ShadowMap.range.value;
     const focusPoint = ShadowMap._shadowFocusPoint;
     const focusX = focusPoint[0];
@@ -277,9 +294,10 @@ export default class ShadowMap {
     const focusZ = focusPoint[2];
 
     // Light direction (FROM light TO scene), already normalised
-    const dirX = ShadowMap.localLightDir[0];
-    const dirY = ShadowMap.localLightDir[1];
-    const dirZ = ShadowMap.localLightDir[2];
+    const dir = ShadowMap.localLightDirs[slotIndex];
+    const dirX = dir[0];
+    const dirY = dir[1];
+    const dirZ = dir[2];
 
     // Light "eye" — offset back from the shadow focus point along the light direction.
     const eyeX = focusX - dirX * range;
@@ -340,7 +358,7 @@ export default class ShadowMap {
     // ── lightSpaceMatrix = ortho × view  (column-major multiply) ───
     // ortho is diagonal-ish, so many terms simplify:
     //   ortho = diag(invHS, invHS, invDepth, 1) + [0,0,0,nfTerm] in col 3
-    const m = ShadowMap.lightSpaceMatrix;
+    const m = ShadowMap.lightSpaceMatrices[slotIndex];
     m[0]  = invHS * v0;
     m[1]  = invHS * v1;
     m[2]  = invDepth * v2;
@@ -360,12 +378,29 @@ export default class ShadowMap {
   }
 
   /**
+   * Recompute all active local shadow matrices for the current frame.
+   */
+  static updateLightSpaceMatrices() {
+    for (let i = 0; i < ShadowMap.localLightCount; i++) {
+      ShadowMap._updateLightSpaceMatrix(i);
+    }
+  }
+
+  /**
    * Begin the shadow depth pass.
    * Binds the shadow FBO, clears depth, and sets GL state for depth-only
    * rendering with polygon offset bias to reduce shadow acne.
+   * @param {number} slotIndex Local shadow slot whose depth texture will be rendered
    */
-  static begin() {
+  static begin(slotIndex) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, ShadowMap.fbo);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.DEPTH_ATTACHMENT,
+      gl.TEXTURE_2D,
+      ShadowMap.depthTextures[slotIndex],
+      0,
+    );
     gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
     gl.enable(gl.DEPTH_TEST); // required — Set2D disables this at end of previous frame
     gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -412,7 +447,7 @@ export default class ShadowMap {
     // World entity: origin = 0, angles = identity
     gl.uniform3f(program.uOrigin, 0, 0, 0);
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
-    gl.uniformMatrix4fv(program.uLightSpaceMatrix, false, ShadowMap.lightSpaceMatrix);
+    gl.uniformMatrix4fv(program.uLightSpaceMatrix, false, ShadowMap.lightSpaceMatrices[0]);
 
     // Draw all opaque leaf commands (skip vis — we need everything the light sees)
     for (let i = 0; i < worldmodel.leafs.length; i++) {
@@ -446,23 +481,15 @@ export default class ShadowMap {
    * @param {Float64Array} lightSpaceMatrix The light-space VP matrix
    * @param {string} brushProgram Program name for brush/mesh models
    * @param {string} aliasProgram Program name for alias models
+   * @param {Vector|Float64Array|number[]|null} cutoffOrigin View-relative origin used to reject distant local casters
+   * @param {number} cutoffDistSq Squared cutoff distance for local shadow casters
    */
-  static renderEntitiesShadow(lightSpaceMatrix, brushProgram = 'shadow-brush', aliasProgram = 'shadow-alias') {
+  static renderEntitiesShadow(lightSpaceMatrix, brushProgram = 'shadow-brush', aliasProgram = 'shadow-alias', cutoffOrigin = null, cutoffDistSq = Infinity) {
     if (R.drawentities.value === 0) {
       return;
     }
-    const noShadowEffects = effect.EF_MUZZLEFLASH | effect.EF_NOSHADOW | effect.EF_DIMLIGHT | effect.EF_FULLBRIGHT | effect.EF_BRIGHTLIGHT;
     for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-      if (entity.model === null || entity.alpha === 0.0 || entity.alpha < 1.0) {
-        continue;
-      }
-
-      if (entity.model.name.startsWith('*')) { // CR: submodels need to be handled differently
-        continue;
-      }
-
-      // Skip entities flagged as not casting shadows, or ones that are effectively fullbright
-      if (entity.effects & (noShadowEffects)) {
+      if (!ShadowMap._isLocalShadowCasterEntity(entity, cutoffOrigin, cutoffDistSq)) {
         continue;
       }
       const model = entity.model;
@@ -480,6 +507,49 @@ export default class ShadowMap {
           break;
       }
     }
+  }
+
+  /**
+   * Determine whether an entity should contribute to the local shadow pass.
+   * @param {import('../ClientEntities.mjs').ClientEdict} entity Visible entity candidate
+   * @param {Vector|Float64Array|number[]|null} cutoffOrigin Local shadow reference origin
+   * @param {number} cutoffDistSq Squared caster cutoff distance
+   * @returns {boolean} `true` if the entity should contribute to local shadows
+   */
+  static _isLocalShadowCasterEntity(entity, cutoffOrigin, cutoffDistSq) {
+    if (entity.model === null || entity.alpha === 0.0 || entity.alpha < 1.0) {
+      return false;
+    }
+
+    if (entity.num === 0 || entity.isStatic()) {
+      return false;
+    }
+
+    if (entity.model.name.startsWith('*')) {
+      return false;
+    }
+
+    const noShadowEffects = effect.EF_MUZZLEFLASH | effect.EF_NOSHADOW
+      | effect.EF_DIMLIGHT | effect.EF_FULLBRIGHT | effect.EF_BRIGHTLIGHT;
+    if (entity.effects & noShadowEffects) {
+      return false;
+    }
+
+    const type = entity.model.type;
+    if (type !== Mod.type.brush && type !== Mod.type.alias && type !== Mod.type.mesh) {
+      return false;
+    }
+
+    if (cutoffOrigin !== null && Number.isFinite(cutoffDistSq)) {
+      const dx = entity.lerp.origin[0] - cutoffOrigin[0];
+      const dy = entity.lerp.origin[1] - cutoffOrigin[1];
+      const dz = entity.lerp.origin[2] - cutoffOrigin[2];
+      if ((dx * dx + dy * dy + dz * dz) > cutoffDistSq) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -584,10 +654,16 @@ export default class ShadowMap {
   }
 
   /**
-   * @returns {WebGLTexture} The texture to bind as shadow map (real or dummy)
+   * @returns {WebGLTexture[]} The textures to bind as local shadow maps
    */
-  static getActiveTexture() {
-    return ShadowMap.enabled.value ? ShadowMap.depthTexture : ShadowMap.dummyTexture;
+  static getActiveTextures() {
+    const textures = new Array(LOCAL_SHADOW_COUNT);
+    for (let i = 0; i < LOCAL_SHADOW_COUNT; i++) {
+      textures[i] = ShadowMap.enabled.value && i < ShadowMap.localLightCount
+        ? ShadowMap.depthTextures[i]
+        : ShadowMap.dummyTexture;
+    }
+    return textures;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -604,6 +680,8 @@ export default class ShadowMap {
    */
   static parseLightEntities(entityString) {
     ShadowMap.lightEntities.length = 0;
+    ShadowMap._currentLocalLightIndices.fill(-1);
+    ShadowMap.localLightCount = 0;
 
     if (!entityString) {
       return;
@@ -682,165 +760,87 @@ export default class ShadowMap {
   }
 
   /**
-   * Compute the centroid of all visible shadow-casting entities.
-   * Used to select the dominant light relative to the entities rather
-   * than the camera, so that shadows remain stable when only the
-   * camera moves.
-   * @param {Float64Array} out 3-element array to receive the centroid
-   * @returns {number} Number of entities that contributed
+   * Test visibility from a map light to the target, allowing for lights that
+   * are embedded slightly inside wall fixtures or ceilings.
+   * @param {Vector|Float64Array|number[]} start Light entity origin
+   * @param {Vector|Float64Array|number[]} end Shadow target point
+   * @returns {boolean} `true` if a direct or nudged trace is unobstructed
    */
-  static _computeShadowCasterCentroid(out) {
-    out[0] = 0; out[1] = 0; out[2] = 0;
-    let count = 0;
-    const noShadowEffects = effect.EF_MUZZLEFLASH | effect.EF_NOSHADOW
-      | effect.EF_DIMLIGHT | effect.EF_FULLBRIGHT | effect.EF_BRIGHTLIGHT;
-
-    for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-      if (entity.model === null || entity.alpha === 0.0 || entity.alpha < 1.0) {
-        continue;
-      }
-      if (entity.effects & noShadowEffects) {
-        continue;
-      }
-      const type = entity.model.type;
-      if (type !== Mod.type.brush && type !== Mod.type.alias && type !== Mod.type.mesh) {
-        continue;
-      }
-      out[0] += entity.lerp.origin[0];
-      out[1] += entity.lerp.origin[1];
-      out[2] += entity.lerp.origin[2];
-      count++;
+  static _traceLightVisible(start, end) {
+    if (ShadowMap._traceVisible(start, end)) {
+      return true;
     }
 
-    if (count > 0) {
-      const inv = 1.0 / count;
-      out[0] *= inv;
-      out[1] *= inv;
-      out[2] *= inv;
+    const dirX = end[0] - start[0];
+    const dirY = end[1] - start[1];
+    const dirZ = end[2] - start[2];
+    const dist = Math.hypot(dirX, dirY, dirZ);
+
+    if (dist <= 1.0) {
+      return false;
     }
-    return count;
+
+    const invDist = 1.0 / dist;
+    const bias = Math.min(ShadowMap._LIGHT_VISIBILITY_BIAS, dist * 0.33);
+    const nudgedStart = ShadowMap._lightTraceScratch;
+    nudgedStart[0] = start[0] + dirX * invDist * bias;
+    nudgedStart[1] = start[1] + dirY * invDist * bias;
+    nudgedStart[2] = start[2] + dirZ * invDist * bias;
+
+    return ShadowMap._traceVisible(nudgedStart, end);
   }
 
   /**
-   * Determine the local light direction for the entity shadow this frame.
-   * Finds the strongest visible light entity (parsed from the BSP entity
-   * lump) near the shadow-casting entities and derives the shadow cast
-   * direction from the vector pointing FROM the light TO the entity
-   * centroid. This ensures shadows remain stable when only the camera
-   * moves; only entity movement changes the shadow direction.
-   * When no visible light entity is found the method falls back to the
-   * configurable fallback angles (`r_shadow_fallback_yaw` /
-   * `r_shadow_fallback_pitch`).
-   * @param {Vector|Float64Array|number[]} viewOrigin Camera position used as
-   *   fallback when no shadow casters are visible.
+   * Determine the single top-down local shadow used this frame.
+   * The shadow focus follows the nearest visible caster; the local shadow
+   * direction itself is fixed straight down for now.
+   * @param {Vector|Float64Array|number[]} viewOrigin Camera position used only
+   *   as a last-resort fallback when no shadow casters are visible.
    */
-  static selectLocalLight(viewOrigin) {
-    const worldmodel = CL.state.worldmodel;
-    if (!worldmodel) {
-      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
-      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
-      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
-      ShadowMap._applyFallbackDirection();
-      return;
-    }
+  static selectLocalLights(viewOrigin) {
+    let anchorEntity = null;
+    let bestDistSq = Infinity;
 
-    // Lazy-parse light entities when worldmodel changes (new map)
-    if (ShadowMap._parsedWorldmodel !== worldmodel) {
-      ShadowMap.parseLightEntities(worldmodel.entities);
-      ShadowMap._parsedWorldmodel = worldmodel;
-    }
+    for (const entity of CL.state.clientEntities.getVisibleEntities()) {
+      if (!ShadowMap._isLocalShadowCasterEntity(entity, null, Infinity)) {
+        continue;
+      }
 
-    // Score all light entities and pick the best visible one.
-    // Score = radius / distance — prefers brighter, closer lights.
-    const lights = ShadowMap.lightEntities;
-    const numLights = lights.length;
-
-    if (numLights === 0) {
-      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
-      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
-      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
-      ShadowMap._applyFallbackDirection();
-      return;
-    }
-
-    // Use the centroid of visible shadow-casting entities as the
-    // reference point so the light direction is stable when only the
-    // camera moves.  Fall back to viewOrigin when nothing casts shadows.
-    const centroid = ShadowMap._centroidScratch;
-    const casterCount = ShadowMap._computeShadowCasterCentroid(centroid);
-    const refX = casterCount > 0 ? centroid[0] : viewOrigin[0];
-    const refY = casterCount > 0 ? centroid[1] : viewOrigin[1];
-    const refZ = casterCount > 0 ? centroid[2] : viewOrigin[2];
-    const targetPoint = casterCount > 0 ? centroid : viewOrigin;
-    if (casterCount > 0) {
-      const blend = ShadowMap._SHADOW_FOCUS_BLEND;
-      const invBlend = 1.0 - blend;
-      ShadowMap._shadowFocusPoint[0] = viewOrigin[0] * invBlend + refX * blend;
-      ShadowMap._shadowFocusPoint[1] = viewOrigin[1] * invBlend + refY * blend;
-      ShadowMap._shadowFocusPoint[2] = viewOrigin[2] * invBlend + refZ * blend;
-    } else {
-      ShadowMap._shadowFocusPoint[0] = viewOrigin[0];
-      ShadowMap._shadowFocusPoint[1] = viewOrigin[1];
-      ShadowMap._shadowFocusPoint[2] = viewOrigin[2];
-    }
-
-    // Build scored list, cheaply reject lights that are too far away
-    const maxRange = ShadowMap.range.value * 16.0;
-    const maxRangeSq = maxRange * maxRange;
-    const scored = [];
-
-    for (let i = 0; i < numLights; i++) {
-      const light = lights[i];
-      const dx = light.origin[0] - refX;
-      const dy = light.origin[1] - refY;
-      const dz = light.origin[2] - refZ;
+      const dx = entity.lerp.origin[0] - viewOrigin[0];
+      const dy = entity.lerp.origin[1] - viewOrigin[1];
+      const dz = entity.lerp.origin[2] - viewOrigin[2];
       const distSq = dx * dx + dy * dy + dz * dz;
 
-      if (distSq > maxRangeSq || distSq < 0.01) {
-        continue;
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        anchorEntity = entity;
       }
-
-      const dist = Math.sqrt(distSq);
-      const score = light.radius / Math.max(dist, 1.0);
-      scored.push({ light, dist, score });
     }
 
-    // Sort descending by score, limit trace count
-    scored.sort((a, b) => b.score - a.score);
-    const traceLimit = Math.min(scored.length, ShadowMap._MAX_LIGHT_TRACES);
+    const anchorPoint = anchorEntity !== null ? anchorEntity.lerp.origin : viewOrigin;
 
-    for (let i = 0; i < traceLimit; i++) {
-      const { light, dist } = scored[i];
+    ShadowMap._shadowFocusPoint[0] = anchorPoint[0];
+    ShadowMap._shadowFocusPoint[1] = anchorPoint[1];
+    ShadowMap._shadowFocusPoint[2] = anchorPoint[2];
 
-      // Prefer lights that actually have line-of-sight to the casters.
-      if (!ShadowMap._traceVisible(light.origin, targetPoint)) {
-        continue;
-      }
-
-      // Direction FROM the light TO the entity centroid (shadow cast direction)
-      const invDist = 1.0 / dist;
-      ShadowMap.localLightDir[0] = (refX - light.origin[0]) * invDist;
-      ShadowMap.localLightDir[1] = (refY - light.origin[1]) * invDist;
-      ShadowMap.localLightDir[2] = (refZ - light.origin[2]) * invDist;
-      ShadowMap.localLightFalloff = 1.0;
-      return;
+    ShadowMap.localLightCount = 1;
+    ShadowMap._applyFallbackDirection(0);
+    for (let slotIndex = 1; slotIndex < LOCAL_SHADOW_COUNT; slotIndex++) {
+      ShadowMap._currentLocalLightIndices[slotIndex] = -1;
     }
-
-    // No visible light entity found — use fallback direction
-    ShadowMap._applyFallbackDirection();
   }
 
   /**
    * Apply the configurable fallback shadow direction.
    * Used when no light entity from the BSP entity lump is visible.
+   * @param {number} slotIndex Local shadow slot to populate with the fallback direction
    */
-  static _applyFallbackDirection() {
-    const yaw = ShadowMap.sunYaw.value * Math.PI / 180.0;
-    const pitch = ShadowMap.sunPitch.value * Math.PI / 180.0;
-    const cp = Math.cos(pitch);
-    ShadowMap.localLightDir[0] = cp * Math.cos(yaw);
-    ShadowMap.localLightDir[1] = cp * Math.sin(yaw);
-    ShadowMap.localLightDir[2] = Math.sin(pitch);
+  static _applyFallbackDirection(slotIndex) {
+    ShadowMap._currentLocalLightIndices[slotIndex] = -1;
+    const dir = ShadowMap.localLightDirs[slotIndex];
+    dir[0] = 0.0;
+    dir[1] = 0.0;
+    dir[2] = -1.0;
     ShadowMap.localLightFalloff = 1.0;
   }
 
