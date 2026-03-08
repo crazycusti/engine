@@ -37,6 +37,7 @@ export class BaseMaterial {
   name = /** @type {string} */ (null);
   width = /** @type {number} */ (0);
   height = /** @type {number} */ (0);
+  currentAlpha = 1.0;
 
   /** @type {number[]} Average color of the texture as [r, g, b] in 0-255 range */
   averageColor = [128, 128, 128];
@@ -57,9 +58,68 @@ export class BaseMaterial {
     // to be implemented by subclasses
   }
 
-  // eslint-disable-next-line no-unused-vars
   emit(/** @type {ClientEdict?} */ clientEdict = null) {
-    // to be implemented by subclasses
+    this.currentAlpha = this.resolveAlpha(clientEdict);
+  }
+
+  /**
+   * Resolve the effective alpha for this material on the current draw.
+   * @protected
+   * @param {ClientEdict?} clientEdict Client entity being rendered.
+   * @returns {number} Alpha in the 0..1 range.
+   */
+  resolveAlpha(clientEdict = null) {
+    if ((this.flags & materialFlags.MF_TURBULENT) === 0 || clientEdict === null) {
+      return 1.0;
+    }
+
+    const worldspawn = CL.state.clientEntities.getEntity(0);
+    if (clientEdict !== worldspawn) {
+      return 1.0;
+    }
+
+    const worldspawnInfo = CL.state.worldmodel?.worldspawnInfo;
+    if (!worldspawnInfo) {
+      return 1.0;
+    }
+
+    const alphaKeys = this._getLiquidAlphaKeys();
+    for (let i = 0; i < alphaKeys.length; i++) {
+      const rawValue = worldspawnInfo[alphaKeys[i]];
+      if (rawValue === undefined) {
+        continue;
+      }
+
+      const parsedAlpha = Number.parseFloat(rawValue);
+      if (Number.isFinite(parsedAlpha)) {
+        return Math.max(0.0, Math.min(parsedAlpha, 1.0));
+      }
+    }
+
+    return 1.0;
+  }
+
+  /**
+   * Pick the relevant worldspawn alpha keys for this turbulent material.
+   * @protected
+   * @returns {string[]} Ordered list of worldspawn keys to query.
+   */
+  _getLiquidAlphaKeys() {
+    const lowerName = this.name.toLowerCase();
+
+    if (lowerName.includes('lava')) {
+      return ['_lavaalpha', 'lavaalpha'];
+    }
+
+    if (lowerName.includes('slime')) {
+      return ['_slimealpha', 'slimealpha'];
+    }
+
+    if (lowerName.includes('tele')) {
+      return ['_telealpha', 'telealpha', '_teleportalpha', 'teleportalpha'];
+    }
+
+    return ['_wateralpha', 'wateralpha'];
   }
 
   free() {
@@ -127,6 +187,7 @@ export class QuakeMaterial extends BaseMaterial {
   }
 
   emit(/** @type {ClientEdict} */ clientEdict = null) {
+    this.currentAlpha = this.resolveAlpha(clientEdict);
     const frame = Math.floor((clientEdict !== null ? clientEdict.frame : 0) + CL.state.time * 5.0);
     const useAlternate = (clientEdict !== null && clientEdict.frame > 0 && this.#alternateFrames > 0);
 
@@ -204,6 +265,10 @@ export class PBRMaterial extends BaseMaterial {
       this.luminance.bind(program.tLuminance);
       R.c_brush_texture_binds++;
     }
+  }
+
+  emit(/** @type {ClientEdict?} */ clientEdict = null) {
+    this.currentAlpha = this.resolveAlpha(clientEdict);
   }
 
   free() {

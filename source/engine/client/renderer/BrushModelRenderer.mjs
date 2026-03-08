@@ -470,18 +470,10 @@ export class BrushModelRenderer extends ModelRenderer {
     GL.BindVAO(clmodel.turbulentVAO);
     R.c_brush_vbos++;
 
-    gl.enable(gl.BLEND);
     const program = GL.UseProgram('turbulent');
     gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
     gl.uniformMatrix3fv(program.uAngles, false, GL.identity);
     gl.uniform1f(program.uTime, Host.realtime);
-    gl.uniform1f(program.uAlpha, 1.0);
-
-    // Disable depth writes so turbulent surfaces don't contaminate the depth
-    // texture. The fog volume shader samples that texture to compute fog
-    // thickness — if water/slime depths were included, fog behind or inside
-    // liquid surfaces would be incorrectly clipped.
-    gl.depthMask(false);
 
     // Bind common textures
     this._setupBrushShaderCommon(program, clmodel, true);
@@ -503,10 +495,16 @@ export class BrushModelRenderer extends ModelRenderer {
 
     for (let j = leaf.waterchain; j < leaf.cmds.length; j++) {
       const cmds = leaf.cmds[j];
+      const material = clmodel.textures[cmds[0]];
+
+      material.emit(worldspawn);
+      const alpha = this._getTurbulentMaterialAlpha(material, worldspawn);
+      this._setTurbulentSurfaceState(alpha);
+      gl.uniform1f(program.uAlpha, alpha);
+
       R.c_brush_verts += cmds[2];
       R.c_brush_tris += cmds[2] / 3;
-      clmodel.textures[cmds[0]].emit(worldspawn);
-      clmodel.textures[cmds[0]].bindTo(program);
+      material.bindTo(program);
       gl.drawArrays(gl.TRIANGLES, cmds[1], cmds[2]);
       R.c_brush_draws++;
     }
@@ -521,6 +519,34 @@ export class BrushModelRenderer extends ModelRenderer {
     GL.UnbindVAO();
     this._worldTurbulentProgram = null;
     this._worldTurbulentModel = null;
+  }
+
+  /**
+   * @private
+   * @param {import('./Materials.mjs').BaseMaterial} material Material chosen for the draw.
+   * @param {ClientEdict} entity Entity that owns the surface.
+   * @returns {number} Combined material/entity alpha in the 0..1 range.
+   */
+  _getTurbulentMaterialAlpha(material, entity) {
+    const entityAlpha = entity?.alpha ?? 1.0;
+    return Math.max(0.0, Math.min(material.currentAlpha * entityAlpha, 1.0));
+  }
+
+  /**
+   * Opaque liquids must write depth so they occlude later fog/transparent passes.
+   * Transparent liquids stay blended and keep depth writes disabled.
+   * @private
+   * @param {number} alpha Effective surface alpha.
+   */
+  _setTurbulentSurfaceState(alpha) {
+    if (alpha >= 1.0) {
+      gl.disable(gl.BLEND);
+      gl.depthMask(true);
+      return;
+    }
+
+    gl.enable(gl.BLEND);
+    gl.depthMask(false);
   }
 
   /**
@@ -748,12 +774,9 @@ export class BrushModelRenderer extends ModelRenderer {
    * @param {number[]} viewMatrix Rotation matrix for entity orientation
    */
   _renderTurbulentSurfaces(clmodel, e, viewMatrix) {
-    gl.enable(gl.BLEND);
-
     const program = GL.UseProgram('turbulent');
-    gl.uniform3f(program.uOrigin, 0.0, 0.0, 0.0);
+    gl.uniform3fv(program.uOrigin, e.lerp.origin);
     gl.uniformMatrix3fv(program.uAngles, false, viewMatrix);
-    gl.uniform1f(program.uAlpha, 1.0);
     gl.uniform1f(program.uTime, Host.realtime % (Math.PI * 2.0));
 
     // Bind common textures
@@ -762,6 +785,7 @@ export class BrushModelRenderer extends ModelRenderer {
 
     // Render each turbulent chain
     if (!clmodel.chains || clmodel.chains.length === 0) {
+      gl.depthMask(true);
       gl.disable(gl.BLEND);
       return;
     }
@@ -779,14 +803,19 @@ export class BrushModelRenderer extends ModelRenderer {
         continue; // Skip non-turbulent surfaces in this pass
       }
 
+      material.emit(e);
+      const alpha = this._getTurbulentMaterialAlpha(material, e);
+      this._setTurbulentSurfaceState(alpha);
+      gl.uniform1f(program.uAlpha, alpha);
+      material.bindTo(program);
+
       R.c_brush_verts += chain[2];
       R.c_brush_tris += chain[2] / 3;
-      // GL.Bind(program.tTexture, texture.texturenum);
-      R.notexture.bind(program.tTexture); // TODO: fix turbulent texture binding
       gl.drawArrays(gl.TRIANGLES, chain[1], chain[2]);
       R.c_brush_draws++;
     }
 
+    gl.depthMask(true);
     gl.disable(gl.BLEND);
   }
 
@@ -1399,17 +1428,21 @@ export class BrushModelRenderer extends ModelRenderer {
         for (let l = 0; l < surf.styles.length; l++) {
           styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
         }
+        const hasLightmap = this._surfaceHasTurbulentLightmap(m, surf);
         chain[2] += surf.verts.length;
         for (let k = 0; k < surf.verts.length; k++) {
           const vert = surf.verts[k];
+          const fallbackLight = hasLightmap
+            ? [0.0, 0.0, 0.0]
+            : this._getTurbulentFallbackLight(m, surf, new Vector(vert[0], vert[1], vert[2]));
           // Position (12 bytes)
           cmds.push(vert[0], vert[1], vert[2]);
           // TexCoord (16 bytes)
-          cmds.push(vert[3], vert[4], vert[5], vert[6]);
+          cmds.push(vert[3], vert[4], hasLightmap ? vert[5] : -1.0, hasLightmap ? vert[6] : -1.0);
           // LightStyle (16 bytes)
           cmds.push(styles[0], styles[1], styles[2], styles[3]);
-          // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
-          cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+          // aNormal carries per-vertex fallback light for no-lightmap turbulents.
+          cmds.push(fallbackLight[0], fallbackLight[1], fallbackLight[2]);
           cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         }
       }
@@ -1575,18 +1608,22 @@ export class BrushModelRenderer extends ModelRenderer {
           for (let l = 0; l < surf.styles.length; l++) {
             styles[l] = surf.styles[l] * 0.015625 + 0.0078125;
           }
+          const hasLightmap = this._surfaceHasTurbulentLightmap(m, surf);
           this._expandLeafBoundsForSurface(leaf, surf.verts);
           chain[2] += surf.verts.length;
           for (let l = 0; l < surf.verts.length; l++) {
             const vert = surf.verts[l];
+            const fallbackLight = hasLightmap
+              ? [0.0, 0.0, 0.0]
+              : this._getTurbulentFallbackLight(m, surf, new Vector(vert[0], vert[1], vert[2]));
             // Position (12 bytes)
             cmds.push(vert[0], vert[1], vert[2]);
             // TexCoord (16 bytes)
-            cmds.push(vert[3], vert[4], vert[5], vert[6]);
+            cmds.push(vert[3], vert[4], hasLightmap ? vert[5] : -1.0, hasLightmap ? vert[6] : -1.0);
             // LightStyle (16 bytes)
             cmds.push(styles[0], styles[1], styles[2], styles[3]);
-            // Normal (12 bytes) + Tangent/Bitangent placeholders (24 bytes)
-            cmds.push(surf.normal[0], surf.normal[1], surf.normal[2]);
+            // aNormal carries per-vertex fallback light for no-lightmap turbulents.
+            cmds.push(fallbackLight[0], fallbackLight[1], fallbackLight[2]);
             cmds.push(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
           }
         }
@@ -1640,6 +1677,70 @@ export class BrushModelRenderer extends ModelRenderer {
       }
       face.verts[face.verts.length] = vert;
     }
+  }
+
+  /**
+   * @private
+   * @param {BrushModel} model Model containing the face.
+   * @param {import('../../common/model/BaseModel.mjs').Face} face Turbulent face being packed.
+   * @returns {boolean} True when the face has usable baked lightmap samples.
+   */
+  _surfaceHasTurbulentLightmap(model, face) {
+    if (face.styles.length === 0 || face.lightofs < 0) {
+      return false;
+    }
+
+    if (model.version === 38 && face.lightofs === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * @private
+   * @param {BrushModel} model Model containing the face.
+   * @param {import('../../common/model/BaseModel.mjs').Face} face Turbulent face being packed.
+   * @param {Vector} worldPos Vertex position used for the fallback sample.
+   * @returns {number[]} Vertex-level fallback light color.
+   */
+  _getTurbulentFallbackLight(model, face, worldPos) {
+    const turbulentFace = /** @type {import('../../common/model/BaseModel.mjs').Face & { verts?: number[][] }} */ (face);
+
+    if (model.submodel || CL.state.worldmodel === null) {
+      return [1.0, 1.0, 1.0];
+    }
+
+    // Sampling exactly on a no-lightmap turbulent plane can immediately hit the
+    // same face inside RecursiveLightPoint and return the zero-light path.
+    // Probe a few nearby positions around the vertex and keep the brightest result.
+    const normalOffset = turbulentFace.normal.copy().multiply(2.0);
+    const samplePositions = [
+      worldPos,
+      worldPos.copy().add(normalOffset),
+      worldPos.copy().subtract(normalOffset),
+      new Vector(worldPos[0], worldPos[1], worldPos[2] - 2.0),
+    ];
+    let bestColor = new Vector(0.0, 0.0, 0.0);
+    let bestIntensity = 0.0;
+
+    for (let i = 0; i < samplePositions.length; i++) {
+      const [color] = R.LightPoint(samplePositions[i]);
+      const intensity = Math.max(color[0], color[1], color[2]);
+
+      if (intensity <= bestIntensity) {
+        continue;
+      }
+
+      bestColor = color;
+      bestIntensity = intensity;
+    }
+
+    return [
+      Math.max(0.0, bestColor[0] * 0.0078125),
+      Math.max(0.0, bestColor[1] * 0.0078125),
+      Math.max(0.0, bestColor[2] * 0.0078125),
+    ];
   }
 
   /**

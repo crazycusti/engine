@@ -327,7 +327,7 @@ R.RecursiveLightPoint = function(node, start, end) {
       continue;
     }
 
-    if (surf.lightofs === 0) {
+    if (surf.styles.length === 0 || surf.lightofs < 0) {
       return [new Vector(), mid];
     }
 
@@ -1553,7 +1553,7 @@ R.InitShaders = async function() {
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
           ['aLightStyle', gl.FLOAT, 4],
-          // ['aNormal', gl.FLOAT, 3],
+          ['aNormal', gl.FLOAT, 3],
           // ['aTangent', gl.FLOAT, 3],
           // ['aBitangent', gl.FLOAT, 3],
         ],
