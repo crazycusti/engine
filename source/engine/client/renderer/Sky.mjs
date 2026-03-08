@@ -450,6 +450,19 @@ export class SimpleSkyBox extends SkyRenderer {
     gl.uniform3f(program.uDynamicShadeLight, 0.0, 0.0, 0.0);
     gl.uniform3f(program.uLightVec, 0.0, 0.0, 1.0);
 
+    if (program.tShadowMap0 !== undefined && R.shadow_textures?.[0]) {
+      GL.Bind(program.tShadowMap0, R.shadow_textures[0]);
+    }
+    if (program.tShadowMap1 !== undefined && R.shadow_textures?.[1]) {
+      GL.Bind(program.tShadowMap1, R.shadow_textures[1]);
+    }
+    if (program.tShadowMap2 !== undefined && R.shadow_textures?.[2]) {
+      GL.Bind(program.tShadowMap2, R.shadow_textures[2]);
+    }
+    if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
+      GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
+    }
+
     GL.BindVAO(this.#cubeVAO);
 
     const faces = [this.#front, this.#back, this.#right, this.#left, this.#up, this.#down];

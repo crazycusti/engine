@@ -8,7 +8,7 @@ import Chase from './Chase.mjs';
 import W from '../common/W.mjs';
 import VID from './VID.mjs';
 import GL, { ATTRIB_LOCATIONS, GLTexture } from './GL.mjs';
-import { content, effect, EPSILON, gameCapabilities } from '../../shared/Defs.mjs';
+import { content, effect, gameCapabilities } from '../../shared/Defs.mjs';
 import { modelRendererRegistry } from './renderer/ModelRendererRegistry.mjs';
 import { BrushModelRenderer, LIGHTMAP_BLOCK_HEIGHT, LIGHTMAP_BLOCK_SIZE } from './renderer/BrushModelRenderer.mjs';
 import { AliasModelRenderer } from './renderer/AliasModelRenderer.mjs';
@@ -18,6 +18,7 @@ import Draw from './Draw.mjs';
 import { BrushModel, Node, revealedVisibility } from '../common/model/BSP.mjs';
 import PostProcess from './renderer/PostProcess.mjs';
 import WarpEffect from './renderer/WarpEffect.mjs';
+import ShadowMap from './renderer/ShadowMap.mjs';
 import { ClientDlight, ClientEdict } from './ClientEntities.mjs';
 import { avertexnormals } from '../common/model/loaders/AliasMDLLoader.mjs';
 import { SkyRenderer } from './renderer/Sky.mjs';
@@ -123,16 +124,74 @@ R.RenderDlights = function() {
 };
 
 /**
- * @param {ClientDlight} light
- * @param {number} bit
- * @param {Node} node
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface to sample.
+ * @returns {Vector} A known point on the surface plane.
+ */
+R.GetDynamicLightSurfacePoint = function(surf) {
+  const surfedge = CL.state.worldmodel.surfedges[surf.firstedge];
+
+  if (surfedge >= 0) {
+    return CL.state.worldmodel.vertexes[CL.state.worldmodel.edges[surfedge][0]].copy();
+  }
+
+  return CL.state.worldmodel.vertexes[CL.state.worldmodel.edges[-surfedge][1]].copy();
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being evaluated.
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface being tested.
+ * @returns {{distanceToPlane: number, impact: Vector}|null} Surface-plane hit information when the light is in front of the face.
+ */
+R.GetDynamicLightSurfaceImpact = function(light, surf) {
+  const faceNormal = surf.normal.copy();
+  const surfacePoint = R.GetDynamicLightSurfacePoint(surf);
+  const distanceToPlane = light.origin.copy().subtract(surfacePoint).dot(faceNormal);
+
+  if (distanceToPlane <= 0.0 || distanceToPlane >= light.radius) {
+    return null;
+  }
+
+  const impact = light.origin.copy().subtract(faceNormal.copy().multiply(distanceToPlane));
+
+  return { distanceToPlane, impact };
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being evaluated.
+ * @param {import('../common/model/BaseModel.mjs').Face} surf Surface being tested.
+ * @param {Vector} impact Projected point on the face plane.
+ * @returns {boolean} True when the light has line of sight to the surface.
+ */
+R.IsDynamicLightSurfaceVisible = function(light, surf, impact) {
+  const trace = {
+    fraction: 1.0,
+    allsolid: true,
+    startsolid: false,
+    endpos: impact,
+    plane: {
+      normal: Vector.origin.copy(),
+      dist: 0.0,
+    },
+    ent: null,
+  };
+  const end = impact.copy().add(surf.normal.copy().multiply(1.0));
+
+  SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, light.origin, end, trace);
+
+  return !trace.startsolid && !trace.allsolid && trace.fraction === 1.0;
+};
+
+/**
+ * @param {ClientDlight} light Dynamic light being propagated through the BSP.
+ * @param {number} bit Bitmask for the current dynamic light.
+ * @param {Node} node BSP node being traversed.
  */
 R.MarkLights = function(light, bit, node) {
   if (node.contents < 0) {
     return;
   }
   const normal = node.plane.normal;
-  const dist = light.origin[0] * normal[0] + light.origin[1] * normal[1] + light.origin[2] * normal[2] - node.plane.dist;
+  const dist = light.origin.dot(normal) - node.plane.dist;
   if (dist > light.radius) {
     R.MarkLights(light, bit, node.children[0]);
     return;
@@ -146,11 +205,17 @@ R.MarkLights = function(light, bit, node) {
       continue;
     }
 
+    const lightImpact = R.GetDynamicLightSurfaceImpact(light, surf);
+
+    if (lightImpact === null || !R.IsDynamicLightSurfaceVisible(light, surf, lightImpact.impact)) {
+      continue;
+    }
+
     if (surf.dlightframe !== (R.dlightframecount + 1)) {
       surf.dlightbits = 0;
       surf.dlightframe = R.dlightframecount + 1;
     }
-    surf.dlightbits += bit;
+    surf.dlightbits |= bit;
   }
   R.MarkLights(light, bit, node.children[0]);
   R.MarkLights(light, bit, node.children[1]);
@@ -176,7 +241,7 @@ R.PushDlights = function() {
         if (ent.model === null) {
           continue;
         }
-        if ((ent.model.type !== Mod.type.brush) || (ent.model.submodel !== true)) {
+        if ((ent.model.type !== Mod.type.brush) || !ent.model.submodel) {
           continue;
         }
         R.MarkLights(l, bit, CL.state.worldmodel.nodes[ent.model.hulls[0].firstclipnode]);
@@ -262,7 +327,7 @@ R.RecursiveLightPoint = function(node, start, end) {
       continue;
     }
 
-    if (surf.lightofs === 0) {
+    if (surf.styles.length === 0 || surf.lightofs < 0) {
       return [new Vector(), mid];
     }
 
@@ -305,7 +370,7 @@ R.RecursiveLightPoint = function(node, start, end) {
 
     return [
       r3,
-      mid.add(surf.plane.normal.copy().multiply(16.0)),
+      mid.add(surf.normal.copy().multiply(16.0)),
     ];
   }
 
@@ -669,8 +734,8 @@ R.DrawEntitiesOnList = function() {
 
     renderer.setupRenderState(0);
     for (const entity of entities) {
-      if (entity.alpha < 1.0) {
-        continue; // Transparent entities are drawn in pass 2
+      if (!renderer.rendersOpaquePass(entity.model, entity)) {
+        continue;
       }
 
       renderer.render(entity.model, entity, 0);
@@ -698,13 +763,10 @@ R.DrawEntitiesOnList = function() {
 /**
  * Render world turbulent surfaces and fog volumes in the correct order.
  *
- * Turbulent surfaces must render BEFORE fog volumes because fog volumes
- * are screen-space compositing effects (depth test disabled, depth texture
- * sampled). If a turbulent surface renders after a co-located fog volume,
- * it overwrites the fog with its own color (alpha = 1.0).
- *
- * Both turbulents and fog volumes are individually sorted back-to-front
- * (farthest first) for correct blending among items of the same type.
+ * Turbulent surfaces and fog volumes share the same transparency space, so
+ * they must be composed from a single back-to-front list. Rendering them in
+ * separate phases is incorrect when water and fog overlap or alternate in
+ * depth, such as foggy water volumes or mist sitting above water.
  *
  * When no fog volumes exist (or post-process is unavailable), this falls
  * back to the simple sequential turbulent pass.
@@ -732,28 +794,59 @@ R._renderFogAndTurbulentsSorted = function(worldEntity) {
   }
 
   const vieworg = R.refdef.vieworg;
+  /** @type {Array<{dist: number, kind: number, data: Node|import('../common/model/BSP.mjs').FogVolumeInfo}>} */
+  const items = [];
 
-  // Phase 1: Render all turbulent leaves (back-to-front)
   const turbulentLeaves = brushRenderer.getWorldTurbulentLeaves(worldmodel, vieworg);
-  if (turbulentLeaves.length > 0) {
-    turbulentLeaves.sort((a, b) => b.dist - a.dist);
-    brushRenderer.beginWorldTurbulentPass(worldmodel);
-    for (let i = 0; i < turbulentLeaves.length; i++) {
-      brushRenderer.renderWorldTurbulentLeaf(worldmodel, turbulentLeaves[i].leaf);
-    }
-    brushRenderer.endWorldTurbulentPass();
+  for (let i = 0; i < turbulentLeaves.length; i++) {
+    items.push({ dist: turbulentLeaves[i].dist, kind: 0, data: turbulentLeaves[i].leaf });
   }
 
-  // Phase 2: Render all fog volumes on top (back-to-front)
   const fogItems = brushRenderer.getFogVolumeItems(worldmodel, vieworg);
-  if (fogItems.length > 0) {
-    fogItems.sort((a, b) => b.dist - a.dist);
-    if (brushRenderer.beginFogVolumePass(worldmodel)) {
-      for (let i = 0; i < fogItems.length; i++) {
-        brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (fogItems[i].fogVolume));
+  for (let i = 0; i < fogItems.length; i++) {
+    items.push({ dist: fogItems[i].dist, kind: 1, data: fogItems[i].fogVolume });
+  }
+
+  if (items.length === 0) {
+    return;
+  }
+
+  items.sort((a, b) => b.dist - a.dist);
+
+  let activePass = -1;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (item.kind !== activePass) {
+      if (activePass === 0) {
+        brushRenderer.endWorldTurbulentPass();
+      } else if (activePass === 1) {
+        brushRenderer.endFogVolumePass();
       }
-      brushRenderer.endFogVolumePass();
+
+      if (item.kind === 0) {
+        brushRenderer.beginWorldTurbulentPass(worldmodel);
+      } else if (!brushRenderer.beginFogVolumePass(worldmodel)) {
+        activePass = -1;
+        continue;
+      }
+
+      activePass = item.kind;
     }
+
+    if (item.kind === 0) {
+      brushRenderer.renderWorldTurbulentLeaf(worldmodel, /** @type {Node} */ (item.data));
+      continue;
+    }
+
+    brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (item.data));
+  }
+
+  if (activePass === 0) {
+    brushRenderer.endWorldTurbulentPass();
+  } else if (activePass === 1) {
+    brushRenderer.endFogVolumePass();
   }
 };
 
@@ -782,12 +875,15 @@ R._renderTransparentsSorted = function(worldEntity) {
   // Collect transparent entities with distances
   if (R.drawentities.value !== 0) {
     for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-      if (entity.model === null || entity.alpha === 0) {
+      if (entity.model === null || entity.alpha === 0.0) {
         continue;
       }
-      if (entity.model.type === Mod.type.sprite) {
-        continue; // Sprites are handled in pass 1
+
+      const renderer = modelRendererRegistry.getRenderer(entity.model.type);
+      if (renderer === null || !renderer.rendersTransparentPass(entity.model, entity)) {
+        continue;
       }
+
       const dx = entity.origin[0] - vieworg[0];
       const dy = entity.origin[1] - vieworg[1];
       const dz = entity.origin[2] - vieworg[2];
@@ -1071,6 +1167,38 @@ R.Perspective = function() {
       // uFogParams = vec4(start, end, density, mode)
       gl.uniform4f(program.uFogParams, R.fog_start.value, R.fog_end.value, R.fog_density.value, R.fog_mode.value);
     }
+    // shadow mapping uniforms (set on all programs that declare them)
+    if (program.uLightSpaceMatrix0 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix0, false, ShadowMap.lightSpaceMatrices[0]);
+    }
+    if (program.uLightSpaceMatrix1 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix1, false, ShadowMap.lightSpaceMatrices[1]);
+    }
+    if (program.uLightSpaceMatrix2 !== undefined) {
+      gl.uniformMatrix4fv(program.uLightSpaceMatrix2, false, ShadowMap.lightSpaceMatrices[2]);
+    }
+    if (program.uShadowEnabled !== undefined) {
+      gl.uniform1f(program.uShadowEnabled, ShadowMap.enabled.value ? 1.0 : 0.0);
+    }
+    if (program.uShadowCount !== undefined) {
+      gl.uniform1i(program.uShadowCount, ShadowMap.enabled.value ? ShadowMap.localLightCount : 0);
+    }
+    if (program.uShadowDarkness !== undefined) {
+      gl.uniform1f(program.uShadowDarkness, ShadowMap.darkness.value);
+    }
+    if (program.uShadowMapSize !== undefined) {
+      gl.uniform1f(program.uShadowMapSize, ShadowMap.size);
+    }
+    // Point light shadow uniforms
+    if (program.uPointShadowEnabled !== undefined) {
+      gl.uniform1f(program.uPointShadowEnabled, ShadowMap.pointLightActive ? 1.0 : 0.0);
+    }
+    if (program.uPointLightPos !== undefined) {
+      gl.uniform3fv(program.uPointLightPos, ShadowMap.pointLightOrigin);
+    }
+    if (program.uPointLightRadius !== undefined) {
+      gl.uniform1f(program.uPointLightRadius, ShadowMap.pointLightRadius);
+    }
   }
 };
 
@@ -1119,6 +1247,11 @@ R.PreRenderScene = function() {
   // Activate depth-texture post-process when fog volumes exist.
   // Pipeline effects (warp, etc.) are resolved separately via PostProcess.resolve.
   R.usePostProcess = CL.state.worldmodel.fogVolumes && CL.state.worldmodel.fogVolumes.length > 0;
+
+  // Choose the shadow texture for this frame (real or dummy)
+  R.shadow_textures = ShadowMap.getActiveTextures();
+  R.shadow_texture = R.shadow_textures[0];
+  R.point_shadow_texture = ShadowMap.getActivePointTexture();
 };
 
 R.RenderWorld = function() {
@@ -1157,6 +1290,41 @@ R.RenderWorld = function() {
 
 R.RenderScene = function() {
   R.SetFrustum();
+
+  // Shadow depth pass — local entity shadow centered on the nearest visible
+  // shadow caster. Static world shadowing remains authored by baked lightmaps.
+  if (ShadowMap.enabled.value) {
+    ShadowMap.selectLocalLights(R.refdef.vieworg);
+    ShadowMap.updateLightSpaceMatrices();
+    R.shadow_textures = ShadowMap.getActiveTextures();
+    R.shadow_texture = R.shadow_textures[0];
+    const localCasterRadius = ShadowMap.casterRadius.value;
+    const localCasterRadiusSq = localCasterRadius * localCasterRadius;
+
+    for (let i = 0; i < ShadowMap.localLightCount; i++) {
+      ShadowMap.begin(i);
+      ShadowMap.renderEntitiesShadow(
+        ShadowMap.lightSpaceMatrices[i],
+        'shadow-brush',
+        'shadow-alias',
+        ShadowMap._shadowFocusPoint,
+        localCasterRadiusSq,
+      );
+      ShadowMap.end();
+    }
+  }
+
+  // Point light shadow pass — render world BSP into a cube depth map
+  // from the strongest dlight's position.
+  if (ShadowMap.selectPointLight(R.refdef.vieworg)) {
+    ShadowMap.renderPointLightShadow();
+  }
+  // Update point shadow texture AFTER selectPointLight so the correct
+  // texture (real or dummy) is bound for this frame. PreRenderScene
+  // runs before selectPointLight updates pointLightActive, so its
+  // assignment may be stale on the first frame a dlight appears.
+  R.point_shadow_texture = ShadowMap.getActivePointTexture();
+
   R.SetupGL();
   R.MarkLeafs();
   gl.enable(gl.CULL_FACE);
@@ -1168,9 +1336,9 @@ R.RenderScene = function() {
 R._speeds = /** @type {string[]} */ ([]);
 
 R.RenderView = function() {
-  gl.finish();
   let time1;
   if (R.speeds.value !== 0) {
+    gl.finish();
     time1 = Sys.FloatMilliTime();
   }
   R.c_brush_verts = 0;
@@ -1246,19 +1414,22 @@ R.InitTextures = function() {
   R.flatnormalmap = GLTexture.Allocate('r_flatnormalmap', 1, 1, new Uint8Array([128, 128, 255, 255]));
 
   R.deluxemap_texture = gl.createTexture();
-  GL.Bind(0, R.deluxemap_texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  GL.BindArray(0, R.deluxemap_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 3);
 
   R.lightmap_texture = gl.createTexture();
-  GL.Bind(0, R.lightmap_texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  GL.BindArray(0, R.lightmap_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 3);
 
   R.dlightmap_rgba_texture = gl.createTexture();
   GL.Bind(0, R.dlightmap_rgba_texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE);
 
   R.lightstyle_texture_a = gl.createTexture();
   GL.Bind(0, R.lightstyle_texture_a);
@@ -1273,11 +1444,15 @@ R.InitTextures = function() {
   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, 64, 1);
 
   R.fullbright_texture = gl.createTexture();
-  GL.Bind(0, R.fullbright_texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 0]));
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  GL.BindArray(0, R.fullbright_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 1, 1, 3);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 3, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+    255, 0, 0, 0, // layer 0 (R): lightstyle 0 at full
+    255, 0, 0, 0, // layer 1 (G): lightstyle 0 at full
+    255, 0, 0, 0, // layer 2 (B): lightstyle 0 at full
+  ]));
 
   R.null_texture = gl.createTexture();
   GL.Bind(0, R.null_texture);
@@ -1287,11 +1462,15 @@ R.InitTextures = function() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
   R.normal_up_texture = gl.createTexture();
-  GL.Bind(0, R.normal_up_texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 255, 128, 255]));
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  GL.BindArray(0, R.normal_up_texture);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 1, 1, 3);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 3, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+    128, 0, 0, 0, // layer 0 (X): neutral
+    255, 0, 0, 0, // layer 1 (Y): full (up direction)
+    128, 0, 0, 0, // layer 2 (Z): neutral
+  ]));
 
   eventBus.publish('renderer.textures.initialized');
 };
@@ -1300,36 +1479,37 @@ R.InitShaders = async function() {
   // rendering alias models
   await Promise.all([
     GL.CreateProgram('alias',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPositionA', gl.FLOAT, 3],
         ['aPositionB', gl.FLOAT, 3],
         ['aNormal', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
       ],
-      ['tTexture']),
+      ['tTexture', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering mesh models (OBJ, IQM, GLTF)
     GL.CreateProgram('mesh',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uAlpha', 'uTime', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
       [
         ['aPosition', gl.FLOAT, 3],
         ['aTexCoord', gl.FLOAT, 2],
         ['aNormal', gl.FLOAT, 3],
       ],
-      ['tTexture']),
+      ['tTexture', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering brush models (water is down below)
     GL.CreateProgram('brush',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uFogColor', 'uFogParams', 'uPerformDotLighting', 'uHaveDeluxemap', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uShadowMapSize', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
           ['aLightStyle', gl.FLOAT, 4],
           ['aNormal', gl.FLOAT, 3],
           ['aTangent', gl.FLOAT, 3],
+          ['aBitangent', gl.FLOAT, 3],
         ],
-        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap']),
+        ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // rendering dynamic lights
     GL.CreateProgram('dlight',
@@ -1339,14 +1519,14 @@ R.InitShaders = async function() {
 
     // rendering the player model (similar to alias model but with custom colors)
     GL.CreateProgram('player',
-      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams'],
+      ['uOrigin', 'uAngles', 'uViewOrigin', 'uViewAngles', 'uPerspective', 'uLightVec', 'uDynamicLightVec', 'uGamma', 'uAmbientLight', 'uShadeLight', 'uDynamicShadeLight', 'uInterpolation', 'uAlpha', 'uTime', 'uTop', 'uBottom', 'uFogColor', 'uFogParams', 'uLightSpaceMatrix0', 'uLightSpaceMatrix1', 'uLightSpaceMatrix2', 'uShadowEnabled', 'uShadowCount', 'uShadowDarkness', 'uPointLightPos', 'uPointLightRadius', 'uPointShadowEnabled'],
         [
           ['aPositionA', gl.FLOAT, 3],
           ['aPositionB', gl.FLOAT, 3],
           ['aNormal', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 2],
         ],
-        ['tTexture', 'tPlayer']),
+        ['tTexture', 'tPlayer', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 
     // for rendering sprites (usually effects)
     GL.CreateProgram('sprite',
@@ -1373,7 +1553,7 @@ R.InitShaders = async function() {
           ['aPosition', gl.FLOAT, 3],
           ['aTexCoord', gl.FLOAT, 4],
           ['aLightStyle', gl.FLOAT, 4],
-          // ['aNormal', gl.FLOAT, 3],
+          ['aNormal', gl.FLOAT, 3],
           // ['aTangent', gl.FLOAT, 3],
           // ['aBitangent', gl.FLOAT, 3],
         ],
@@ -1407,6 +1587,30 @@ R.InitShaders = async function() {
        'uDlightColor[4]', 'uDlightColor[5]', 'uDlightColor[6]', 'uDlightColor[7]'],
       [['aPosition', gl.FLOAT, 3]],
       ['tDepth', 'tLightProbe']),
+
+    // shadow depth pass for directional shadow mapping
+    GL.CreateProgram('shadow-brush',
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix'],
+      [['aPosition', gl.FLOAT, 3]],
+      []),
+
+    // shadow depth pass for point light cube shadow mapping
+    GL.CreateProgram('shadow-point',
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uLightPos', 'uLightRadius', 'uNormalBias'],
+      [['aPosition', gl.FLOAT, 3], ['aNormal', gl.FLOAT, 3]],
+      []),
+
+    // shadow depth pass for alias models (frame interpolation)
+    GL.CreateProgram('shadow-alias',
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uInterpolation'],
+      [['aPositionA', gl.FLOAT, 3], ['aPositionB', gl.FLOAT, 3]],
+      []),
+
+    // point shadow depth pass for alias models (frame interpolation)
+    GL.CreateProgram('shadow-alias-point',
+      ['uOrigin', 'uAngles', 'uLightSpaceMatrix', 'uInterpolation', 'uLightPos', 'uLightRadius', 'uNormalBias'],
+      [['aPositionA', gl.FLOAT, 3], ['aPositionB', gl.FLOAT, 3], ['aNormalA', gl.FLOAT, 3], ['aNormalB', gl.FLOAT, 3]],
+      []),
   ]);
 
   eventBus.publish('renderer.shaders.initialized');
@@ -1451,6 +1655,9 @@ R.Init = async function() {
   // and register the warp effect for underwater distortion.
   PostProcess.init();
   PostProcess.addEffect(new WarpEffect());
+
+  // Initialize shadow mapping (depth-only FBO + sun light)
+  ShadowMap.init();
 
   R.dlightvecs = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, R.dlightvecs);
@@ -1509,7 +1716,7 @@ R.NewMap = function() {
   }
 
   GL.Bind(0, R.dlightmap_rgba_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, R.dlightmaps_rgba);
 
   R.NewMapFog();
   R.MakeSky();
@@ -1533,6 +1740,11 @@ R.ClearAll = function() {
   R.dlightmaps_rgba = null;
 
   R.allocated = null;
+
+  R.shadow_textures = [];
+  R.shadow_texture = null;
+  R.point_shadow_texture = null;
+  R.world_depth_texture = null;
 
   R.ClearParticles();
   R.ClearDecals();
@@ -2111,14 +2323,19 @@ R.AddDynamicLights = function(surf) {
       continue;
     }
     const light = CL.state.clientEntities.dlights[i];
-    let dist = light.origin.dot(surf.plane.normal) - surf.plane.dist;
-    const rad = light.radius - Math.abs(dist);
+    const lightImpact = R.GetDynamicLightSurfaceImpact(light, surf);
+
+    if (lightImpact === null) {
+      continue;
+    }
+    let dist = lightImpact.distanceToPlane;
+    const rad = light.radius - dist;
     let minlight = light.minlight;
     if (rad < minlight) {
       continue;
     }
     minlight = rad - minlight;
-    const impact = light.origin.copy().subtract(surf.plane.normal.copy().multiply(dist));
+    const impact = lightImpact.impact;
     const tex = CL.state.worldmodel.texinfo[surf.texinfo];
     const local = [
       impact.dot(new Vector(...tex.vecs[0])) + tex.vecs[0][3] - surf.texturemins[0],
@@ -2224,7 +2441,7 @@ R.BuildLightMapEx = function(currentmodel, surf) {
   const tmax = (surf.extents[1] >> surf.lmshift) + 1;
 
   if (currentmodel.deluxemap && !R.deluxemap) {
-    R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+    R.deluxemap = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 3));
   }
 
   for (let k = 0; k < 3; k++) {
@@ -2380,7 +2597,7 @@ R.AllocBlock = function(surf) {
 R.BuildLightmaps = function() {
   R.allocated = (new Array(LIGHTMAP_BLOCK_SIZE)).fill(0);
 
-  R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 4));
+  R.lightmaps_rgb = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_HEIGHT * 3));
   R.dlightmaps_rgba = new Uint8Array(new ArrayBuffer(LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4));
 
   const brushRenderer = modelRendererRegistry.getRenderer(Mod.type.brush);
@@ -2415,11 +2632,18 @@ R.BuildLightmaps = function() {
     }
   }
 
-  GL.Bind(0, R.lightmap_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb);
+  const layerBytes = LIGHTMAP_BLOCK_SIZE * LIGHTMAP_BLOCK_SIZE * 4;
+  GL.BindArray(0, R.lightmap_texture);
+  for (let k = 0; k < 3; k++) {
+    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 1, gl.RGBA, gl.UNSIGNED_BYTE, R.lightmaps_rgb.subarray(k * layerBytes, (k + 1) * layerBytes));
+  }
 
-  GL.Bind(0, R.deluxemap_texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap);
+  GL.BindArray(0, R.deluxemap_texture);
+  if (R.deluxemap) {
+    for (let k = 0; k < 3; k++) {
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, LIGHTMAP_BLOCK_SIZE, LIGHTMAP_BLOCK_SIZE, 1, gl.RGBA, gl.UNSIGNED_BYTE, R.deluxemap.subarray(k * layerBytes, (k + 1) * layerBytes));
+    }
+  }
 };
 
 // warp

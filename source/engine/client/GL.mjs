@@ -5,6 +5,21 @@ import { WadLumpTexture } from '../common/W.mjs';
 import { eventBus, registry } from '../registry.mjs';
 import VID from './VID.mjs';
 
+/** @type {Record<string, string>|null} */
+let shaderSources = /** @type {Record<string, string>|null} */ (null);
+
+try {
+  // Vite rewrites this at build time; raw Node.js leaves it undefined and falls back.
+  // @ts-ignore Vite-specific import.meta.glob
+  shaderSources = import.meta.glob('./shaders/*.{vert,frag}', {
+    eager: true,
+    import: 'default',
+    query: '?raw',
+  });
+} catch {
+  shaderSources = null;
+}
+
 class GL {
   /** @type {object[]} */
   static programs = [];
@@ -17,6 +32,9 @@ class GL {
 
   /** @type {Cvar|null} */
   static picmip = null;
+
+  /** @type {Cvar|null} */
+  static clear = null;
 
   /** @type {ArrayBuffer|null} */
   static streamArray = null;
@@ -88,6 +106,36 @@ class GL {
     gl.bindTexture(gl.TEXTURE_3D, texnum);
   }
 
+  /**
+   * Binds a 2D array texture. Invalidates the 2D texture cache for this unit.
+   * @param {number} target texture unit (0-31)
+   * @param {WebGLTexture} texnum texture handle
+   */
+  static BindArray(target, texnum) {
+    if (currentTextureTarget !== target) {
+      currentTextureTarget = target;
+      gl.activeTexture(gl.TEXTURE0 + target);
+    }
+
+    currentTextureTargets[target] = null;
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, texnum);
+  }
+
+  /**
+   * Binds a cube map texture. Invalidates the 2D texture cache for this unit.
+   * @param {number} target texture unit (0-31)
+   * @param {WebGLTexture} texnum texture handle
+   */
+  static BindCube(target, texnum) {
+    if (currentTextureTarget !== target) {
+      currentTextureTarget = target;
+      gl.activeTexture(gl.TEXTURE0 + target);
+    }
+
+    currentTextureTargets[target] = null;
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texnum);
+  }
+
   static Set2D() {
     gl.viewport(0, 0, Math.floor(VID.width * VID.pixelRatio), Math.floor(VID.height * VID.pixelRatio));
     GL.UnbindProgram();
@@ -111,9 +159,9 @@ class GL {
    * @param {string[]} uniforms uniform names
    * @param {Array} attribs attribute parameters
    * @param {string[]} textures texture names
-   * @returns {Promise<object>} the program object
+   * @returns {object} the program object
    */
-  static async CreateProgram(identifier, uniforms, attribs, textures) {
+  static CreateProgram(identifier, uniforms, attribs, textures) {
     const p = gl.createProgram();
     const program = {
       identifier: identifier,
@@ -121,8 +169,19 @@ class GL {
       attribs: [],
     };
 
+    if (shaderSources === null) {
+      throw new Error('Shader sources are unavailable in this runtime');
+    }
+
+    const vertexShaderPath = `./shaders/${identifier}.vert`;
+    const fragmentShaderPath = `./shaders/${identifier}.frag`;
+    const vsource = shaderSources[vertexShaderPath];
+    const fsource = shaderSources[fragmentShaderPath];
+
+    console.assert(vsource !== undefined, `Vertex shader source not found for program ${identifier}`);
+    console.assert(fsource !== undefined, `Fragment shader source not found for program ${identifier}`);
+
     const vsh = gl.createShader(gl.VERTEX_SHADER);
-    const vsource = await COM.LoadTextFile(`shaders/${identifier}.vert`);
     gl.shaderSource(vsh, vsource);
     gl.compileShader(vsh);
     if (gl.getShaderParameter(vsh, gl.COMPILE_STATUS) !== true) {
@@ -130,7 +189,6 @@ class GL {
     }
 
     const fsh = gl.createShader(gl.FRAGMENT_SHADER);
-    const fsource = await COM.LoadTextFile(`shaders/${identifier}.frag`);
     gl.shaderSource(fsh, fsource);
     gl.compileShader(fsh);
     if (gl.getShaderParameter(fsh, gl.COMPILE_STATUS) !== true) {
@@ -280,8 +338,6 @@ class GL {
 
       const errorName = errorNames[error] || `Unknown error (${error})`;
       const message = `WebGL Error: ${errorName} during ${operation}`;
-
-      debugger;
 
       throw new GLError(message, error, errorName, operation);
     }
@@ -486,6 +542,8 @@ export const ATTRIB_LOCATIONS = {
   aColor: 5,
   aPositionA: 6,
   aPositionB: 7,
+  aNormalA: 8,
+  aNormalB: 9,
 };
 
 /** @type {number} Standard brush vertex stride (20 floats = 80 bytes) */
@@ -698,6 +756,7 @@ export class GLTexture {
 
   /**
    * Will lock the texture mode to the specified name.
+   * Changes to gl_texturemode will no longer change this texture’s mode.
    * @param {string} name texture mode name
    * @returns {GLTexture} this
    */
@@ -954,6 +1013,14 @@ class GLError extends Error {
   }
 }
 
+function initClear() {
+  if (GL.clear.value) {
+    gl.clearColor(1.0, 0.0, 1.0, 1.0); // CR: magenta clear color to easily identify unrendered areas
+  } else {
+    gl.clearColor(0.0, 0.0, 0.0, 0.0); // CR: transparent black clear color
+  }
+}
+
 /**
  * Initializes the WebGL context and sets up the default state.
  */
@@ -973,7 +1040,6 @@ function GL_Init() {
 
   GL.maxtexturesize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
-  gl.clearColor(0.0, 0.0, 0.0, 0.0);
   gl.cullFace(gl.FRONT);
   gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
 
@@ -987,8 +1053,12 @@ function GL_Init() {
   currentTextureMode = 'GL_LINEAR_MIPMAP_LINEAR';
 
   GL.picmip = new Cvar('gl_picmip', '0');
+  GL.clear = new Cvar('gl_clear', '0', Cvar.FLAG.ARCHIVE, '1 = clear with magenta color, 0 = clear transparent black');
   Cmd.AddCommand('gl_texturemode', TextureModeCommand);
   Cmd.AddCommand('gl_texturelist', TextureListCommand);
+
+  initClear();
+  eventBus.subscribe('cvar.changed.gl_clear', () => initClear());
 
   GL.streamArray = new ArrayBuffer(8192);
   GL.streamArrayBytes = new Uint8Array(GL.streamArray);

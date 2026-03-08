@@ -79,6 +79,8 @@ export const flags = Object.freeze({
   FL_WATERJUMP: 2048,
   /** for jump debouncing */
   FL_JUMPRELEASED: 4096,
+  /** entity can be used (interacted with) */
+  FL_USEABLE: 8192,
 });
 
 /**
@@ -128,6 +130,10 @@ export const effect = Object.freeze({
   /** makes sure the model is never completely dark */
   EF_MINLIGHT: 32,
 
+  /** make sure the model never casts a shadow */
+  EF_NOSHADOW: 64,
+
+  /** simply not being rendered */
   EF_NODRAW: 128,
 });
 

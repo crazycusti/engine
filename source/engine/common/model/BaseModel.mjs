@@ -22,6 +22,9 @@ export class Plane { // TODO: move to shared
 export class Face {
   submodel = false;
   plane = /** @type {Plane} */(null); // will be linked during loading
+
+  /** @type {boolean} True when the face uses the back side of its BSP plane. */
+  planeBack = false;
   firstedge = 0;
   numedges = 0;
   texinfo = 0;
@@ -38,7 +41,7 @@ export class Face {
   turbulent = false;
   sky = false;
 
-  /** calculated normal with correct direction */
+  /** @type {Vector} Face normal oriented to the BSP face side. */
   normal = new Vector();
 
   dlightbits = 0;

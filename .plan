@@ -156,6 +156,15 @@ Grouped by sections and then sorted by priority (more or less).
 
 ## Log
 
+### 2026-03-08
+
+- played around with dynamic shadows
+  - coming from dynamic lights
+  - entities having a drop shadow below them
+- fixed dlight lighting up faces being out of reach
+- discovered the `side` on `dface_t` being unused by the original engine but actually being useful to fix normals
+- moved shaders back into the code
+
 ### 2026-03-01
 
 - compiling dedicated server using vite

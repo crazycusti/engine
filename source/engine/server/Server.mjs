@@ -189,6 +189,9 @@ export default class SV {
     /** gamestate across maps */
     gamestate: null,
 
+    /** @type {string[]} list of maps */
+    maplist: [],
+
     *spawnedClients() {
       for (const client of this.clients) {
         if (client.state === ServerClient.STATE.SPAWNED) {
@@ -210,23 +213,25 @@ export default class SV {
   static pmove = null;
 
   // Cvars (initialized in Init())
-  static maxvelocity = null;
-  static edgefriction = null;
-  static stopspeed = null;
-  static accelerate = null;
-  static idealpitchscale = null;
-  static aim = null;
-  static nostep = null;
-  static cheats = null;
-  static gravity = null;
-  static friction = null;
-  static maxspeed = null;
-  static airaccelerate = null;
-  static wateraccelerate = null;
-  static spectatormaxspeed = null;
-  static waterfriction = null;
-  static rcon_password = null;
-  static public = null;
+  static maxvelocity = /** @type {Cvar} */ (null);
+  static edgefriction = /** @type {Cvar} */ (null);
+  static stopspeed = /** @type {Cvar} */ (null);
+  static accelerate = /** @type {Cvar} */ (null);
+  static idealpitchscale = /** @type {Cvar} */ (null);
+  static aim = /** @type {Cvar} */ (null);
+  static nostep = /** @type {Cvar} */ (null);
+  static cheats = /** @type {Cvar} */ (null);
+  static gravity = /** @type {Cvar} */ (null);
+  static friction = /** @type {Cvar} */ (null);
+  static maxspeed = /** @type {Cvar} */ (null);
+  static airaccelerate = /** @type {Cvar} */ (null);
+  static wateraccelerate = /** @type {Cvar} */ (null);
+  static spectatormaxspeed = /** @type {Cvar} */ (null);
+  static waterfriction = /** @type {Cvar} */ (null);
+  static rcon_password = /** @type {Cvar} */ (null);
+  static maplist = /** @type {Cvar} */ (null);
+  static nextmap = /** @type {Cvar} */ (null);
+  static public = /** @type {Cvar} */ (null);
 
   /** Scheduled game commands */
   static _scheduledGameCommands = [];
@@ -239,10 +244,10 @@ export default class SV {
   }
 
   static Init() {
-    SV.maxvelocity = new Cvar('sv_maxvelocity', '2000');
-    SV.edgefriction = new Cvar('edgefriction', '2');
-    SV.stopspeed = new Cvar('sv_stopspeed', '100');
-    SV.accelerate = new Cvar('sv_accelerate', '10');
+    SV.maxvelocity = new Cvar('sv_maxvelocity', '2000', Cvar.FLAG.SERVER);
+    SV.edgefriction = new Cvar('edgefriction', '2', Cvar.FLAG.SERVER);
+    SV.stopspeed = new Cvar('sv_stopspeed', '100', Cvar.FLAG.SERVER);
+    SV.accelerate = new Cvar('sv_accelerate', '10', Cvar.FLAG.SERVER);
     SV.idealpitchscale = new Cvar('sv_idealpitchscale', '0.8');
     SV.aim = new Cvar('sv_aim', '0.93');
     SV.nostep = new Cvar('sv_nostep', '0');
@@ -250,10 +255,10 @@ export default class SV {
     SV.gravity = new Cvar('sv_gravity', '800', Cvar.FLAG.SERVER);
     SV.friction = new Cvar('sv_friction', '4', Cvar.FLAG.SERVER);
     SV.maxspeed = new Cvar('sv_maxspeed', '320', Cvar.FLAG.SERVER);
-    SV.airaccelerate = new Cvar('sv_airaccelerate', '0.7');
-    SV.wateraccelerate = new Cvar('sv_wateraccelerate', '10');
-    SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500');
-    SV.waterfriction = new Cvar('sv_waterfriction', '4');
+    SV.airaccelerate = new Cvar('sv_airaccelerate', '0.7', Cvar.FLAG.SERVER);
+    SV.wateraccelerate = new Cvar('sv_wateraccelerate', '10', Cvar.FLAG.SERVER);
+    SV.spectatormaxspeed = new Cvar('sv_spectatormaxspeed', '500', Cvar.FLAG.SERVER);
+    SV.waterfriction = new Cvar('sv_waterfriction', '4', Cvar.FLAG.SERVER);
     SV.rcon_password = new Cvar('sv_rcon_password', '', Cvar.FLAG.ARCHIVE);
     SV.public = new Cvar('sv_public', '1', Cvar.FLAG.ARCHIVE | Cvar.FLAG.SERVER, 'Make this server publicly listed in the master server');
 
@@ -278,6 +283,8 @@ export default class SV {
       }
     });
 
+    SV.InitNextmapStuff();
+
     // TODO: we need to observe changes to those pmove vars and resend them to all clients when changed
 
     SV.InitPmove();
@@ -289,6 +296,44 @@ export default class SV {
   // GAME COMMANDS & SCHEDULING
   // Schedule and run commands from the game logic
   // =============================================================================
+
+  /**
+   * Provides functionality for cycling through maps after each map change, based on sv_maplist and sv_nextmap cvars.
+   * The server game code doesn’t really have a state and this helps the game code with managing map cycling.
+   */
+  static InitNextmapStuff() {
+    SV.maplist = new Cvar('sv_maplist', '', Cvar.FLAG.NONE, 'Comma-separated list of maps to cycle through after each map change');
+    SV.nextmap = new Cvar('sv_nextmap', '', Cvar.FLAG.SERVER, 'Next map to change to after the current one, will be autopopulated with the next map in sv_maplist after each map change');
+
+    eventBus.subscribe('cvar.changed.sv_maplist', () => {
+      if (SV.maplist.string.trim() === '') {
+        SV.svs.maplist.length = 0;
+        return;
+      }
+
+      SV.svs.maplist = SV.maplist.string.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    });
+
+    eventBus.subscribe('server.spawning', ({ mapname }) => {
+      if (SV.svs.maplist.length === 0) {
+        return;
+      }
+
+      if (!SV.svs.maplist.includes(mapname)) {
+        SV.nextmap.set(SV.svs.maplist[0]);
+        return;
+      }
+
+      const currentIndex = SV.svs.maplist.indexOf(mapname);
+      const nextIndex = (currentIndex + 1) % SV.svs.maplist.length;
+
+      SV.nextmap.set(SV.svs.maplist[nextIndex]);
+    });
+
+    eventBus.subscribe('server.shutdown', () => {
+      SV.nextmap.reset();
+    });
+  }
 
   static RunScheduledGameCommands() {
     while (SV._scheduledGameCommands.length > 0) {

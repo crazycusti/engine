@@ -1,10 +1,10 @@
+import { PmoveConfiguration } from '../../shared/Pmove.mjs';
 import Vector from '../../shared/Vector.mjs';
 import Key from '../client/Key.mjs';
 import { SFX } from '../client/Sound.mjs';
 import VID from '../client/VID.mjs';
 import * as Protocol from '../network/Protocol.mjs';
-import { eventBus, registry } from '../registry.mjs';
-import { ServerClient } from '../server/Client.mjs';
+import { EventBus, eventBus, registry } from '../registry.mjs';
 import { ED, ServerEdict } from '../server/Edict.mjs';
 import Cmd from './Cmd.mjs';
 import Cvar from './Cvar.mjs';
@@ -599,10 +599,24 @@ export class ServerEngineAPI extends CommonEngineAPI {
     return SV.server.worldmodel.getLeafForPoint(origin).area;
   }
 
+  /**
+   * Sets the player movement configuration. This is used by the PMove code to determine how the player should move.
+   * @param {PmoveConfiguration} config pmove profile
+   */
+  static SetPmoveConfiguration(config) {
+    console.assert(config instanceof PmoveConfiguration, 'config must be an instance of PmoveConfiguration');
+
+    SV.pmove.configuration = config;
+  }
+
   static get maxplayers() {
     return SV.svs.maxclients;
   }
 
+  /**
+   * Server game event bus, will be reset on every map load.
+   * @returns {EventBus} event bus
+   */
   static get eventBus() {
     return SV.server.eventBus;
   }
@@ -860,6 +874,16 @@ export class ClientEngineAPI extends CommonEngineAPI {
     V.ContentShift(slot + 4, color, alpha);
   }
 
+  /**
+   * Sets the player movement configuration. This is used by the PMove code to determine how the player will move.
+   * @param {PmoveConfiguration} config pmove profile
+   */
+  static SetPmoveConfiguration(config) {
+    console.assert(config instanceof PmoveConfiguration, 'config must be an instance of PmoveConfiguration');
+
+    CL.pmove.configuration = config;
+  }
+
   static M = null;
 
   static CL = {
@@ -874,6 +898,9 @@ export class ClientEngineAPI extends CommonEngineAPI {
     },
     get levelname() {
       return CL.state.levelname;
+    },
+    get entityNum() {
+      return CL.state.viewent.num;
     },
     /**
      * local time, not game time! If you are looking for SV.server.time, check gametime

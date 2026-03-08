@@ -15,6 +15,7 @@ import * as Protocol from '../network/Protocol.mjs';
 import { content, solid } from '../../shared/Defs.mjs';
 import { BrushModel } from './Mod.mjs';
 import Cvar from './Cvar.mjs';
+import { PmoveConfiguration } from '../../shared/Pmove.mjs';
 
 /** @typedef {import('../../shared/Vector.mjs').DirectionalVectors} DirectionalVectors */
 
@@ -113,61 +114,6 @@ export class MoveVars { // movevars_t
     /** @type {number} edge friction multiplier */
     this.edgefriction = 2;
   }
-};
-
-/**
- * Pmove constant defaults.
- *
- * These will give player movement that feels more like Q1 (from QuakeWorld).
- */
-export class PmoveConfiguration {
-  /** @type {number} distance to probe forward for water jump wall detection */
-  forwardProbe = 24;
-  /** @type {number} Z offset for wall check in water jump detection */
-  wallcheckZ = 8;
-  /** @type {number} Z offset for empty space check above wall in water jump */
-  emptycheckZ = 24;
-  /** @type {number} upward velocity when exiting water via water jump */
-  waterExitVelocity = 310;
-  /** @type {number} multiplier applied to wish speed when swimming */
-  waterspeedMultiplier = 0.7;
-  /** @type {number} overbounce factor for velocity clipping (1.0 = QW, 1.01 = Q2) */
-  overbounce = 1.0;
-  /** @type {number} distance below feet for ground detection trace */
-  groundCheckDepth = 1.0;
-  /** @type {number} pitch divisor for ground angle vectors (0 = no scaling, 3 = Q2-style) */
-  pitchDivisor = 0;
-  /** @type {boolean} clamp jump velocity to a minimum of 270 */
-  jumpMinClamp = false;
-  /** @type {boolean} apply landing cooldown (PMF_TIME_LAND) preventing immediate re-jump */
-  landingCooldown = false;
-  /** @type {boolean} prevent swimming jump when sinking faster than -300 */
-  swimJumpGuard = false;
-  /** @type {boolean} fall back to regular accelerate when airaccelerate is 0 */
-  airAccelFallback = false;
-  /** @type {boolean} apply edge friction when near dropoffs */
-  edgeFriction = true;
-};
-
-/**
- * Quake 2 defaults.
- *
- * This will give player movement that original Quake 2 feeling.
- */
-export class PmoveQuake2Configuration extends PmoveConfiguration {
-  forwardProbe = 30;
-  wallcheckZ = 4;
-  emptycheckZ = 16;
-  waterExitVelocity = 350;
-  waterspeedMultiplier = 0.5;
-  overbounce = 1.01;
-  groundCheckDepth = 0.25;
-  pitchDivisor = 3;
-  jumpMinClamp = true;
-  landingCooldown = true;
-  swimJumpGuard = true;
-  airAccelFallback = true;
-  edgeFriction = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -874,9 +820,9 @@ export class BrushTrace {
   }
 
   /** @type {Vector[]} */
-  static _midPool = Array.from({ length: 64 }, () => new Vector());
+  static _midPool = Array.from({ length: 96 }, () => new Vector());
   /** @type {Vector[]} */
-  static _mid2Pool = Array.from({ length: 64 }, () => new Vector());
+  static _mid2Pool = Array.from({ length: 96 }, () => new Vector());
 
   /**
    * Recursively traverse the BSP node tree, expanding by trace extents.
@@ -951,10 +897,13 @@ export class BrushTrace {
       frac2 = 0;
     }
 
-    if (depth >= BrushTrace._midPool.length) {
+    while (depth >= BrushTrace._midPool.length) {
       BrushTrace._midPool.push(new Vector());
       BrushTrace._mid2Pool.push(new Vector());
     }
+
+    console.assert(depth === 128, 'hull check went quite deep');
+    console.assert(depth < 256, 'hull check went really deep');
 
     // Move up to the node
     const midf = p1f + (p2f - p1f) * frac;

@@ -1,5 +1,5 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 
 uniform vec3 uOrigin;
 uniform mat3 uAngles;
@@ -12,11 +12,17 @@ uniform vec3 uDynamicLightVec;
 uniform bool uPerformDotLighting;
 uniform bool uHaveDeluxemap;
 
+// Shadow mapping
+uniform mat4 uLightSpaceMatrix0;
+uniform mat4 uLightSpaceMatrix1;
+uniform mat4 uLightSpaceMatrix2;
+
 in vec3 aPosition;
 in vec3 aNormal;
 in vec4 aTexCoord;
 in vec4 aLightStyle;
 in vec3 aTangent;
+in vec3 aBitangent;
 
 out vec4 vTexCoord;
 out vec4 vLightStyle;
@@ -27,18 +33,30 @@ out vec3 vNormal;
 out vec3 vLightVec;
 out float vLightMix;
 out vec3 vTangent;
+out vec3 vBitangent;
 out mat3 vAngles;
 
 out vec3 vViewVec;
+out vec4 vShadowCoord0;
+out vec4 vShadowCoord1;
+out vec4 vShadowCoord2;
+out vec3 vWorldPos;
 uniform vec4 uFogParams; // start, end, density, mode
 
 void main(void) {
   // Calculate world position once and reuse
   vec3 worldPos = uAngles * aPosition + uOrigin;
+  vWorldPos = worldPos;
 
   // Calculate view position and set gl_Position
   vec3 position = uViewAngles * (worldPos - uViewOrigin);
   gl_Position = uPerspective * vec4(position.xz, -position.y, 1.0);
+
+  // Shadow coordinates in light space
+  vec4 shadowWorldPos = vec4(worldPos, 1.0);
+  vShadowCoord0 = uLightSpaceMatrix0 * shadowWorldPos;
+  vShadowCoord1 = uLightSpaceMatrix1 * shadowWorldPos;
+  vShadowCoord2 = uLightSpaceMatrix2 * shadowWorldPos;
 
   // Pass through texture coordinates
   vTexCoord = aTexCoord;
@@ -46,7 +64,7 @@ void main(void) {
 
   // Calculate view-related vectors once (shared for both paths)
   vec3 worldToView = worldPos - uViewOrigin;
-  vViewVec = normalize(worldToView);
+  vViewVec = normalize(-worldToView);
 
   // Calculate distance once for both lighting and fog
   float distToView = length(worldToView);
@@ -59,6 +77,7 @@ void main(void) {
   vec3 transformedNormal = uAngles * aNormal;
   vNormal = normalize(transformedNormal);
   vTangent = normalize(uAngles * aTangent);
+  vBitangent = normalize(uAngles * aBitangent);
   vAngles = uAngles;
 
   // Compute both lighting paths, select based on uniform

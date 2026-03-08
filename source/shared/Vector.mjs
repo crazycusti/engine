@@ -318,7 +318,7 @@ export default class Vector extends Float32Array {
   }
 
   toPitch() {
-    let pitch = (Math.atan2(this[2], Math.sqrt(this[0] * this[0] + this[1] * this[1])) * 180.0 / Math.PI);
+    let pitch = (Math.atan2(this[2], Math.hypot(this[0], this[1])) * 180.0 / Math.PI);
 
     if (pitch < 0.0) {
       pitch += 360.0;
@@ -566,11 +566,7 @@ export default class Vector extends Float32Array {
    * @returns {number} the length of this vector
    */
   len() {
-    return Math.sqrt(
-      this[0] * this[0] +
-      this[1] * this[1] +
-      this[2] * this[2],
-    );
+    return Math.hypot(this[0], this[1], this[2]);
   }
 
   /**
@@ -598,7 +594,7 @@ export default class Vector extends Float32Array {
     const x = this[0] - other[0];
     const y = this[1] - other[1];
     const z = this[2] - other[2];
-    return Math.sqrt(x * x + y * y + z * z);
+    return Math.hypot(x, y, z);
   }
 
   /**

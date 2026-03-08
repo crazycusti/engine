@@ -3,6 +3,7 @@ import { ModelRenderer } from './ModelRenderer.mjs';
 import { eventBus, registry } from '../../registry.mjs';
 import GL from '../GL.mjs';
 import W from '../../common/W.mjs';
+import { effect } from '../../../shared/Defs.mjs';
 
 let { CL, Host, R, Con } = registry;
 let gl = /** @type {WebGL2RenderingContext} */ (null);
@@ -40,6 +41,24 @@ export class AliasModelRenderer extends ModelRenderer {
   setupRenderState(_pass = 0) {
     // Alias models setup their own state per-entity (different shaders for players)
     // No shared setup needed at this level
+  }
+
+  /**
+   * @param {import('../../common/model/AliasModel.mjs').AliasModel} _model The alias model
+   * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when this alias model should render in the opaque pass
+   */
+  rendersOpaquePass(_model, entity) {
+    return entity.alpha >= 1.0;
+  }
+
+  /**
+   * @param {import('../../common/model/AliasModel.mjs').AliasModel} _model The alias model
+   * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when this alias model should render in the sorted transparent pass
+   */
+  rendersTransparentPass(_model, entity) {
+    return entity.alpha > 0.0 && entity.alpha < 1.0;
   }
 
   /**
@@ -108,10 +127,10 @@ export class AliasModelRenderer extends ModelRenderer {
     R.c_alias_polys += clmodel._num_tris;
 
     // Select animation frames
-    const { frameA, frameB, targettime } = this._selectFrames(clmodel, e);
+    const { frameA, frameB, targettime } = AliasModelRenderer._selectFrames(clmodel, e);
 
     // Setup interpolation
-    gl.uniform1f(program.uInterpolation, R.interpolation.value ? Math.min(1, Math.max(0, targettime)) : 0);
+    gl.uniform1f(program.uInterpolation, R.interpolation.value && (e.effects & effect.EF_MUZZLEFLASH) === 0 ? Math.min(1, Math.max(0, targettime)) : 0);
     gl.uniform1f(program.uTime, Host.realtime);
     gl.uniform1f(program.uAlpha, e.alpha);
 
@@ -129,6 +148,22 @@ export class AliasModelRenderer extends ModelRenderer {
       skin.playertexture.bind(program.tPlayer);
     }
 
+    // Bind local shadow maps
+    if (program.tShadowMap0 !== undefined && R.shadow_textures?.[0]) {
+      GL.Bind(program.tShadowMap0, R.shadow_textures[0]);
+    }
+    if (program.tShadowMap1 !== undefined && R.shadow_textures?.[1]) {
+      GL.Bind(program.tShadowMap1, R.shadow_textures[1]);
+    }
+    if (program.tShadowMap2 !== undefined && R.shadow_textures?.[2]) {
+      GL.Bind(program.tShadowMap2, R.shadow_textures[2]);
+    }
+
+    // Bind point light cube shadow map
+    if (program.tPointShadowMap !== undefined && R.point_shadow_texture) {
+      GL.BindCube(program.tPointShadowMap, R.point_shadow_texture);
+    }
+
     if (pass === 2) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -144,12 +179,11 @@ export class AliasModelRenderer extends ModelRenderer {
 
   /**
    * Select animation frames for rendering with interpolation
-   * @private
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} clmodel The alias model
    * @param {import('../ClientEntities.mjs').ClientEdict} e The entity
    * @returns {{frameA: object, frameB: object, targettime: number}} Selected frames and interpolation factor
    */
-  _selectFrames(clmodel, e) {
+  static _selectFrames(clmodel, e) {
     const time = CL.state.time + e.syncbase;
     let num = e.frame;
 
@@ -179,7 +213,7 @@ export class AliasModelRenderer extends ModelRenderer {
           break;
         }
       }
-    } else if (R.interpolation.value) {
+    } else if (R.interpolation.value && (e.effects & effect.EF_MUZZLEFLASH) === 0) {
       // Handle lerp-based interpolation
       const [previousFrame, nextFrame, f] = e.lerp.frame;
       frameA = clmodel.frames[previousFrame];

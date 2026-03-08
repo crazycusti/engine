@@ -625,7 +625,7 @@ export class BSP29Loader extends ModelLoader {
 
     /**
      * Recursively classify nodes against portal planes
-     * @param {import('../BSP.mjs').Node} node
+     * @param {import('../BSP.mjs').Node} node Current BSP node being classified.
      * @param {number[]} states - Array of 0 (Back), 1 (Front), or -1 (Unknown)
      */
     const classifyRecursive = (node, states) => {
@@ -1607,7 +1607,7 @@ export class BSP29Loader extends ModelLoader {
   }
 
   /**
-   * Load faces (surfaces) from BSP lump and calculate face normals
+   * Load faces (surfaces) from BSP lump and derive oriented face normals
    * @protected
    * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer
@@ -1632,6 +1632,7 @@ export class BSP29Loader extends ModelLoader {
       const styles = new Uint8Array(buf, fileofs + 12, 4);
       const out = Object.assign(new Face(), {
         plane: loadmodel.planes[view.getUint16(fileofs, true)],
+        planeBack: view.getInt16(fileofs + 2, true) !== 0,
         firstedge: view.getInt32(fileofs + 4, true),
         numedges: view.getUint16(fileofs + 8, true),
         texinfo: view.getUint16(fileofs + 10, true),
@@ -1650,7 +1651,6 @@ export class BSP29Loader extends ModelLoader {
       const maxs = [-Infinity, -Infinity];
       const tex = loadmodel.texinfo[out.texinfo];
       out.texture = tex.texture;
-      const verts = [];
 
       for (let j = 0; j < out.numedges; j++) {
         const e = loadmodel.surfedges[out.firstedge + j];
@@ -1676,11 +1676,6 @@ export class BSP29Loader extends ModelLoader {
         if (val1 > maxs[1]) {
           maxs[1] = val1;
         }
-
-        if (j >= 3) {
-          verts.push(verts[0], verts[verts.length - 2]);
-        }
-        verts.push(v);
       }
 
       const lmscale = 1 << out.lmshift;
@@ -1693,15 +1688,10 @@ export class BSP29Loader extends ModelLoader {
         out.sky = true;
       }
 
-      // Calculate face normal using Newell's method
-      for (let j = 0; j < verts.length; j++) {
-        const vCurrent = verts[j];
-        const vNext = verts[(j + 1) % verts.length];
-        out.normal[0] += (vCurrent[1] - vNext[1]) * (vCurrent[2] + vNext[2]);
-        out.normal[1] += (vCurrent[2] - vNext[2]) * (vCurrent[0] + vNext[0]);
-        out.normal[2] += (vCurrent[0] - vNext[0]) * (vCurrent[1] + vNext[1]);
+      out.normal.set(out.plane.normal);
+      if (out.planeBack) {
+        out.normal.multiply(-1.0);
       }
-      out.normal.normalize();
 
       loadmodel.faces[i] = out;
       fileofs += 20;

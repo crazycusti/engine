@@ -69,6 +69,7 @@ export class BSP2Loader extends BSP29Loader {
       const styles = new Uint8Array(buf, fileofs + 20, 4);
       const out = Object.assign(new Face(), {
         plane: loadmodel.planes[view.getUint32(fileofs, true)], // int planenum (offset 0)
+        planeBack: view.getInt32(fileofs + 4, true) !== 0, // int side (offset 4)
         firstedge: view.getUint32(fileofs + 8, true), // int firstedge (offset 8)
         numedges: view.getUint32(fileofs + 12, true), // int numedges (offset 12)
         texinfo: view.getUint32(fileofs + 16, true), // int texinfo (offset 16)
@@ -86,7 +87,6 @@ export class BSP2Loader extends BSP29Loader {
       const maxs = [-Infinity, -Infinity];
       const tex = loadmodel.texinfo[out.texinfo];
       out.texture = tex.texture;
-      const verts = [];
 
       for (let j = 0; j < out.numedges; j++) {
         const e = loadmodel.surfedges[out.firstedge + j];
@@ -112,11 +112,6 @@ export class BSP2Loader extends BSP29Loader {
         if (val1 > maxs[1]) {
           maxs[1] = val1;
         }
-
-        if (j >= 3) {
-          verts.push(verts[0], verts[verts.length - 2]);
-        }
-        verts.push(v);
       }
 
       const lmscale = 1 << out.lmshift;
@@ -129,15 +124,10 @@ export class BSP2Loader extends BSP29Loader {
         out.sky = true;
       }
 
-      // Calculate face normal using Newell's method
-      for (let j = 0; j < verts.length; j++) {
-        const vCurrent = verts[j];
-        const vNext = verts[(j + 1) % verts.length];
-        out.normal[0] += (vCurrent[1] - vNext[1]) * (vCurrent[2] + vNext[2]);
-        out.normal[1] += (vCurrent[2] - vNext[2]) * (vCurrent[0] + vNext[0]);
-        out.normal[2] += (vCurrent[0] - vNext[0]) * (vCurrent[1] + vNext[1]);
+      out.normal.set(out.plane.normal);
+      if (out.planeBack) {
+        out.normal.multiply(-1.0);
       }
-      out.normal.normalize();
 
       loadmodel.faces[i] = out;
       fileofs += 28;
