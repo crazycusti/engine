@@ -124,18 +124,6 @@ R.RenderDlights = function() {
 };
 
 /**
- * @param {import('../common/model/BaseModel.mjs').Face} surf Surface to orient.
- * @returns {Vector} Face normal oriented to the BSP face side.
- */
-R.GetDynamicLightSurfaceNormal = function(surf) {
-  if (surf.planeBack) {
-    return surf.plane.normal.copy().multiply(-1.0);
-  }
-
-  return surf.plane.normal.copy();
-};
-
-/**
  * @param {import('../common/model/BaseModel.mjs').Face} surf Surface to sample.
  * @returns {Vector} A known point on the surface plane.
  */
@@ -155,7 +143,7 @@ R.GetDynamicLightSurfacePoint = function(surf) {
  * @returns {{distanceToPlane: number, impact: Vector}|null} Surface-plane hit information when the light is in front of the face.
  */
 R.GetDynamicLightSurfaceImpact = function(light, surf) {
-  const faceNormal = R.GetDynamicLightSurfaceNormal(surf);
+  const faceNormal = surf.normal.copy();
   const surfacePoint = R.GetDynamicLightSurfacePoint(surf);
   const distanceToPlane = light.origin.copy().subtract(surfacePoint).dot(faceNormal);
 
@@ -175,7 +163,6 @@ R.GetDynamicLightSurfaceImpact = function(light, surf) {
  * @returns {boolean} True when the light has line of sight to the surface.
  */
 R.IsDynamicLightSurfaceVisible = function(light, surf, impact) {
-  const faceNormal = R.GetDynamicLightSurfaceNormal(surf);
   const trace = {
     fraction: 1.0,
     allsolid: true,
@@ -187,7 +174,7 @@ R.IsDynamicLightSurfaceVisible = function(light, surf, impact) {
     },
     ent: null,
   };
-  const end = impact.copy().add(faceNormal.copy().multiply(1.0));
+  const end = impact.copy().add(surf.normal.copy().multiply(1.0));
 
   SV.collision.recursiveHullCheck(CL.state.worldmodel.hulls[0], 0, 0.0, 1.0, light.origin, end, trace);
 
@@ -383,7 +370,7 @@ R.RecursiveLightPoint = function(node, start, end) {
 
     return [
       r3,
-      mid.add(surf.plane.normal.copy().multiply(16.0)),
+      mid.add(surf.normal.copy().multiply(16.0)),
     ];
   }
 
