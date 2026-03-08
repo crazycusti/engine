@@ -1607,7 +1607,7 @@ export class BSP29Loader extends ModelLoader {
   }
 
   /**
-   * Load faces (surfaces) from BSP lump and calculate face normals
+   * Load faces (surfaces) from BSP lump and derive oriented face normals
    * @protected
    * @param {BrushModel} loadmodel - The model being loaded
    * @param {ArrayBuffer} buf - The BSP file buffer

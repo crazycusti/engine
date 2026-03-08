@@ -60,6 +60,45 @@ export class BrushModelRenderer extends ModelRenderer {
   }
 
   /**
+   * @param {BrushModel} _model The brush model
+   * @param {ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when the brush model should contribute to the opaque pass
+   */
+  rendersOpaquePass(_model, entity) {
+    return entity.alpha >= 1.0;
+  }
+
+  /**
+   * @param {BrushModel} model The brush model
+   * @param {ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when the brush model has transparent content for the sorted pass
+   */
+  rendersTransparentPass(model, entity) {
+    if (entity.alpha <= 0.0) {
+      return false;
+    }
+
+    if (entity.alpha < 1.0) {
+      return true;
+    }
+
+    if (!model.chains || model.chains.length === 0) {
+      return false;
+    }
+
+    for (let i = 0; i < model.chains.length; i++) {
+      const chain = model.chains[i];
+      const material = model.textures[chain[0]];
+
+      if ((material.flags & materialFlags.MF_TRANSPARENT) !== 0) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Render a single brush model entity.
    * Handles frustum culling, transforms, lighting, and both opaque and turbulent surfaces.
    * @param {BrushModel} model The brush model to render
@@ -269,13 +308,7 @@ export class BrushModelRenderer extends ModelRenderer {
       if (!hasTransparent) {
         continue;
       }
-      const cx = (leaf.mins[0] + leaf.maxs[0]) * 0.5;
-      const cy = (leaf.mins[1] + leaf.maxs[1]) * 0.5;
-      const cz = (leaf.mins[2] + leaf.maxs[2]) * 0.5;
-      const dx = cx - vieworg[0];
-      const dy = cy - vieworg[1];
-      const dz = cz - vieworg[2];
-      const dist = Math.hypot(dx, dy, dz);
+      const dist = this._getBoundsDistanceToView(leaf.mins, leaf.maxs, vieworg);
       items.push({ leaf, dist });
     }
     return items;
@@ -401,16 +434,31 @@ export class BrushModelRenderer extends ModelRenderer {
       if (R.CullBox(leaf.mins, leaf.maxs) === true) {
         continue;
       }
-      const cx = (leaf.mins[0] + leaf.maxs[0]) * 0.5;
-      const cy = (leaf.mins[1] + leaf.maxs[1]) * 0.5;
-      const cz = (leaf.mins[2] + leaf.maxs[2]) * 0.5;
-      const dx = cx - vieworg[0];
-      const dy = cy - vieworg[1];
-      const dz = cz - vieworg[2];
-      const dist = Math.hypot(dx, dy, dz);
+      const dist = this._getBoundsDistanceToView(leaf.mins, leaf.maxs, vieworg);
       items.push({ leaf, dist });
     }
     return items;
+  }
+
+  /**
+   * Approximate view-relative sort distance for bounded transparent content.
+   * Uses the nearest point on the AABB instead of the center so large leaves
+   * and fog volumes sort by the depth where they begin affecting the view.
+   * @private
+   * @param {Vector|number[]|Float32Array} mins Minimum corner of the AABB
+   * @param {Vector|number[]|Float32Array} maxs Maximum corner of the AABB
+   * @param {Float32Array|number[]} vieworg Camera position [x, y, z]
+   * @returns {number} Euclidean distance from the view to the nearest point on the bounds
+   */
+  _getBoundsDistanceToView(mins, maxs, vieworg) {
+    const nearestX = Math.max(mins[0], Math.min(vieworg[0], maxs[0]));
+    const nearestY = Math.max(mins[1], Math.min(vieworg[1], maxs[1]));
+    const nearestZ = Math.max(mins[2], Math.min(vieworg[2], maxs[2]));
+    const dx = nearestX - vieworg[0];
+    const dy = nearestY - vieworg[1];
+    const dz = nearestZ - vieworg[2];
+
+    return Math.hypot(dx, dy, dz);
   }
 
   /**
@@ -1098,13 +1146,7 @@ export class BrushModelRenderer extends ModelRenderer {
     }
     const items = [];
     for (const fogVolume of worldmodel.fogVolumes) {
-      const cx = (fogVolume.mins[0] + fogVolume.maxs[0]) * 0.5;
-      const cy = (fogVolume.mins[1] + fogVolume.maxs[1]) * 0.5;
-      const cz = (fogVolume.mins[2] + fogVolume.maxs[2]) * 0.5;
-      const dx = cx - vieworg[0];
-      const dy = cy - vieworg[1];
-      const dz = cz - vieworg[2];
-      const dist = Math.hypot(dx, dy, dz);
+      const dist = this._getBoundsDistanceToView(fogVolume.mins, fogVolume.maxs, vieworg);
       items.push({ fogVolume, dist });
     }
     return items;

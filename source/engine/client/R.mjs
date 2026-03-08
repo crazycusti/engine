@@ -734,8 +734,8 @@ R.DrawEntitiesOnList = function() {
 
     renderer.setupRenderState(0);
     for (const entity of entities) {
-      if (entity.alpha < 1.0) {
-        continue; // Transparent entities are drawn in pass 2
+      if (!renderer.rendersOpaquePass(entity.model, entity)) {
+        continue;
       }
 
       renderer.render(entity.model, entity, 0);
@@ -763,13 +763,10 @@ R.DrawEntitiesOnList = function() {
 /**
  * Render world turbulent surfaces and fog volumes in the correct order.
  *
- * Turbulent surfaces must render BEFORE fog volumes because fog volumes
- * are screen-space compositing effects (depth test disabled, depth texture
- * sampled). If a turbulent surface renders after a co-located fog volume,
- * it overwrites the fog with its own color (alpha = 1.0).
- *
- * Both turbulents and fog volumes are individually sorted back-to-front
- * (farthest first) for correct blending among items of the same type.
+ * Turbulent surfaces and fog volumes share the same transparency space, so
+ * they must be composed from a single back-to-front list. Rendering them in
+ * separate phases is incorrect when water and fog overlap or alternate in
+ * depth, such as foggy water volumes or mist sitting above water.
  *
  * When no fog volumes exist (or post-process is unavailable), this falls
  * back to the simple sequential turbulent pass.
@@ -797,28 +794,59 @@ R._renderFogAndTurbulentsSorted = function(worldEntity) {
   }
 
   const vieworg = R.refdef.vieworg;
+  /** @type {Array<{dist: number, kind: number, data: Node|import('../common/model/BSP.mjs').FogVolumeInfo}>} */
+  const items = [];
 
-  // Phase 1: Render all turbulent leaves (back-to-front)
   const turbulentLeaves = brushRenderer.getWorldTurbulentLeaves(worldmodel, vieworg);
-  if (turbulentLeaves.length > 0) {
-    turbulentLeaves.sort((a, b) => b.dist - a.dist);
-    brushRenderer.beginWorldTurbulentPass(worldmodel);
-    for (let i = 0; i < turbulentLeaves.length; i++) {
-      brushRenderer.renderWorldTurbulentLeaf(worldmodel, turbulentLeaves[i].leaf);
-    }
-    brushRenderer.endWorldTurbulentPass();
+  for (let i = 0; i < turbulentLeaves.length; i++) {
+    items.push({ dist: turbulentLeaves[i].dist, kind: 0, data: turbulentLeaves[i].leaf });
   }
 
-  // Phase 2: Render all fog volumes on top (back-to-front)
   const fogItems = brushRenderer.getFogVolumeItems(worldmodel, vieworg);
-  if (fogItems.length > 0) {
-    fogItems.sort((a, b) => b.dist - a.dist);
-    if (brushRenderer.beginFogVolumePass(worldmodel)) {
-      for (let i = 0; i < fogItems.length; i++) {
-        brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (fogItems[i].fogVolume));
+  for (let i = 0; i < fogItems.length; i++) {
+    items.push({ dist: fogItems[i].dist, kind: 1, data: fogItems[i].fogVolume });
+  }
+
+  if (items.length === 0) {
+    return;
+  }
+
+  items.sort((a, b) => b.dist - a.dist);
+
+  let activePass = -1;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (item.kind !== activePass) {
+      if (activePass === 0) {
+        brushRenderer.endWorldTurbulentPass();
+      } else if (activePass === 1) {
+        brushRenderer.endFogVolumePass();
       }
-      brushRenderer.endFogVolumePass();
+
+      if (item.kind === 0) {
+        brushRenderer.beginWorldTurbulentPass(worldmodel);
+      } else if (!brushRenderer.beginFogVolumePass(worldmodel)) {
+        activePass = -1;
+        continue;
+      }
+
+      activePass = item.kind;
     }
+
+    if (item.kind === 0) {
+      brushRenderer.renderWorldTurbulentLeaf(worldmodel, /** @type {Node} */ (item.data));
+      continue;
+    }
+
+    brushRenderer.renderSingleFogVolume(worldmodel, /** @type {import('../common/model/BSP.mjs').FogVolumeInfo} */ (item.data));
+  }
+
+  if (activePass === 0) {
+    brushRenderer.endWorldTurbulentPass();
+  } else if (activePass === 1) {
+    brushRenderer.endFogVolumePass();
   }
 };
 
@@ -847,12 +875,15 @@ R._renderTransparentsSorted = function(worldEntity) {
   // Collect transparent entities with distances
   if (R.drawentities.value !== 0) {
     for (const entity of CL.state.clientEntities.getVisibleEntities()) {
-      if (entity.model === null || entity.alpha === 0) {
+      if (entity.model === null || entity.alpha === 0.0) {
         continue;
       }
-      if (entity.model.type === Mod.type.sprite) {
-        continue; // Sprites are handled in pass 1
+
+      const renderer = modelRendererRegistry.getRenderer(entity.model.type);
+      if (renderer === null || !renderer.rendersTransparentPass(entity.model, entity)) {
+        continue;
       }
+
       const dx = entity.origin[0] - vieworg[0];
       const dy = entity.origin[1] - vieworg[1];
       const dz = entity.origin[2] - vieworg[2];
@@ -1305,9 +1336,9 @@ R.RenderScene = function() {
 R._speeds = /** @type {string[]} */ ([]);
 
 R.RenderView = function() {
-  gl.finish();
   let time1;
   if (R.speeds.value !== 0) {
+    gl.finish();
     time1 = Sys.FloatMilliTime();
   }
   R.c_brush_verts = 0;

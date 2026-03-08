@@ -44,6 +44,24 @@ export class AliasModelRenderer extends ModelRenderer {
   }
 
   /**
+   * @param {import('../../common/model/AliasModel.mjs').AliasModel} _model The alias model
+   * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when this alias model should render in the opaque pass
+   */
+  rendersOpaquePass(_model, entity) {
+    return entity.alpha >= 1.0;
+  }
+
+  /**
+   * @param {import('../../common/model/AliasModel.mjs').AliasModel} _model The alias model
+   * @param {import('../ClientEntities.mjs').ClientEdict} entity The entity being rendered
+   * @returns {boolean} True when this alias model should render in the sorted transparent pass
+   */
+  rendersTransparentPass(_model, entity) {
+    return entity.alpha > 0.0 && entity.alpha < 1.0;
+  }
+
+  /**
    * Render a single alias model entity.
    * Handles frustum culling, frame interpolation, skinning, and player color translation.
    * @param {import('../../common/model/AliasModel.mjs').AliasModel} model The alias model to render

@@ -47,6 +47,26 @@ export class SpriteModelRenderer extends ModelRenderer {
   }
 
   /**
+   * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} _model The sprite model
+   * @param {import('../ClientEntities.mjs').ClientEdict} _entity The entity being rendered
+   * @returns {boolean} Sprites are never drawn in the opaque pass
+   */
+  // eslint-disable-next-line no-unused-vars
+  rendersOpaquePass(_model, _entity) {
+    return false;
+  }
+
+  /**
+   * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} _model The sprite model
+   * @param {import('../ClientEntities.mjs').ClientEdict} _entity The entity being rendered
+   * @returns {boolean} Sprites use their dedicated sprite pass rather than the sorted transparent pass
+   */
+  // eslint-disable-next-line no-unused-vars
+  rendersTransparentPass(_model, _entity) {
+    return false;
+  }
+
+  /**
    * Render a single sprite model entity.
    * Generates billboard geometry dynamically based on camera orientation.
    * @param {import('../../common/model/SpriteModel.mjs').SpriteModel} model The sprite model to render
