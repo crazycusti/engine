@@ -124,6 +124,7 @@ export class ServerPhysics {
     if (ent1.touch && ent1.solid !== Defs.solid.SOLID_NOT) {
       ent1.touch(ent2, pushVector);
     }
+
     if (ent2.touch && ent2.solid !== Defs.solid.SOLID_NOT) {
       ent2.touch(ent1, pushVector);
     }
