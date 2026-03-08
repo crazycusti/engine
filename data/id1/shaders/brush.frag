@@ -53,6 +53,7 @@ in vec3 vNormal;
 in vec3 vLightVec;
 in float vLightMix;
 in vec3 vTangent;
+in vec3 vBitangent;
 in vec3 vViewVec;
 in vec4 vShadowCoord0;
 in vec4 vShadowCoord1;
@@ -209,9 +210,8 @@ void main(void) {
         dot(deluxemapB, lightstyle)
       );
 
-      // CR: Since we are fixing normals when loading the faces, we need to fix the deluxemap accordingly
-      lightDirection.x *= vNormal.x > 0.0 ? 1.0 : -1.0;
-      lightDirection.y *= vNormal.y > 0.0 ? 1.0 : -1.0;
+      lightDirection.x *= vNormal.x >= 0.0 ? 1.0 : -1.0;
+      lightDirection.y *= vNormal.y >= 0.0 ? 1.0 : -1.0;
 
       // need to adjust for rotation of the surface
       lightDirection *= vAngles;
@@ -233,7 +233,7 @@ void main(void) {
 
     // Gram-Schmidt orthogonalize tangent against normal (inline to avoid extra variables)
     vec3 t = normalize(vTangent - vNormal * dot(vNormal, vTangent));
-    vec3 b = normalize(cross(vNormal, t));
+    vec3 b = normalize(vBitangent - vNormal * dot(vNormal, vBitangent) - t * dot(t, vBitangent));
 
     // Build TBN transform and apply to normal
     vec3 N = normalize(t * normalMap.x + b * normalMap.y + vNormal * normalMap.z);

@@ -1507,6 +1507,7 @@ R.InitShaders = async function() {
           ['aLightStyle', gl.FLOAT, 4],
           ['aNormal', gl.FLOAT, 3],
           ['aTangent', gl.FLOAT, 3],
+          ['aBitangent', gl.FLOAT, 3],
         ],
         ['tTextureA', 'tTextureB', 'tLightmap', 'tDlight', 'tLightStyleA', 'tLightStyleB', 'tLuminance', 'tSpecular', 'tNormal', 'tDeluxemap', 'tShadowMap0', 'tShadowMap1', 'tShadowMap2', 'tPointShadowMap']),
 

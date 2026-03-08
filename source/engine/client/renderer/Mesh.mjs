@@ -36,6 +36,9 @@ export default class Mesh {
       const tx = f * (deltaUV2[1] * edge1[0] - deltaUV1[1] * edge2[0]);
       const ty = f * (deltaUV2[1] * edge1[1] - deltaUV1[1] * edge2[1]);
       const tz = f * (deltaUV2[1] * edge1[2] - deltaUV1[1] * edge2[2]);
+      const bx = f * (-deltaUV2[0] * edge1[0] + deltaUV1[0] * edge2[0]);
+      const by = f * (-deltaUV2[0] * edge1[1] + deltaUV1[0] * edge2[1]);
+      const bz = f * (-deltaUV2[0] * edge1[2] + deltaUV1[0] * edge2[2]);
 
       for (const base of [i0, i1, i2]) {
         // Get the correct normal from the vertex data
@@ -53,8 +56,22 @@ export default class Mesh {
         const tlen = Math.hypot(ortho_tx, ortho_ty, ortho_tz) || 1.0;
         const tnorm = [ortho_tx / tlen, ortho_ty / tlen, ortho_tz / tlen];
 
-        // bitangent = cross(normal, tangent)
-        const bnorm = [
+        const dot_nb = nx * bx + ny * by + nz * bz;
+        const ortho_bx = bx - nx * dot_nb;
+        const ortho_by = by - ny * dot_nb;
+        const ortho_bz = bz - nz * dot_nb;
+
+        const dot_tb = tnorm[0] * ortho_bx + tnorm[1] * ortho_by + tnorm[2] * ortho_bz;
+        const bitangentX = ortho_bx - tnorm[0] * dot_tb;
+        const bitangentY = ortho_by - tnorm[1] * dot_tb;
+        const bitangentZ = ortho_bz - tnorm[2] * dot_tb;
+        const blen = Math.hypot(bitangentX, bitangentY, bitangentZ);
+
+        const bnorm = blen > EPSILON ? [
+          bitangentX / blen,
+          bitangentY / blen,
+          bitangentZ / blen,
+        ] : [
           ny * tnorm[2] - nz * tnorm[1],
           nz * tnorm[0] - nx * tnorm[2],
           nx * tnorm[1] - ny * tnorm[0],

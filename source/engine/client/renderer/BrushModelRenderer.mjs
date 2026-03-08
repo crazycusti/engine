@@ -799,7 +799,7 @@ export class BrushModelRenderer extends ModelRenderer {
 
   /**
    * Create a VAO for brush geometry at the given byte offset in the VBO.
-   * All 5 standard brush attributes are configured with 80-byte stride.
+   * All 6 standard brush attributes are configured with 80-byte stride.
    * @private
    * @param {WebGLBuffer} vbo The VBO containing brush vertex data
    * @param {number} offset Byte offset for the first vertex
@@ -812,6 +812,7 @@ export class BrushModelRenderer extends ModelRenderer {
       { location: 2, components: 4, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 28 },
       { location: 3, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 44 },
       { location: 4, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 56 },
+      { location: 5, components: 3, type: gl.FLOAT, normalized: false, stride: BRUSH_VERTEX_STRIDE, offset: offset + 68 },
     ]);
   }
 

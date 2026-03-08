@@ -22,6 +22,7 @@ in vec3 aNormal;
 in vec4 aTexCoord;
 in vec4 aLightStyle;
 in vec3 aTangent;
+in vec3 aBitangent;
 
 out vec4 vTexCoord;
 out vec4 vLightStyle;
@@ -32,6 +33,7 @@ out vec3 vNormal;
 out vec3 vLightVec;
 out float vLightMix;
 out vec3 vTangent;
+out vec3 vBitangent;
 out mat3 vAngles;
 
 out vec3 vViewVec;
@@ -62,7 +64,7 @@ void main(void) {
 
   // Calculate view-related vectors once (shared for both paths)
   vec3 worldToView = worldPos - uViewOrigin;
-  vViewVec = normalize(worldToView);
+  vViewVec = normalize(-worldToView);
 
   // Calculate distance once for both lighting and fog
   float distToView = length(worldToView);
@@ -75,6 +77,7 @@ void main(void) {
   vec3 transformedNormal = uAngles * aNormal;
   vNormal = normalize(transformedNormal);
   vTangent = normalize(uAngles * aTangent);
+  vBitangent = normalize(uAngles * aBitangent);
   vAngles = uAngles;
 
   // Compute both lighting paths, select based on uniform
